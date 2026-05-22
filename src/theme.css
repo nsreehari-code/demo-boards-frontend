@@ -1433,16 +1433,35 @@ a {
   color: #05101e;
 }
 
+.board-button.btn-danger,
+.board-button.btn-outline-danger:hover {
+  background: linear-gradient(180deg, rgba(230, 87, 87, 0.96), rgba(191, 50, 50, 0.95));
+  border-color: rgba(255, 151, 151, 0.5);
+  color: #fff5f5;
+}
+
 .board-button.btn-outline-secondary,
-.board-button.btn-outline-primary {
+.board-button.btn-outline-primary,
+.board-button.btn-outline-danger {
   color: var(--color-text-muted);
   border-color: var(--color-border);
   background: rgba(255, 255, 255, 0.01);
 }
 
+.board-button.btn-outline-danger {
+  color: #b94a4a;
+  border-color: rgba(185, 74, 74, 0.38);
+  background: rgba(185, 74, 74, 0.08);
+}
+
 .board-app-shell[data-theme='mist-ops'] .board-button.btn-outline-secondary,
-.board-app-shell[data-theme='mist-ops'] .board-button.btn-outline-primary {
+.board-app-shell[data-theme='mist-ops'] .board-button.btn-outline-primary,
+.board-app-shell[data-theme='mist-ops'] .board-button.btn-outline-danger {
   background: rgba(239, 245, 249, 0.88);
+}
+
+.board-app-shell[data-theme='mist-ops'] .board-button.btn-outline-danger {
+  background: rgba(255, 235, 235, 0.95);
 }
 
 .board-text-muted {

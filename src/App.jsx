@@ -166,6 +166,7 @@ export default function App() {
   return (
     <div className="board-app-shell" data-theme={DEFAULT_THEME}>
       <AppConfigModal
+        boardId={BOARD_ID}
         autoOpen={serverReachability.unreachable}
         serverUnreachable={serverReachability.unreachable}
         serverUnreachableMessage={serverReachability.message}

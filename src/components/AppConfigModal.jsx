@@ -5,6 +5,7 @@ import {
   hasStoredAppConfigOverride,
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
+import { resyncSeedCards } from '../lib/client.js';
 
 function toFormState(config) {
   return {
@@ -28,10 +29,11 @@ function normalizeFormState(formState) {
   };
 }
 
-export function AppConfigModal({ autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
+export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
   const [open, setOpen] = useState(false);
   const [openedByAuto, setOpenedByAuto] = useState(false);
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
+  const [syncingSeeds, setSyncingSeeds] = useState(false);
   const overrideActive = hasStoredAppConfigOverride();
 
   useEffect(() => {
@@ -80,6 +82,24 @@ export function AppConfigModal({ autoOpen = false, serverUnreachable = false, se
   const handleReset = () => {
     clearStoredAppConfigOverride();
     window.location.reload();
+  };
+
+  const handleSyncSeeds = async () => {
+    if (!boardId || syncingSeeds) {
+      return;
+    }
+
+    setSyncingSeeds(true);
+    try {
+      const response = await resyncSeedCards(boardId);
+      if (!response.ok) {
+        throw new Error(`Resync seed cards failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error('[AppConfigModal] Failed to sync runtime cards to seeds', error);
+    } finally {
+      setSyncingSeeds(false);
+    }
   };
 
   return (
@@ -183,6 +203,14 @@ export function AppConfigModal({ autoOpen = false, serverUnreachable = false, se
               </p>
 
               <div className="board-settings-form__actions">
+                <button
+                  type="button"
+                  className="btn btn-outline-danger board-button"
+                  onClick={handleSyncSeeds}
+                  disabled={syncingSeeds || !boardId}
+                >
+                  {syncingSeeds ? 'Resetting cards…' : 'Reset All Cards to Clean Board'}
+                </button>
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Cancel</button>
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={handleReset}>Reset to shipped config</button>
                 <button type="submit" className="btn btn-primary board-button">Save and reload</button>
