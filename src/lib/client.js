@@ -17,8 +17,13 @@ export const refreshCard = (boardId, cardId) =>
     method: 'POST',
   });
 
-export const resyncSeedCards = (boardId) =>
-  fetch(`${base(boardId)}/resync-seedcards`, {
+export const resetRuntimeFromSeedCards = (boardId) =>
+  fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
+    method: 'POST',
+  });
+
+export const reverseSaveRuntimeToSeedCards = (boardId) =>
+  fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
     method: 'POST',
   });
 

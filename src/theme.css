@@ -726,6 +726,10 @@ a {
   isolation: isolate;
 }
 
+.board-ingest-layer--right {
+  flex-direction: row-reverse;
+}
+
 .board-ingest-backdrop {
   position: fixed;
   top: calc(var(--nav-height) + 6px);
@@ -735,6 +739,12 @@ a {
   background: linear-gradient(90deg, rgba(214, 223, 232, 0.92) 0%, rgba(221, 230, 238, 0.74) 35%, rgba(228, 236, 243, 0.18) 74%, transparent 100%);
   pointer-events: none;
   z-index: 0;
+}
+
+.board-ingest-backdrop--right {
+  left: auto;
+  right: 0;
+  background: linear-gradient(270deg, rgba(214, 223, 232, 0.92) 0%, rgba(221, 230, 238, 0.74) 35%, rgba(228, 236, 243, 0.18) 74%, transparent 100%);
 }
 
 .board-surface,
@@ -881,6 +891,11 @@ a {
   opacity: 0.75;
 }
 
+.board-ingest-toggle--right {
+  margin-right: -0.65rem;
+  margin-left: 0.55rem;
+}
+
 .board-app-shell[data-theme='mist-ops'] .board-ingest-toggle {
   background: linear-gradient(180deg, rgba(208, 220, 231, 0.99), rgba(186, 201, 215, 0.99));
   border-color: rgba(64, 96, 131, 0.34);
@@ -888,6 +903,10 @@ a {
 
 .board-ingest-toggle.is-open {
   transform: translateX(-0.15rem);
+}
+
+.board-ingest-toggle--right.is-open {
+  transform: none;
 }
 
 .board-ingest-toggle:hover,

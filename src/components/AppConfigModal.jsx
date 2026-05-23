@@ -5,7 +5,8 @@ import {
   hasStoredAppConfigOverride,
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
-import { resyncSeedCards } from '../lib/client.js';
+import { resetRuntimeFromSeedCards, reverseSaveRuntimeToSeedCards } from '../lib/client.js';
+import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 
 function toFormState(config) {
   return {
@@ -33,7 +34,9 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [open, setOpen] = useState(false);
   const [openedByAuto, setOpenedByAuto] = useState(false);
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
-  const [syncingSeeds, setSyncingSeeds] = useState(false);
+  const [resettingSeeds, setResettingSeeds] = useState(false);
+  const [savingSeeds, setSavingSeeds] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
   const overrideActive = hasStoredAppConfigOverride();
 
   useEffect(() => {
@@ -84,21 +87,29 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     window.location.reload();
   };
 
-  const handleSyncSeeds = async () => {
-    if (!boardId || syncingSeeds) {
-      return;
-    }
-
-    setSyncingSeeds(true);
+  const handleResetFromSeeds = async () => {
+    if (!boardId || resettingSeeds) return;
+    setResettingSeeds(true);
     try {
-      const response = await resyncSeedCards(boardId);
-      if (!response.ok) {
-        throw new Error(`Resync seed cards failed with status ${response.status}`);
-      }
+      const response = await resetRuntimeFromSeedCards(boardId);
+      if (!response.ok) throw new Error(`Reset from seed cards failed with status ${response.status}`);
     } catch (error) {
-      console.error('[AppConfigModal] Failed to sync runtime cards to seeds', error);
+      console.error('[AppConfigModal] Failed to reset runtime from seed cards', error);
     } finally {
-      setSyncingSeeds(false);
+      setResettingSeeds(false);
+    }
+  };
+
+  const handleSaveToSeeds = async () => {
+    if (!boardId || savingSeeds) return;
+    setSavingSeeds(true);
+    try {
+      const response = await reverseSaveRuntimeToSeedCards(boardId);
+      if (!response.ok) throw new Error(`Save runtime to seed cards failed with status ${response.status}`);
+    } catch (error) {
+      console.error('[AppConfigModal] Failed to save runtime cards to seeds', error);
+    } finally {
+      setSavingSeeds(false);
     }
   };
 
@@ -206,17 +217,49 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 <button
                   type="button"
                   className="btn btn-outline-danger board-button"
-                  onClick={handleSyncSeeds}
-                  disabled={syncingSeeds || !boardId}
+                  onClick={() => setPendingAction('reset')}
+                  disabled={resettingSeeds || !boardId}
+                  title="POST /api/boards/:boardId/reset-runtime-from-seed-cards"
                 >
-                  {syncingSeeds ? 'Resetting cards…' : 'Reset All Cards to Clean Board'}
+                  {resettingSeeds ? 'Resetting…' : 'Reset Runtime from Seed Cards'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-warning board-button"
+                  onClick={() => setPendingAction('save')}
+                  disabled={savingSeeds || !boardId}
+                  title="POST /api/boards/:boardId/reverse-save-runtime-to-seed-cards"
+                >
+                  {savingSeeds ? 'Saving…' : 'Save Runtime to Seed Cards'}
                 </button>
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="button" className="btn btn-outline-secondary board-button" onClick={handleReset}>Reset to shipped config</button>
+                <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setPendingAction('config')}>Reset to shipped config</button>
                 <button type="submit" className="btn btn-primary board-button">Save and reload</button>
               </div>
             </form>
           </section>
+
+          {pendingAction === 'reset' ? (
+            <ChallengeConfirmModal
+              message="This will overwrite all runtime card state with the board's seed cards. Any live progress will be lost."
+              onConfirm={() => { setPendingAction(null); handleResetFromSeeds(); }}
+              onCancel={() => setPendingAction(null)}
+            />
+          ) : null}
+          {pendingAction === 'save' ? (
+            <ChallengeConfirmModal
+              message="This will overwrite the board's seed card files with the current runtime state. The previous seed files will be replaced."
+              onConfirm={() => { setPendingAction(null); handleSaveToSeeds(); }}
+              onCancel={() => setPendingAction(null)}
+            />
+          ) : null}
+          {pendingAction === 'config' ? (
+            <ChallengeConfirmModal
+              message="This will clear all stored config overrides and reload with the shipped defaults."
+              onConfirm={() => { setPendingAction(null); handleReset(); }}
+              onCancel={() => setPendingAction(null)}
+            />
+          ) : null}
         </div>
       ) : null}
     </>
