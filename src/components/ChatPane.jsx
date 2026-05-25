@@ -2,12 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useChatState } from '../hooks/useChatState.js';
 
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
-function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
+function useChatSubscription(
+  subscribeChat,
+  unsubscribeChat,
+  subscribeCopilotOutput,
+  unsubscribeCopilotOutput,
+  boardId,
+  cardId,
+  boardSseClientId,
+) {
   useEffect(() => {
     if (!subscribeChat || !unsubscribeChat || !boardId || !cardId || !boardSseClientId) return;
     subscribeChat().catch(() => {});
-    return () => { unsubscribeChat().catch(() => {}); };
-  }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
+    subscribeCopilotOutput?.().catch(() => {});
+    return () => {
+      unsubscribeCopilotOutput?.().catch(() => {});
+      unsubscribeChat().catch(() => {});
+    };
+  }, [subscribeChat, unsubscribeChat, subscribeCopilotOutput, unsubscribeCopilotOutput, boardId, cardId, boardSseClientId]);
 }
 
 function UserBubbleIcon() {
@@ -106,11 +118,13 @@ function ChatBubble({ msg, compact = false }) {
   );
 }
 
-function WorkingBubble() {
+function WorkingBubble({ copilotOutput = '' }) {
+  const liveOutput = typeof copilotOutput === 'string' ? copilotOutput.trim() : '';
+
   return (
     <div className="d-flex mb-2">
       <div
-        className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex align-items-center"
+        className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex flex-column align-items-stretch"
         style={{
           maxWidth: '82%',
           background: 'var(--bs-light, #f8f9fa)',
@@ -118,16 +132,36 @@ function WorkingBubble() {
           gap: '0.45rem',
         }}
       >
-        <ChatIconShell>
-          <WorkingBubbleIcon />
-        </ChatIconShell>
-        <span>AI working...</span>
-        <span
-          className="spinner-border spinner-border-sm flex-shrink-0"
-          role="status"
-          aria-label="AI working"
-          style={{ width: '0.75rem', height: '0.75rem', borderWidth: '0.12em' }}
-        />
+        <div className="d-inline-flex align-items-center" style={{ gap: '0.45rem' }}>
+          <ChatIconShell>
+            <WorkingBubbleIcon />
+          </ChatIconShell>
+          <span>AI working...</span>
+          <span
+            className="spinner-border spinner-border-sm flex-shrink-0"
+            role="status"
+            aria-label="AI working"
+            style={{ width: '0.75rem', height: '0.75rem', borderWidth: '0.12em' }}
+          />
+        </div>
+        {liveOutput ? (
+          <pre
+            className="mb-0 rounded-2 p-2 small"
+            style={{
+              maxHeight: '12rem',
+              overflow: 'auto',
+              background: 'rgba(255,255,255,0.7)',
+              border: '1px solid rgba(0,0,0,0.08)',
+              color: 'var(--bs-body-color, #212529)',
+              fontFamily: 'Consolas, "SFMono-Regular", Menlo, Monaco, monospace',
+              fontStyle: 'normal',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {liveOutput}
+          </pre>
+        ) : null}
       </div>
     </div>
   );
@@ -219,15 +253,24 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const chat = useChatState(boardId, cardId);
   const messages = chat?.messages ?? [];
   const processing = chat?.processing ?? false;
+  const copilotOutput = chat?.copilotOutput ?? '';
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
   const bottomRef = useRef(null);
 
-  useChatSubscription(chatActions?.subscribeChat, chatActions?.unsubscribeChat, boardId, cardId, boardSseClientId);
+  useChatSubscription(
+    chatActions?.subscribeChat,
+    chatActions?.unsubscribeChat,
+    chatActions?.subscribeCopilotOutput,
+    chatActions?.unsubscribeCopilotOutput,
+    boardId,
+    cardId,
+    boardSseClientId,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, processing, copilotOutput]);
 
   if (!chat) return null;
 
@@ -237,7 +280,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
         className="board-chat-pane__messages p-2"
       >
         {messages.map((msg, i) => <ChatBubble key={i} msg={msg} compact={compact} />)}
-        {processing && <WorkingBubble />}
+        {processing && <WorkingBubble copilotOutput={copilotOutput} />}
         <div ref={bottomRef} />
       </div>
       {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} />}

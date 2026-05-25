@@ -74,3 +74,17 @@ export const unsubscribeCardChats = (boardId, cardId, clientId) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clientId }),
   });
+
+export const subscribeWatchparty = (boardId, cardId, channelName, clientId) =>
+  fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/subscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  });
+
+export const unsubscribeWatchparty = (boardId, cardId, channelName, clientId) =>
+  fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/unsubscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  });

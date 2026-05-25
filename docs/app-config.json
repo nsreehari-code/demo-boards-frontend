@@ -8,5 +8,8 @@
   "pageTitle": "Live",
   "pageSubtitle": "Live operational intelligence for agent workflows",
   "refreshAllIntervalSeconds": 300,
-  "serverOrigin": "http://localhost:7799"
+  "serverOrigin": "http://localhost:7799",
+  "boardServerConstants": {
+    "copilotOutputChannel": "copilot-output"
+  }
 }

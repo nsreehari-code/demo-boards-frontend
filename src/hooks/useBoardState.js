@@ -152,6 +152,7 @@ function buildState(payload) {
     cardContentsById,
     cardRuntimesById,
     chatsById,
+    watchpartyById:   {},
     statusSummary:    payload.statusSnapshot?.summary ?? null,
     dataObjects:      payload.dataObjectsByToken ?? {},
   };
@@ -172,6 +173,7 @@ function applyFrame(prev, payload) {
       cardRuntimesById: { ...prev.cardRuntimesById },
       chatsById:        { ...prev.chatsById },
       dataObjects:      { ...prev.dataObjects },
+      watchpartyById:   { ...(prev.watchpartyById ?? {}) },
     };
     for (const n of (payload.notifications ?? [])) {
       if (n.kind === 'status') {
@@ -200,6 +202,16 @@ function applyFrame(prev, payload) {
           processing: !!n.processing,
           receiving:  !!n.receiving,
         };
+      } else if (n.kind === 'card_watchparty' && n.cardId && n.channel) {
+        const cardParty = { ...(next.watchpartyById[n.cardId] ?? {}) };
+        if (n.clear) {
+          cardParty[n.channel] = [];
+        } else if (n.replace) {
+          cardParty[n.channel] = [{ payload: n.payload, ts: Date.now() }];
+        } else {
+          cardParty[n.channel] = [...(cardParty[n.channel] ?? []), { payload: n.payload, ts: Date.now() }];
+        }
+        next.watchpartyById[n.cardId] = cardParty;
       } else if (n.kind === 'card_refreshed' && n.cardId && n.card) {
         const { computed_values, runtime, status, ...cardContent } = n.card;
 
@@ -310,6 +322,7 @@ export function useBoardState(boardId) {
     boardStatus,
     dataObjects,
     chatStates,
+    watchpartyById: raw.watchpartyById ?? {},
     refreshableCardIds,
     hasRefreshableCards: refreshableCardIds.length > 0,
     filterCards,

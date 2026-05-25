@@ -14,7 +14,21 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   pageSubtitle: DEFAULT_PAGE_SUBTITLE,
   refreshAllIntervalSeconds: DEFAULT_REFRESH_ALL_INTERVAL_SECONDS,
   serverOrigin: 'http://localhost:7799',
+  boardServerConstants: {
+    copilotOutputChannel: 'copilot-output',
+  },
 });
+
+function normalizeBoardServerConstants(constants) {
+  const fallback = FALLBACK_APP_CONFIG.boardServerConstants;
+  const source = constants && typeof constants === 'object' ? constants : {};
+
+  return {
+    copilotOutputChannel: typeof source.copilotOutputChannel === 'string' && source.copilotOutputChannel.trim()
+      ? source.copilotOutputChannel.trim()
+      : fallback.copilotOutputChannel,
+  };
+}
 
 function normalizeServerOrigin(serverOrigin) {
   if (typeof serverOrigin === 'string' && serverOrigin.trim()) {
@@ -56,6 +70,7 @@ function normalizeAppConfig(config) {
     pageSubtitle: defaultBoardSubtitle,
     refreshAllIntervalSeconds: resolvedRefreshAllIntervalSeconds,
     serverOrigin: normalizeServerOrigin(config?.serverOrigin),
+    boardServerConstants: normalizeBoardServerConstants(config?.boardServerConstants),
   };
 }
 
@@ -141,6 +156,8 @@ export let PAGE_TITLE = currentAppConfig.pageTitle;
 export let PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
 export let REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
 export let SERVER = currentAppConfig.serverOrigin;
+export let BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
+export let COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
 
 function applyAppConfig(config) {
   currentAppConfig = normalizeAppConfig(config);
@@ -151,6 +168,8 @@ function applyAppConfig(config) {
   PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
   REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
   SERVER = currentAppConfig.serverOrigin;
+  BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
+  COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
   return currentAppConfig;
 }
 
