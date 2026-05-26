@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useChatState } from '../hooks/useChatState.js';
+import { SERVER } from '../lib/client.js';
 
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
 function useChatSubscription(
@@ -80,10 +81,89 @@ function ChatMessageText({ text, compact = false }) {
   );
 }
 
-function ChatBubble({ msg, compact = false }) {
+function resolveChatAttachmentDownloadUrl(boardId, cardId, file, index) {
+  if (!boardId || !cardId || !file || !Number.isInteger(index) || index < 0) {
+    return null;
+  }
+
+  const storedName = typeof file.stored_name === 'string' ? file.stored_name : '';
+  if (!storedName) {
+    return null;
+  }
+
+  return `${SERVER}/api/boards/${boardId}/cards/${cardId}/files/${index}?sn=${encodeURIComponent(storedName)}`;
+}
+
+function parseIndexedSystemAttachment(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return null;
+  }
+
+  const match = /^(file uploaded|AI generated):\s*(.*?)\s*#(\d+)\s*$/i.exec(text.trim());
+  if (!match) {
+    return null;
+  }
+
+  const index = Number.parseInt(match[3], 10);
+  if (!Number.isInteger(index) || index < 0) {
+    return null;
+  }
+
+  return {
+    kind: String(match[1] || '').toLowerCase(),
+    label: String(match[2] || '').trim(),
+    index,
+  };
+}
+
+function SystemAttachmentChip({ boardId, cardId, file, index, label }) {
+  const href = resolveChatAttachmentDownloadUrl(boardId, cardId, file, index);
+  const displayLabel = label || file?.name || file?.stored_name || `Attachment #${index}`;
+
+  if (!href) {
+    return null;
+  }
+
+  return (
+    <a
+      href={href}
+      className="badge rounded-pill text-bg-light border text-decoration-none text-body-emphasis"
+      target="_blank"
+      rel="noreferrer"
+      title={displayLabel}
+    >
+      <i className="bi bi-paperclip me-1" />
+      {displayLabel}
+    </a>
+  );
+}
+
+function SystemMessage({ msg, boardId, cardId, filesUploaded = [] }) {
+  const text = typeof msg?.text === 'string' ? msg.text : '';
+  const indexedAttachment = parseIndexedSystemAttachment(text);
+  const indexedFile = indexedAttachment ? filesUploaded[indexedAttachment.index] : null;
+  const directLabel = indexedAttachment?.label || indexedFile?.name || indexedFile?.stored_name || text;
+
+  return (
+    <div className="text-center small text-muted fst-italic px-2 my-1 d-flex flex-column align-items-center" style={{ gap: '0.35rem' }}>
+      <div>{text}</div>
+      {indexedFile && indexedAttachment ? (
+        <SystemAttachmentChip
+          boardId={boardId}
+          cardId={cardId}
+          file={indexedFile}
+          index={indexedAttachment.index}
+          label={directLabel}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ChatBubble({ msg, compact = false, boardId, cardId, filesUploaded = [] }) {
   const { role, text, files } = msg;
   if (role === 'system') {
-    return <div className="text-center small text-muted fst-italic px-2 my-1">{text}</div>;
+    return <SystemMessage msg={msg} boardId={boardId} cardId={cardId} filesUploaded={filesUploaded} />;
   }
   const isUser = role === 'user';
   return (
@@ -256,6 +336,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const copilotOutput = chat?.copilotOutput ?? '';
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
+  const filesUploaded = chat?.filesUploaded ?? [];
   const bottomRef = useRef(null);
 
   useChatSubscription(
@@ -279,7 +360,16 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
       <div
         className="board-chat-pane__messages p-2"
       >
-        {messages.map((msg, i) => <ChatBubble key={i} msg={msg} compact={compact} />)}
+        {messages.map((msg, i) => (
+          <ChatBubble
+            key={i}
+            msg={msg}
+            compact={compact}
+            boardId={boardId}
+            cardId={cardId}
+            filesUploaded={filesUploaded}
+          />
+        ))}
         {processing && <WorkingBubble copilotOutput={copilotOutput} />}
         <div ref={bottomRef} />
       </div>
