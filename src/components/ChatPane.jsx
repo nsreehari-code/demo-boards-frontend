@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useChatState } from '../hooks/useChatState.js';
 import { SERVER } from '../lib/client.js';
 
@@ -8,6 +10,8 @@ function useChatSubscription(
   unsubscribeChat,
   subscribeCopilotOutput,
   unsubscribeCopilotOutput,
+  subscribeCopilotTools,
+  unsubscribeCopilotTools,
   boardId,
   cardId,
   boardSseClientId,
@@ -16,11 +20,23 @@ function useChatSubscription(
     if (!subscribeChat || !unsubscribeChat || !boardId || !cardId || !boardSseClientId) return;
     subscribeChat().catch(() => {});
     subscribeCopilotOutput?.().catch(() => {});
+    subscribeCopilotTools?.().catch(() => {});
     return () => {
+      unsubscribeCopilotTools?.().catch(() => {});
       unsubscribeCopilotOutput?.().catch(() => {});
       unsubscribeChat().catch(() => {});
     };
-  }, [subscribeChat, unsubscribeChat, subscribeCopilotOutput, unsubscribeCopilotOutput, boardId, cardId, boardSseClientId]);
+  }, [
+    subscribeChat,
+    unsubscribeChat,
+    subscribeCopilotOutput,
+    unsubscribeCopilotOutput,
+    subscribeCopilotTools,
+    unsubscribeCopilotTools,
+    boardId,
+    cardId,
+    boardSseClientId,
+  ]);
 }
 
 function UserBubbleIcon() {
@@ -61,22 +77,122 @@ function ChatIconShell({ children }) {
   );
 }
 
-function ChatMessageText({ text, compact = false }) {
+function ChatMessageText({ text, onOverflowChange }) {
+  const messageRef = useRef(null);
+  const normalizedText = typeof text === 'string' ? text.trim() : '';
+
+  useEffect(() => {
+    if (!normalizedText) {
+      onOverflowChange?.(false);
+      return;
+    }
+
+    const element = messageRef.current;
+    if (!element) {
+      onOverflowChange?.(false);
+      return;
+    }
+
+    const checkOverflow = () => {
+      const hasOverflow = element.scrollHeight > element.clientHeight + 1;
+      onOverflowChange?.(hasOverflow);
+    };
+
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    return () => window.removeEventListener('resize', checkOverflow);
+  }, [normalizedText, onOverflowChange]);
+
+  if (!normalizedText) {
+    return null;
+  }
+
   return (
     <div
-      className="board-chat__message"
+      ref={messageRef}
+      className="small mb-0 markdown-body lh-sm board-markdown board-chat__message"
       style={{
-        overflowWrap: 'anywhere',
-        wordBreak: 'break-word',
-        ...(compact ? {
-          display: '-webkit-box',
-          WebkitBoxOrient: 'vertical',
-          WebkitLineClamp: 8,
-          overflow: 'hidden',
-        } : null),
+        color: 'inherit',
+        maxHeight: '7em',
+        overflow: 'hidden',
       }}
     >
-      {text}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ node, ...props }) => <p className="mb-1" {...props} />,
+          ul: ({ node, ...props }) => <ul className="mb-1 ps-3" {...props} />,
+          ol: ({ node, ...props }) => <ol className="mb-1 ps-3" {...props} />,
+          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+          a: ({ node, ...props }) => <a className="link-primary text-decoration-none" target="_blank" rel="noreferrer" {...props} />,
+          blockquote: ({ node, ...props }) => <blockquote className="border-start border-3 ps-2 fst-italic my-2" style={{ borderColor: 'var(--color-border-strong)' }} {...props} />,
+          hr: ({ node, ...props }) => <hr className="my-2 opacity-25" {...props} />,
+          strong: ({ node, ...props }) => <strong className="fw-semibold" {...props} />,
+          code: ({ inline, className, children, ...props }) => (
+            inline ? (
+              <code className="board-code rounded px-1 py-0" style={{ background: 'rgba(255, 255, 255, 0.06)' }} {...props}>{children}</code>
+            ) : (
+              <code className={`${className ?? ''} board-code small`.trim()} {...props}>{children}</code>
+            )
+          ),
+          pre: ({ node, ...props }) => <pre className="board-code-block p-2 mb-2 overflow-auto" style={{ lineHeight: 1.4 }} {...props} />,
+          table: ({ node, ...props }) => (
+            <div className="table-responsive my-2">
+              <table className="table table-sm table-striped align-middle mb-0 board-data-table" {...props} />
+            </div>
+          ),
+          thead: ({ node, ...props }) => <thead {...props} />,
+          img: ({ node, ...props }) => <img className="img-fluid rounded my-2" style={{ border: '1px solid var(--color-border)' }} loading="lazy" {...props} />,
+        }}
+      >
+        {normalizedText}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function MessageModal({ title, text, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="board-modal position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+      style={{ zIndex: 1250, padding: '1rem' }}
+      onClick={onClose}
+    >
+      <div
+        className="board-modal__dialog w-100"
+        style={{
+          width: 'calc(100vw - 2rem)',
+          height: 'calc(100vh - 2rem)',
+          maxWidth: 'none',
+          maxHeight: 'none',
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="board-modal__header d-flex align-items-center justify-content-between gap-2 px-3 py-3">
+          <div className="board-modal__title text-truncate">{title}</div>
+          <button type="button" className="board-icon-button" onClick={onClose} title="Close message">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+        <div className="board-modal__body p-3 overflow-auto" style={{ height: 'calc(100% - 65px)' }}>
+          <div className="small mb-0 markdown-body lh-sm board-markdown" style={{ color: 'var(--color-text)' }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {typeof text === 'string' ? text : ''}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -162,51 +278,98 @@ function SystemMessage({ msg, boardId, cardId, filesUploaded = [] }) {
 
 function ChatBubble({ msg, compact = false, boardId, cardId, filesUploaded = [] }) {
   const { role, text, files } = msg;
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
   if (role === 'system') {
     return <SystemMessage msg={msg} boardId={boardId} cardId={cardId} filesUploaded={filesUploaded} />;
   }
   const isUser = role === 'user';
   return (
-    <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
-      <div
-        className={`px-2 py-2 rounded-3 small d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`}
-        style={{
-          maxWidth: '82%',
-          background: isUser
-            ? 'var(--bs-primary-bg-subtle, #cfe2ff)'
-            : 'var(--bs-light, #f8f9fa)',
-          border: isUser ? 'none' : '1px solid var(--bs-border-color, #dee2e6)',
-          whiteSpace: 'pre-wrap',
-          overflowWrap: 'anywhere',
-          wordBreak: 'break-word',
-          overflowX: 'hidden',
-          lineHeight: 1.4,
-          gap: '0.45rem',
-        }}
-      >
-        <ChatIconShell>
-          {isUser ? <UserBubbleIcon /> : <AssistantBubbleIcon />}
-        </ChatIconShell>
-        <div className="flex-grow-1 min-w-0">
-          <ChatMessageText text={text} compact={compact} />
-          {(files ?? []).map((f, i) => (
-            <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
-          ))}
+    <>
+      <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
+        <div
+          className={`px-2 py-2 rounded-3 small d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`}
+          style={{
+            maxWidth: '82%',
+            background: isUser
+              ? 'var(--bs-secondary-bg, #e9ecef)'
+              : 'var(--bs-primary-bg-subtle, #cfe2ff)',
+            border: isUser ? 'none' : '1px solid var(--bs-border-color, #dee2e6)',
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            overflowX: 'hidden',
+            lineHeight: 1.4,
+            gap: '0.45rem',
+          }}
+        >
+          <ChatIconShell>
+            {isUser ? <UserBubbleIcon /> : <AssistantBubbleIcon />}
+          </ChatIconShell>
+          <div className="flex-grow-1 min-w-0">
+            <ChatMessageText text={text} onOverflowChange={setIsOverflowing} />
+            {isOverflowing ? (
+              <div className={`d-flex mt-1 ${isUser ? 'justify-content-start' : 'justify-content-end'}`}>
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 lh-1 text-decoration-none"
+                  onClick={() => setIsModalOpen(true)}
+                  title="View full message"
+                  aria-label="View full message"
+                >
+                  ...
+                </button>
+              </div>
+            ) : null}
+            {(files ?? []).map((f, i) => (
+              <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+      {isModalOpen ? (
+        <MessageModal
+          title={isUser ? 'User Message' : 'Assistant Message'}
+          text={typeof text === 'string' ? text : ''}
+          onClose={() => setIsModalOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }
 
-function WorkingBubble({ copilotOutput = '' }) {
+function toChipPreview(text, maxLength = 96) {
+  const lines = String(text ?? '')
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const raw = lines.at(-1) || String(text ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+  const normalizedMaxLength = Number.isInteger(maxLength) && maxLength > 8 ? maxLength : 96;
+  return raw.length > normalizedMaxLength
+    ? `${raw.slice(0, normalizedMaxLength - 3)}...`
+    : raw;
+}
+
+function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false }) {
+  const [activeChipKey, setActiveChipKey] = useState('');
+  const chipPreviewLength = compact ? 44 : 96;
   const liveOutput = typeof copilotOutput === 'string' ? copilotOutput.trim() : '';
+  const liveTools = typeof copilotTools === 'string' ? copilotTools.trim() : '';
+  const chips = [
+    liveOutput ? { key: 'output', label: 'Copilot Output', value: toChipPreview(liveOutput, chipPreviewLength), fullText: liveOutput } : null,
+    liveTools ? { key: 'tools', label: 'Analysing', value: toChipPreview(liveTools, chipPreviewLength), fullText: liveTools } : null,
+  ].filter(Boolean);
+  const activeChip = compact ? null : (chips.find((chip) => chip.key === activeChipKey) ?? null);
 
   return (
-    <div className="d-flex mb-2">
+    <div className="d-flex mb-2 w-100">
       <div
-        className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex flex-column align-items-stretch"
+        className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex flex-column align-items-stretch w-100"
         style={{
-          maxWidth: '82%',
+          maxWidth: '100%',
           background: 'var(--bs-light, #f8f9fa)',
           border: '1px solid var(--bs-border-color, #dee2e6)',
           gap: '0.45rem',
@@ -224,7 +387,37 @@ function WorkingBubble({ copilotOutput = '' }) {
             style={{ width: '0.75rem', height: '0.75rem', borderWidth: '0.12em' }}
           />
         </div>
-        {liveOutput ? (
+        {chips.length > 0 ? (
+          <div className="d-flex flex-wrap" style={{ gap: '0.35rem' }}>
+            {chips.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                className={`badge rounded-pill border text-body-emphasis ${activeChipKey === chip.key ? 'text-bg-primary' : 'text-bg-light'}`}
+                title={chip.value}
+                style={{
+                  maxWidth: compact ? '100%' : '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                onClick={() => {
+                  if (compact) {
+                    return;
+                  }
+                  setActiveChipKey((prev) => (prev === chip.key ? '' : chip.key));
+                }}
+              >
+                <span className={`board-chat-pane__chip-label${activeChipKey === chip.key || compact ? '' : ' board-chat-pane__chip-label--shimmer'}`}>
+                  {chip.label}
+                </span>
+                <span className="board-chat-pane__chip-separator">: </span>
+                <span className="board-chat-pane__chip-value">{chip.value}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {activeChip ? (
           <pre
             className="mb-0 rounded-2 p-2 small"
             style={{
@@ -239,7 +432,7 @@ function WorkingBubble({ copilotOutput = '' }) {
               wordBreak: 'break-word',
             }}
           >
-            {liveOutput}
+            {activeChip.fullText}
           </pre>
         ) : null}
       </div>
@@ -334,6 +527,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const messages = chat?.messages ?? [];
   const processing = chat?.processing ?? false;
   const copilotOutput = chat?.copilotOutput ?? '';
+  const copilotTools = chat?.copilotTools ?? '';
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
   const filesUploaded = chat?.filesUploaded ?? [];
@@ -344,6 +538,8 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
     chatActions?.unsubscribeChat,
     chatActions?.subscribeCopilotOutput,
     chatActions?.unsubscribeCopilotOutput,
+    chatActions?.subscribeCopilotTools,
+    chatActions?.unsubscribeCopilotTools,
     boardId,
     cardId,
     boardSseClientId,
@@ -351,7 +547,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, processing, copilotOutput]);
+  }, [messages.length, processing, copilotOutput, copilotTools]);
 
   if (!chat) return null;
 
@@ -370,7 +566,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
             filesUploaded={filesUploaded}
           />
         ))}
-        {processing && <WorkingBubble copilotOutput={copilotOutput} />}
+        {processing && <WorkingBubble copilotOutput={copilotOutput} copilotTools={copilotTools} compact={compact} />}
         <div ref={bottomRef} />
       </div>
       {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} />}

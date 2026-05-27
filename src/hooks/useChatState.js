@@ -7,7 +7,7 @@ import {
   unsubscribeWatchparty,
   uploadFileForChat,
 } from '../lib/client.js';
-import { COPILOT_OUTPUT_CHANNEL } from '../lib/appConfig.js';
+import { COPILOT_OUTPUT_CHANNEL, COPILOT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import { useCardState } from './useCardState.js';
 
 export function useChatState(boardId, cardId) {
@@ -19,6 +19,7 @@ export function useChatState(boardId, cardId) {
   const boardSseClientId = card.boardSseClientId ?? null;
   const filesUploaded = card.filesUploaded ?? [];
   const latestCopilotOutput = String(card.copilotOutput ?? '');
+  const latestCopilotTools = String(card.copilotTools ?? '');
 
   const sendChat = useCallback(
     (text, payload = {}) => dispatchAction(boardId, cardId, 'chat-send', { text, ...payload }),
@@ -50,6 +51,16 @@ export function useChatState(boardId, cardId) {
     return unsubscribeWatchparty(boardId, cardId, COPILOT_OUTPUT_CHANNEL, boardSseClientId);
   }, [boardId, cardId, boardSseClientId]);
 
+  const subscribeCopilotTools = useCallback(() => {
+    if (!boardSseClientId) return Promise.resolve(null);
+    return subscribeWatchparty(boardId, cardId, COPILOT_TOOLS_CHANNEL, boardSseClientId);
+  }, [boardId, cardId, boardSseClientId]);
+
+  const unsubscribeCopilotTools = useCallback(() => {
+    if (!boardSseClientId) return Promise.resolve(null);
+    return unsubscribeWatchparty(boardId, cardId, COPILOT_TOOLS_CHANNEL, boardSseClientId);
+  }, [boardId, cardId, boardSseClientId]);
+
   const chatActions = useMemo(() => ({
     sendChat,
     uploadFileForChat: uploadChatFile,
@@ -57,11 +68,14 @@ export function useChatState(boardId, cardId) {
     unsubscribeChat,
     subscribeCopilotOutput,
     unsubscribeCopilotOutput,
-  }), [sendChat, uploadChatFile, subscribeChat, unsubscribeChat, subscribeCopilotOutput, unsubscribeCopilotOutput]);
+    subscribeCopilotTools,
+    unsubscribeCopilotTools,
+  }), [sendChat, uploadChatFile, subscribeChat, unsubscribeChat, subscribeCopilotOutput, unsubscribeCopilotOutput, subscribeCopilotTools, unsubscribeCopilotTools]);
 
   return {
     ...(chatState ?? {}),
     copilotOutput: latestCopilotOutput,
+    copilotTools: latestCopilotTools,
     boardSseClientId,
     chatActions,
     filesUploaded,

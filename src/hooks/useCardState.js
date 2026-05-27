@@ -1,5 +1,5 @@
 import { dispatchAction, refreshCard, patchCard, uploadFileForChat } from '../lib/client.js';
-import { COPILOT_OUTPUT_CHANNEL } from '../lib/appConfig.js';
+import { COPILOT_OUTPUT_CHANNEL, COPILOT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import { resolveCanRefresh, resolveRequireTokens, useBoardState } from './useBoardState.js';
 
 export function useCardState(boardId, cardId) {
@@ -31,7 +31,13 @@ export function useCardState(boardId, cardId) {
   const copilotOutputEvents = Array.isArray(watchpartyState[COPILOT_OUTPUT_CHANNEL])
     ? watchpartyState[COPILOT_OUTPUT_CHANNEL]
     : [];
+  const copilotToolsEvents = Array.isArray(watchpartyState[COPILOT_TOOLS_CHANNEL])
+    ? watchpartyState[COPILOT_TOOLS_CHANNEL]
+    : [];
+  const copilotOutputEvent = copilotOutputEvents.at(-1) ?? null;
+  const copilotToolsEvent = copilotToolsEvents.at(-1) ?? null;
   const copilotOutput = String(copilotOutputEvents.at(-1)?.payload?.text ?? '');
+  const copilotTools = String(copilotToolsEvents.at(-1)?.payload?.text ?? '');
   const filesUploaded = cardData.files ?? [];
   const filesUploadedCount = filesUploaded.length;
 
@@ -43,6 +49,9 @@ export function useCardState(boardId, cardId) {
     cardRuntime: board.cardRuntimes[cardId] ?? null,
     chatState,
     copilotOutput,
+    copilotOutputEvent,
+    copilotTools,
+    copilotToolsEvent,
     requiresDataObjects,
     filesUploaded,
     filesUploadedCount,

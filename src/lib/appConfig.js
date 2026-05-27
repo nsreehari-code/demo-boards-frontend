@@ -16,6 +16,7 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   serverOrigin: 'http://localhost:7799',
   boardServerConstants: {
     copilotOutputChannel: 'copilot-output',
+    copilotToolsChannel: 'copilot-tools',
   },
 });
 
@@ -27,6 +28,9 @@ function normalizeBoardServerConstants(constants) {
     copilotOutputChannel: typeof source.copilotOutputChannel === 'string' && source.copilotOutputChannel.trim()
       ? source.copilotOutputChannel.trim()
       : fallback.copilotOutputChannel,
+    copilotToolsChannel: typeof source.copilotToolsChannel === 'string' && source.copilotToolsChannel.trim()
+      ? source.copilotToolsChannel.trim()
+      : fallback.copilotToolsChannel,
   };
 }
 
@@ -158,6 +162,7 @@ export let REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSec
 export let SERVER = currentAppConfig.serverOrigin;
 export let BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
 export let COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
+export let COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
 
 function applyAppConfig(config) {
   currentAppConfig = normalizeAppConfig(config);
@@ -170,6 +175,7 @@ function applyAppConfig(config) {
   SERVER = currentAppConfig.serverOrigin;
   BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
   COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
+  COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
   return currentAppConfig;
 }
 
