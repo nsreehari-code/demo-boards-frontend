@@ -688,6 +688,184 @@ a {
   color: var(--color-text);
 }
 
+.board-card-backface {
+  min-height: 0;
+  height: 100%;
+  padding: 0.6rem 0.7rem;
+  overflow: auto;
+  background: color-mix(in srgb, var(--color-surface-muted) 94%, transparent);
+  border-radius: 12px;
+  filter: invert(0.08);
+}
+
+.board-card-backface__title {
+  font-weight: 700;
+  font-size: 0.94rem;
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+.board-card-backface__section {
+  margin-top: 0.75rem;
+}
+
+.board-card-backface__section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-soft);
+  margin-bottom: 0.2rem;
+  margin-top: 0.2rem;
+}
+
+.board-card-backface__section-content {
+  gap: 0.25rem;
+}
+
+.board-card-backface__chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.board-card-backface__views-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.board-card-backface__view-token {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.45rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--color-border-strong) 75%, transparent);
+  border-radius: 2px;
+}
+
+.board-card-backface__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  background: rgba(84, 166, 255, 0.12);
+  border: 1px solid rgba(84, 166, 255, 0.28);
+  border-radius: 12px;
+  font-size: 0.78rem;
+  color: var(--color-accent-strong);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.board-card-backface__empty {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--color-text-soft);
+}
+
+.board-card-backface__list {
+  min-height: 0;
+  overflow: auto;
+  gap: 0.15rem;
+  margin-top: 0.35rem;
+}
+
+.board-card-backface__source-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+  border-radius: 8px;
+  padding: 0.2rem 0.45rem;
+}
+
+.board-card-backface__source-bind {
+  font-weight: 700;
+  color: var(--color-accent-strong);
+  white-space: nowrap;
+}
+
+.board-card-backface__source-separator {
+  color: var(--color-text-soft);
+}
+
+.board-card-backface__source-kinds {
+  min-width: 0;
+  color: var(--color-text);
+  text-transform: lowercase;
+}
+
+.board-card-backface__item {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  border-style: dashed;
+  border-width: 1px;
+  border-opacity: 0.4;
+}
+
+.board-card-backface__item-head {
+  display: none;
+}
+
+.board-card-backface__item-index {
+  color: var(--color-text-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.board-card-backface__item-kind {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent-strong);
+  background: transparent;
+  padding: 0;
+  border-radius: 4px;
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.board-card-backface__item-fields {
+  gap: 0.2rem;
+}
+
+.board-card-backface__field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--color-text);
+}
+
+.board-card-backface__field-key {
+  flex: 0 0 auto;
+  color: var(--color-text-soft);
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.board-card-backface__field-value {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.board-card-backface__field--empty {
+  color: var(--color-text-soft);
+}
+
 .board-card-core__overlay {
   position: absolute;
   inset: 0;
