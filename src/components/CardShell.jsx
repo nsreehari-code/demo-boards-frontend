@@ -76,7 +76,7 @@ export function CardShell({ boardId, cardId }) {
   return (
     <>
       <style>{`@keyframes card-shell-chat-pulse { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 1; transform: scale(1.24); } }`}</style>
-      <div className={`board-card ${statusTone}`}>
+      <div className={`board-card ${statusTone} ${showBackface ? 'board-card--backface' : ''}`}>
         <div className="board-card__header">
           <div className="board-card__title-wrap">
             <div className="board-card__title-block">
@@ -114,11 +114,18 @@ export function CardShell({ boardId, cardId }) {
               title={showBackface ? 'Show card content' : 'Show source information'}
               aria-label={showBackface ? 'Show card content' : 'Show source information'}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <line x1="12" y1="10" x2="12" y2="16" />
-                <circle cx="12" cy="7" r="1" fill="currentColor" stroke="none" />
-              </svg>
+              {showBackface ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <line x1="12" y1="10" x2="12" y2="16" />
+                  <circle cx="12" cy="7" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              )}
             </button>
             <button
               type="button"

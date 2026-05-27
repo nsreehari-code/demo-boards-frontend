@@ -32,6 +32,7 @@ export const CARD_CORE_VIEW_KINDS = {
   badge: { Component: BadgeView, isEditable: false },
   text: { Component: TextView, isEditable: false },
   markdown: { Component: MarkdownView, isEditable: false },
+  markup: { Component: MarkdownView, isEditable: false },
   actions: { Component: ActionsView, isEditable: false },
 };
 
@@ -1059,7 +1060,7 @@ function TextView({ data, renderDef }) {
       : style === 'heading'
         ? 'fw-bold'
         : 'small';
-  return <Tag className={className}>{data != null ? String(data) : ''}</Tag>;
+  return <Tag className={`${className} board-card-copy-block`}>{data != null ? String(data) : ''}</Tag>;
 }
 
 function MarkdownView({ data }) {
@@ -1077,7 +1078,7 @@ function MarkdownView({ data }) {
   if (!normalizedText) return null;
 
   return (
-    <div className="small mb-0 markdown-body lh-sm board-markdown" style={{ color: 'var(--color-text)' }}>
+    <div className="small mb-0 markdown-body lh-sm board-markdown board-card-copy-block" style={{ color: 'var(--color-text)' }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
