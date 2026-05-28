@@ -41,6 +41,13 @@ export const dispatchAction = (boardId, cardId, type, payload = {}) =>
     body: JSON.stringify({ actionType: type, payload }),
   });
 
+export const callBoardMcp = (boardId, tool, args = {}) =>
+  fetch(`${base(boardId)}/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, args }),
+  });
+
 export const uploadFile = (boardId, cardId, file) =>
   fetch(`${base(boardId)}/cards/${cardId}/files`, {
     method: 'POST',

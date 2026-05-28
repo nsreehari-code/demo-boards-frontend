@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
+import { callBoardMcp } from '../lib/client.js';
 import { CardCore } from './CardCore.jsx';
 import { CardBackface } from './CardBackface.jsx';
 import { ChatPane } from './ChatPane.jsx';
@@ -22,6 +23,40 @@ function getStatusTone(status) {
     default:
       return 'board-tone--fresh';
   }
+}
+
+async function readJsonResponse(response) {
+  let payload = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = typeof payload?.error === 'string'
+      ? payload.error
+      : `Request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+function unwrapMcpToolPayload(payload) {
+  if (payload && typeof payload === 'object' && payload.status === 'fail') {
+    const message = typeof payload.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : 'MCP tool request failed';
+    throw new Error(message);
+  }
+
+  if (payload && typeof payload === 'object' && payload.status === 'success' && 'data' in payload) {
+    return payload.data;
+  }
+
+  return payload;
 }
 
 function ChatModal({ boardId, cardId, title, onClose }) {
@@ -63,6 +98,13 @@ export function CardShell({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const [chatOpen, setChatOpen] = useState(false);
   const [showBackface, setShowBackface] = useState(false);
+  const [flightStateBySource, setFlightStateBySource] = useState({});
+  const [cardFlightState, setCardFlightState] = useState(null);
+
+  useEffect(() => {
+    setFlightStateBySource({});
+    setCardFlightState(null);
+  }, [boardId, cardId]);
 
   if (!cardState?.cardContent) return null;
 
@@ -72,6 +114,73 @@ export function CardShell({ boardId, cardId }) {
   const refreshDisabled = cardState.cardRuntime?.status === 'running';
   const chatProcessing = cardState.chatState?.processing === true;
   const showRefresh = cardState.canRefresh === true;
+
+  const handleRunFlight = async ({ sourceIndex, bindTo }) => {
+    if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
+      return;
+    }
+
+    setFlightStateBySource((previous) => ({
+      ...previous,
+      [sourceIndex]: {
+        state: 'running',
+        bindTo: bindTo || '',
+      },
+    }));
+
+    try {
+      const payload = unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.run-single-source-in-live-card', {
+          card_id: cardId,
+          source_idx: sourceIndex,
+          mock_requires: cardState.requiresDataObjects,
+        }),
+      ));
+
+      setFlightStateBySource((previous) => ({
+        ...previous,
+        [sourceIndex]: {
+          state: 'success',
+          bindTo: bindTo || '',
+          data: payload && typeof payload === 'object' ? payload : {},
+        },
+      }));
+    } catch (error) {
+      setFlightStateBySource((previous) => ({
+        ...previous,
+        [sourceIndex]: {
+          state: 'error',
+          bindTo: bindTo || '',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    }
+  };
+
+  const handleRunCardFlight = async () => {
+    setCardFlightState({
+      state: 'running',
+    });
+
+    try {
+      const payload = unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.run-one-cycle-with-candidate-card', {
+          candidate_card_content: cardState.cardContent,
+          mock_requires: cardState.requiresDataObjects,
+        }),
+      ));
+
+      setCardFlightState({
+        state: 'success',
+        data: payload && typeof payload === 'object' ? payload : {},
+      });
+    } catch (error) {
+      setCardFlightState({
+        state: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
 
   return (
     <>
@@ -143,6 +252,10 @@ export function CardShell({ boardId, cardId }) {
               cardId={cardId}
               title={title}
               cardContent={cardState.cardContent}
+              cardFlightState={cardFlightState}
+              flightStateBySource={flightStateBySource}
+              onRunCardFlight={handleRunCardFlight}
+              onRunFlight={handleRunFlight}
             />
           ) : (
             <CardCore boardId={boardId} cardId={cardId} />
