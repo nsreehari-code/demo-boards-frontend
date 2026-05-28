@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 function formatScalar(value) {
   if (value == null) {
@@ -114,199 +114,50 @@ function buildSourceSummary(sourceDef, index) {
   };
 }
 
-function formatFlightValue(value) {
-  if (value == null) {
-    return 'null';
-  }
-  if (typeof value === 'string') {
-    return value;
-  }
-  return JSON.stringify(value, null, 2);
-}
+const AIRPLANE_FLIPPED_SVG = (
+  <svg
+    width="14" height="14" viewBox="0 0 16 16"
+    fill="currentColor" aria-hidden="true"
+    style={{ transform: 'scaleY(-1)', display: 'block' }}
+  >
+    <path d="M6.428 1.151C6.708.591 7.213 0 8 0s1.292.592 1.572 1.151C9.861 1.73 10 2.431 10 3v3.691l5.17 2.585a1.5 1.5 0 0 1 .83 1.342V12a.5.5 0 0 1-.582.493l-5.507-.918-.375 2.253 1.318 1.318A.5.5 0 0 1 10.5 16h-5a.5.5 0 0 1-.354-.854l1.319-1.318-.376-2.253-5.507.918A.5.5 0 0 1 0 12v-1.382a1.5 1.5 0 0 1 .83-1.342L6 6.691V3c0-.568.14-1.271.428-1.849Z" />
+  </svg>
+);
 
-function normalizeSourceFlightData(data) {
-  if (!data || typeof data !== 'object') {
-    return { bindTo: '', ok: false, result: null, issues: [] };
-  }
-
-  if ('ok' in data || 'result' in data || 'issues' in data) {
-    return {
-      bindTo: typeof data.bindTo === 'string' ? data.bindTo : '',
-      ok: data.ok !== false,
-      result: 'result' in data ? data.result : null,
-      issues: Array.isArray(data.issues) ? data.issues : [],
-    };
-  }
-
-  return {
-    bindTo: typeof data.bindTo === 'string' ? data.bindTo : '',
-    ok: data.reachable !== false,
-    result: 'resultValue' in data ? data.resultValue : null,
-    issues: typeof data.error === 'string' && data.error.trim()
-      ? [data.error.trim()]
-      : [],
-  };
-}
-
-function normalizeCardFlightData(data) {
-  if (!data || typeof data !== 'object') {
-    return {
-      cardId: '',
-      ok: false,
-      issues: [],
-      provides_outputs: {},
-      rendered_view: { layout: null, features: null, elements: [] },
-      raw: {},
-    };
-  }
-
-  if ('issues' in data || 'provides_outputs' in data || 'rendered_view' in data) {
-    return {
-      cardId: typeof data.cardId === 'string' ? data.cardId : '',
-      ok: data.ok !== false,
-      issues: Array.isArray(data.issues) ? data.issues : [],
-      provides_outputs: data.provides_outputs && typeof data.provides_outputs === 'object' ? data.provides_outputs : {},
-      rendered_view: data.rendered_view && typeof data.rendered_view === 'object'
-        ? data.rendered_view
-        : { layout: null, features: null, elements: [] },
-      raw: data,
-    };
-  }
-
-  const issues = [];
-  const validationIssues = Array.isArray(data.validation?.issues) ? data.validation.issues : [];
-  issues.push(...validationIssues.map(String));
-  for (const probe of Array.isArray(data.source_probes) ? data.source_probes : []) {
-    if (typeof probe?.error === 'string' && probe.error.trim()) {
-      issues.push(probe.error.trim());
-    }
-  }
-  issues.push(...(Array.isArray(data.projection_errors) ? data.projection_errors : []).map(String));
-  issues.push(...(Array.isArray(data.compute_errors) ? data.compute_errors : []).map(String));
-
-  return {
-    cardId: typeof data.cardId === 'string' ? data.cardId : '',
-    ok: data.ok !== false,
-    issues,
-    provides_outputs: {},
-    rendered_view: { layout: null, features: null, elements: [] },
-    raw: data,
-  };
-}
-
-function renderFlightResult(flight) {
-  if (!flight) {
-    return null;
-  }
-
-  if (flight.state === 'running') {
-    return (
-      <div className="board-card-backface__flight-result board-card-backface__flight-result--running" role="status" aria-live="polite">
-        <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-        <span>Running preflight...</span>
-      </div>
-    );
-  }
-
-  if (flight.state === 'error') {
-    return (
-      <div className="board-card-backface__flight-result board-card-backface__flight-result--error" role="alert">
-        {flight.error || 'Source preflight failed.'}
-      </div>
-    );
-  }
-
-  if (flight.state !== 'success') {
-    return null;
-  }
-
-  const data = normalizeSourceFlightData(flight.data && typeof flight.data === 'object' ? flight.data : {});
-  const chips = [];
-
-  if (typeof data.bindTo === 'string' && data.bindTo.trim()) {
-    chips.push(data.bindTo.trim());
-  }
-  chips.push(data.ok ? 'ok' : 'failed');
+function SourceBlock({ summary, onRunFlight, isLoading }) {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="board-card-backface__flight-result board-card-backface__flight-result--success">
-      {chips.length > 0 ? (
-        <div className="board-card-backface__flight-meta">{chips.join(' | ')}</div>
-      ) : null}
-      {data.issues.length > 0 ? (
-        <div className="board-card-backface__flight-note">{data.issues.join(' | ')}</div>
-      ) : null}
-      {'result' in data ? (
-        <pre className="board-card-backface__flight-value">{formatFlightValue(data.result)}</pre>
-      ) : null}
-    </div>
-  );
-}
-
-function renderCardFlightResult(flight) {
-  if (!flight) {
-    return null;
-  }
-
-  if (flight.state === 'running') {
-    return (
-      <div className="board-card-backface__flight-result board-card-backface__flight-result--running" role="status" aria-live="polite">
-        <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-        <span>Running card preflight...</span>
+    <div className="board-card-backface__source-line">
+      <div className="board-card-backface__source-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.35rem' }}>
+        <button
+          type="button"
+          className="board-card-backface__source-toggle-btn"
+          onClick={() => setExpanded((prev) => !prev)}
+          title={expanded ? 'Collapse source details' : 'Expand source details'}
+        >
+          <i className={`bi bi-chevron-${expanded ? 'down' : 'right'}`} style={{ fontSize: '0.58rem' }} />
+          <strong className="board-card-backface__source-bind">{summary.bindTo || 'unbound'}</strong>
+        </button>
+        {onRunFlight ? (
+          <button
+            type="button"
+            className="board-icon-button board-icon-button--sm board-icon-button--flight-source"
+            title={`Run source flight: ${summary.bindTo || 'source'}`}
+            onClick={() => onRunFlight({ sourceIndex: summary.index, bindTo: summary.bindTo })}
+            disabled={isLoading}
+          >
+            {isLoading
+              ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              : AIRPLANE_FLIPPED_SVG}
+          </button>
+        ) : null}
       </div>
-    );
-  }
-
-  if (flight.state === 'error') {
-    return (
-      <div className="board-card-backface__flight-result board-card-backface__flight-result--error" role="alert">
-        {flight.error || 'Card preflight failed.'}
-      </div>
-    );
-  }
-
-  if (flight.state !== 'success') {
-    return null;
-  }
-
-  const data = normalizeCardFlightData(flight.data && typeof flight.data === 'object' ? flight.data : {});
-  const providesOutputs = data.provides_outputs && typeof data.provides_outputs === 'object' ? data.provides_outputs : {};
-  const renderedView = data.rendered_view && typeof data.rendered_view === 'object' ? data.rendered_view : {};
-  const renderedElements = Array.isArray(renderedView.elements) ? renderedView.elements : [];
-
-  const chips = [];
-  if (typeof data.cardId === 'string' && data.cardId.trim()) {
-    chips.push(data.cardId.trim());
-  }
-  if (typeof data.ok === 'boolean') {
-    chips.push(data.ok ? 'cycle ok' : 'cycle failed');
-  }
-  if (data.issues.length > 0) {
-    chips.push(`${data.issues.length} issue${data.issues.length === 1 ? '' : 's'}`);
-  }
-  if (Object.keys(providesOutputs).length > 0) {
-    chips.push(`${Object.keys(providesOutputs).length} provide${Object.keys(providesOutputs).length === 1 ? '' : 's'}`);
-  }
-  if (renderedElements.length > 0) {
-    chips.push(`${renderedElements.length} view element${renderedElements.length === 1 ? '' : 's'}`);
-  }
-
-  const detail = {
-    issues: data.issues,
-    provides_outputs: providesOutputs,
-    rendered_view: renderedView,
-  };
-
-  if (Object.keys(providesOutputs).length === 0 && renderedElements.length === 0 && data.raw && Object.keys(data.raw).length > 0) {
-    detail.raw = data.raw;
-  }
-
-  return (
-    <div className="board-card-backface__flight-result board-card-backface__flight-result--success">
-      {chips.length > 0 ? (
-        <div className="board-card-backface__flight-meta">{chips.join(' | ')}</div>
+      {expanded ? (
+        <div className="board-card-backface__source-block">
+          {summary.detailLines.map((line, lineIndex) => renderYamlStyledLine(line, `${summary.id}-line-${lineIndex}`))}
+        </div>
       ) : null}
-      <pre className="board-card-backface__flight-value">{formatFlightValue(detail)}</pre>
     </div>
   );
 }
@@ -320,8 +171,8 @@ function ChipRow({ value }) {
 export function CardBackface({
   cardId,
   cardContent,
-  cardFlightState,
-  flightStateBySource,
+  loadingBySource,
+  cardFlightLoading,
   onRunCardFlight,
   onRunFlight,
 }) {
@@ -332,30 +183,28 @@ export function CardBackface({
   const renderedViews = viewElements
     .map((element) => (typeof element?.kind === 'string' ? element.kind.trim() : ''))
     .filter((kind, index, allKinds) => kind && allKinds.indexOf(kind) === index);
-  
+
   const sourceSummaries = sourceDefs.map((sourceDef, index) => buildSourceSummary(sourceDef, index));
 
   return (
     <div className="board-card-backface h-100 d-flex flex-column">
-      <div className="board-card-backface__title text-truncate" title={cardId}>{cardId}</div>
+      <div className="board-card-backface__title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', minWidth: 0 }}>
+        <span className="text-truncate" title={cardId}>{cardId}</span>
+        {onRunCardFlight ? (
+          <button
+            type="button"
+            className="board-icon-button board-icon-button--sm board-icon-button--flight-card"
+            title="Run card preflight"
+            onClick={() => onRunCardFlight()}
+            disabled={cardFlightLoading}
+          >
+            {cardFlightLoading
+              ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              : <i className="bi bi-flask" style={{ fontSize: '0.9rem' }} />}
+          </button>
+        ) : null}
+      </div>
 
-      {onRunCardFlight ? (
-        <div className="board-card-backface__section">
-          <div className="board-card-backface__section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-            <span>Card Preflight</span>
-            <button
-              type="button"
-              className="btn btn-outline-secondary btn-sm board-card-backface__run-flight-btn"
-              onClick={() => onRunCardFlight()}
-              disabled={cardFlightState?.state === 'running'}
-            >
-              {cardFlightState?.state === 'running' ? 'Running...' : 'Run Card Flight'}
-            </button>
-          </div>
-          {renderCardFlightResult(cardFlightState)}
-        </div>
-      ) : null}
-      
       {/* Depends On + Produces Row */}
       {(requires.length > 0 || provides.length > 0) && (
         <div className="board-card-backface__io-row">
@@ -369,7 +218,6 @@ export function CardBackface({
               </div>
             </div>
           )}
-
           {provides.length > 0 && (
             <div className="board-card-backface__section board-card-backface__section--io">
               <div className="board-card-backface__section-title">Produces</div>
@@ -389,27 +237,12 @@ export function CardBackface({
           <div className="board-card-backface__section-title">External Data</div>
           <div className="board-card-backface__list d-flex flex-column">
             {sourceSummaries.map((summary) => (
-              <div key={summary.id} className="board-card-backface__source-line">
-                <div className="board-card-backface__source-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <strong className="board-card-backface__source-bind">{summary.bindTo || 'unbound'}</strong>
-                  {onRunFlight && (
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm board-card-backface__run-flight-btn"
-                      title={`Run flight for ${summary.bindTo || 'source'}`}
-                      style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem', lineHeight: 1.4 }}
-                      onClick={() => onRunFlight({ sourceIndex: summary.index, bindTo: summary.bindTo })}
-                      disabled={flightStateBySource?.[summary.index]?.state === 'running'}
-                    >
-                      {flightStateBySource?.[summary.index]?.state === 'running' ? 'Running...' : 'Run Flight'}
-                    </button>
-                  )}
-                </div>
-                <div className="board-card-backface__source-block">
-                  {summary.detailLines.map((line, lineIndex) => renderYamlStyledLine(line, `${summary.id}-line-${lineIndex}`))}
-                </div>
-                {renderFlightResult(flightStateBySource?.[summary.index])}
-              </div>
+              <SourceBlock
+                key={summary.id}
+                summary={summary}
+                onRunFlight={onRunFlight}
+                isLoading={loadingBySource?.[summary.index] === true}
+              />
             ))}
           </div>
         </div>

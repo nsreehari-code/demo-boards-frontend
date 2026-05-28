@@ -2,8 +2,13 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { SERVER, initBoard, refreshCard } from '../lib/client.js';
 
 const boardStores = new Map();
+const boardUiStores = new Map();
 
 function emitBoardStore(store) {
+  store.listeners.forEach((listener) => listener());
+}
+
+function emitBoardUiStore(store) {
   store.listeners.forEach((listener) => listener());
 }
 
@@ -60,6 +65,19 @@ function getOrCreateBoardStore(boardId) {
   return boardStores.get(boardId);
 }
 
+function getOrCreateBoardUiStore(boardId) {
+  if (!boardUiStores.has(boardId)) {
+    boardUiStores.set(boardId, {
+      snapshot: {
+        flippedCardId: null,
+      },
+      listeners: new Set(),
+    });
+  }
+
+  return boardUiStores.get(boardId);
+}
+
 function subscribeBoardStore(boardId, listener) {
   if (!boardId) return () => {};
 
@@ -70,6 +88,38 @@ function subscribeBoardStore(boardId, listener) {
   return () => {
     store.listeners.delete(listener);
   };
+}
+
+function subscribeBoardUiStore(boardId, listener) {
+  if (!boardId) return () => {};
+
+  const store = getOrCreateBoardUiStore(boardId);
+  store.listeners.add(listener);
+
+  return () => {
+    store.listeners.delete(listener);
+  };
+}
+
+function setBoardFlippedCardId(boardId, nextValue) {
+  if (!boardId) return;
+
+  const store = getOrCreateBoardUiStore(boardId);
+  const currentValue = store.snapshot?.flippedCardId ?? null;
+  const resolvedValue = typeof nextValue === 'function'
+    ? nextValue(currentValue)
+    : nextValue;
+  const flippedCardId = resolvedValue ? String(resolvedValue) : null;
+
+  if (currentValue === flippedCardId) {
+    return;
+  }
+
+  store.snapshot = {
+    ...store.snapshot,
+    flippedCardId,
+  };
+  emitBoardUiStore(store);
 }
 
 function normalizeFilterFns(filterFns) {
@@ -250,6 +300,29 @@ export function useBoardSSE(boardId) {
     getSnapshot,
     () => null,
   );
+}
+
+export function useBoardFlipState(boardId) {
+  const subscribe = useCallback((listener) => subscribeBoardUiStore(boardId, listener), [boardId]);
+  const getSnapshot = useCallback(
+    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { flippedCardId: null }),
+    [boardId],
+  );
+
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => ({ flippedCardId: null }),
+  );
+
+  const setFlippedCardId = useCallback((nextValue) => {
+    setBoardFlippedCardId(boardId, nextValue);
+  }, [boardId]);
+
+  return {
+    flippedCardId: snapshot?.flippedCardId ?? null,
+    setFlippedCardId,
+  };
 }
 
 // ---------------------------------------------------------------------------
