@@ -12,6 +12,19 @@ const CHAT_PROCESSING_PULSE_STYLE = {
   transformOrigin: 'center',
 };
 
+const CLOSE_DETAILS_SVG = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <line x1="5" y1="7" x2="14" y2="7" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    <circle cx="17" cy="7" r="1.8" fill="currentColor" />
+    <line x1="10" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    <circle cx="7" cy="12" r="1.8" fill="currentColor" />
+    <line x1="5" y1="17" x2="14" y2="17" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    <circle cx="17" cy="17" r="1.8" fill="currentColor" />
+    <line x1="15.8" y1="14.8" x2="21.2" y2="20.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    <line x1="21.2" y1="14.8" x2="15.8" y2="20.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+  </svg>
+);
+
 function getStatusTone(status) {
   switch (status) {
     case 'completed':
@@ -303,54 +316,57 @@ export function CardShell({ boardId, cardId }) {
             </div>
           </div>
           <div className="board-card__actions">
-            {showRefresh ? (
-              refreshDisabled ? (
-                <span
-                  className="board-icon-button disabled"
-                  aria-label="Refreshing"
-                  title="Refreshing"
-                >
-                  <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-                </span>
-              ) : (
+            {showBackface ? (
+              <button
+                type="button"
+                className="board-icon-button"
+                onClick={() => setFlippedCardId(null)}
+                title="Show card content"
+                aria-label="Show card content"
+              >
+                {CLOSE_DETAILS_SVG}
+              </button>
+            ) : (
+              <>
                 <button
                   type="button"
                   className="board-icon-button"
-                  onClick={() => cardState.cardActions?.refresh()}
-                  title="Refresh"
+                  onClick={() => setFlippedCardId(cardId)}
+                  title="Show source information"
+                  aria-label="Show source information"
                 >
-                  <i className="bi bi-arrow-clockwise" />
+                  <i className="bi bi-sliders2" aria-hidden="true" style={{ fontSize: '0.95rem' }} />
                 </button>
-              )
-            ) : null}
-            <button
-              type="button"
-              className="board-icon-button"
-              onClick={() => setFlippedCardId((currentCardId) => (currentCardId === cardId ? null : cardId))}
-              title={showBackface ? 'Show card content' : 'Show source information'}
-              aria-label={showBackface ? 'Show card content' : 'Show source information'}
-            >
-              {showBackface ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" />
-                  <line x1="12" y1="10" x2="12" y2="16" />
-                  <circle cx="12" cy="7" r="1" fill="currentColor" stroke="none" />
-                </svg>
-              )}
-            </button>
-            <button
-              type="button"
-              className="board-icon-button"
-              onClick={() => setChatOpen(true)}
-              title={chatProcessing ? 'Chat processing' : 'Open chat'}
-            >
-              <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
-            </button>
+                {showRefresh ? (
+                  refreshDisabled ? (
+                    <span
+                      className="board-icon-button disabled"
+                      aria-label="Refreshing"
+                      title="Refreshing"
+                    >
+                      <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="board-icon-button"
+                      onClick={() => cardState.cardActions?.refresh()}
+                      title="Refresh"
+                    >
+                      <i className="bi bi-arrow-clockwise" />
+                    </button>
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  className="board-icon-button"
+                  onClick={() => setChatOpen(true)}
+                  title={chatProcessing ? 'Chat processing' : 'Open chat'}
+                >
+                  <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="board-card__body">
