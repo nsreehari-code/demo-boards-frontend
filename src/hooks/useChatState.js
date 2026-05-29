@@ -22,12 +22,21 @@ export function useChatState(boardId, cardId) {
   const latestCopilotTools = String(card.copilotTools ?? '');
 
   const sendChat = useCallback(
-    (text, payload = {}) => dispatchAction(boardId, cardId, 'chat-send', { text, ...payload }),
+    (text, payload = {}) => {
+      const { turnId, ...rest } = payload ?? {};
+      const normalizedTurnId = typeof turnId === 'string' && turnId.trim() ? turnId.trim() : '';
+      const finalPayload = {
+        text,
+        ...rest,
+        ...(normalizedTurnId ? { 'turn-id': normalizedTurnId } : {}),
+      };
+      return dispatchAction(boardId, cardId, 'chat-send', finalPayload);
+    },
     [boardId, cardId],
   );
 
   const uploadChatFile = useCallback(
-    (file) => uploadFileForChat(boardId, cardId, file),
+    (file, turnId = '') => uploadFileForChat(boardId, cardId, file, turnId),
     [boardId, cardId],
   );
 

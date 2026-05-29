@@ -58,8 +58,11 @@ export const uploadFile = (boardId, cardId, file) =>
     body: file,
   });
 
-export const uploadFileForChat = (boardId, cardId, file) =>
-  fetch(`${base(boardId)}/cards/${cardId}/files?inChat=true`, {
+export const uploadFileForChat = (boardId, cardId, file, turnId = '') => {
+  const turnQuery = typeof turnId === 'string' && turnId.trim()
+    ? `&turn-id=${encodeURIComponent(turnId.trim())}`
+    : '';
+  return fetch(`${base(boardId)}/cards/${cardId}/files?inChat=true${turnQuery}`, {
     method: 'POST',
     headers: {
       'Content-Type': file.type || 'application/octet-stream',
@@ -67,6 +70,7 @@ export const uploadFileForChat = (boardId, cardId, file) =>
     },
     body: file,
   });
+};
 
 export const subscribeCardChats = (boardId, cardId, clientId) =>
   fetch(`${base(boardId)}/cards/${cardId}/chats/subscribe-sse`, {

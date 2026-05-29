@@ -440,7 +440,7 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
   );
 }
 
-function ChatComposer({ chatActions, placeholder, processing }) {
+function ChatComposer({ chatActions, placeholder, processing, turnId }) {
   const [text, setText] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef(null);
@@ -455,14 +455,14 @@ function ChatComposer({ chatActions, placeholder, processing }) {
 
   const upload = (file) => {
     if (!file || processing) return;
-    chatActions.uploadFileForChat(file).catch(() => {});
+    chatActions.uploadFileForChat(file, turnId).catch(() => {});
   };
 
   const send = () => {
     if (processing) return;
     const t = text.trim();
     if (!t) return;
-    chatActions.sendChat(t).catch(() => {});
+    chatActions.sendChat(t, { turnId }).catch(() => {});
     setText('');
   };
 
@@ -522,6 +522,16 @@ function ChatComposer({ chatActions, placeholder, processing }) {
   );
 }
 
+function makeTurnId() {
+  return Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+}
+
+function isPendingFileUploadMessage(msg) {
+  if (!msg || msg.role !== 'system') return false;
+  const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+  return /^file uploaded:/i.test(text);
+}
+
 export function ChatPane({ boardId, cardId, readOnly = false, compact = false }) {
   const chat = useChatState(boardId, cardId);
   const messages = chat?.messages ?? [];
@@ -531,7 +541,37 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
   const filesUploaded = chat?.filesUploaded ?? [];
+  const messagesRef = useRef(null);
   const bottomRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const initialScrollDoneRef = useRef(false);
+  const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
+
+  const scrollToBottom = (behavior = 'auto') => {
+    const element = messagesRef.current;
+    if (!element) {
+      bottomRef.current?.scrollIntoView({ behavior });
+      return;
+    }
+
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior,
+    });
+  };
+
+  useEffect(() => {
+    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+    if (isPendingFileUploadMessage(lastMsg) && typeof lastMsg.turn === 'string' && lastMsg.turn.trim()) {
+      if (draftTurnId !== lastMsg.turn) {
+        setDraftTurnId(lastMsg.turn);
+      }
+      return;
+    }
+    if (lastMsg && typeof lastMsg.turn === 'string' && lastMsg.turn.trim() === draftTurnId) {
+      setDraftTurnId(makeTurnId());
+    }
+  }, [messages, draftTurnId]);
 
   useChatSubscription(
     chatActions?.subscribeChat,
@@ -546,14 +586,83 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   );
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const element = messagesRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const updateStickyState = () => {
+      const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+      shouldStickToBottomRef.current = distanceFromBottom <= 72;
+    };
+
+    updateStickyState();
+    element.addEventListener('scroll', updateStickyState, { passive: true });
+    return () => element.removeEventListener('scroll', updateStickyState);
+  }, []);
+
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+    shouldStickToBottomRef.current = true;
+  }, [boardId, cardId]);
+
+  useEffect(() => {
+    if (initialScrollDoneRef.current) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom('auto');
+      shouldStickToBottomRef.current = true;
+      initialScrollDoneRef.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [messages.length, processing, boardId, cardId]);
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom(messages.length > 0 || processing ? 'smooth' : 'auto');
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, [messages.length, processing, copilotOutput, copilotTools]);
+
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const observer = new MutationObserver(() => {
+      if (!shouldStickToBottomRef.current) {
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        scrollToBottom('auto');
+      });
+    });
+
+    observer.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   if (!chat) return null;
 
   return (
     <div className="board-chat-pane">
       <div
+        ref={messagesRef}
         className="board-chat-pane__messages p-2"
       >
         {messages.map((msg, i) => (
@@ -569,7 +678,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
         {processing && <WorkingBubble copilotOutput={copilotOutput} copilotTools={copilotTools} compact={compact} />}
         <div ref={bottomRef} />
       </div>
-      {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} />}
+      {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} turnId={draftTurnId} />}
     </div>
   );
 }

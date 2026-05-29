@@ -195,15 +195,39 @@ function CardFlightModalContent({ flightResult }) {
 }
 
 function ChatModal({ boardId, cardId, title, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
-    <GlobalModal
-      title={`Chat: ${title}`}
-      onClose={onClose}
-      className="global-modal--chat"
-      bodyClassName="global-modal__body--chat"
+    <div
+      className="board-modal position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+      style={{ zIndex: 1200, padding: '1rem' }}
+      onClick={onClose}
     >
-      <ChatPane boardId={boardId} cardId={cardId} />
-    </GlobalModal>
+      <div
+        className="board-modal__dialog w-100"
+        style={{ maxWidth: '960px', height: 'min(90vh, 720px)' }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="board-modal__header d-flex align-items-center justify-content-between gap-2 px-3 py-3">
+          <div className="board-modal__title text-truncate">Chat: {title}</div>
+          <button type="button" className="board-icon-button" onClick={onClose} title="Close chat">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+        <div className="board-modal__body" style={{ height: 'calc(100% - 65px)' }}>
+          <ChatPane boardId={boardId} cardId={cardId} />
+        </div>
+      </div>
+    </div>
   );
 }
 
