@@ -67,6 +67,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
     const runRefreshAll = async () => {
       setRefreshingAll(true);
       try {
+        window.dispatchEvent(new Event('demo-board:persist-canvas'));
         await refreshAllRef.current?.();
       } finally {
         if (isMountedRef.current) {
@@ -86,6 +87,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
 
     setRefreshingAll(true);
     try {
+      window.dispatchEvent(new Event('demo-board:persist-canvas'));
       await refreshAllRef.current?.();
     } finally {
       setRefreshingAll(false);

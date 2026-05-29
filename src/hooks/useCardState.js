@@ -1,60 +1,59 @@
+import { useMemo } from 'react';
 import { dispatchAction, refreshCard, patchCard, uploadFileForChat } from '../lib/client.js';
-import { COPILOT_OUTPUT_CHANNEL, COPILOT_TOOLS_CHANNEL } from '../lib/appConfig.js';
-import { resolveCanRefresh, resolveRequireTokens, useBoardState } from './useBoardState.js';
+import {
+  resolveCanRefresh,
+  resolveRequireTokens,
+  useBoardDataObjects,
+  useBoardInfo,
+  useCardDefinitionAndData,
+  useCardRuntimeState,
+} from './useSseSlices.js';
+
+const EMPTY_FILES = Object.freeze([]);
+
+export function useCardStateFilesData(boardId, cardId) {
+  const definitionAndData = useCardDefinitionAndData(boardId, cardId);
+  const files = definitionAndData?.cardData?.files;
+  return Array.isArray(files) ? files : EMPTY_FILES;
+}
 
 export function useCardState(boardId, cardId) {
-  const board = useBoardState(boardId);
+  const boardInfo = useBoardInfo(boardId);
+  const dataObjects = useBoardDataObjects(boardId);
+  const definitionAndData = useCardDefinitionAndData(boardId, cardId);
+  const runtimeState = useCardRuntimeState(boardId, cardId);
 
-  if (!board || !cardId) return null;
+  if (!definitionAndData || !cardId) return null;
 
-  const cardContent = board.cardContents[cardId] ?? null;
-
-  const requiresDataObjects = {};
-  for (const token of resolveRequireTokens(cardContent)) {
-    if (token in board.dataObjects) {
-      requiresDataObjects[token] = board.dataObjects[token];
-    }
-  }
-
+  const cardContent = definitionAndData.cardContent;
+  const cardData = definitionAndData.cardData;
+  const cardRuntime = runtimeState?.cardRuntime ?? null;
   const canRefresh = resolveCanRefresh(cardContent);
 
-  const cardActions = {
+  const requiresDataObjects = useMemo(() => {
+    const next = {};
+    for (const token of resolveRequireTokens(cardContent)) {
+      if (token in dataObjects) {
+        next[token] = dataObjects[token];
+      }
+    }
+    return next;
+  }, [cardContent, dataObjects]);
+
+  const cardActions = useMemo(() => ({
     refresh: () => (canRefresh ? refreshCard(boardId, cardId) : Promise.resolve(null)),
     patch: (patch) => patchCard(boardId, cardId, patch),
     dispatchAction: (type, payload = {}) => dispatchAction(boardId, cardId, type, payload),
     uploadFileForChat: (file) => uploadFileForChat(boardId, cardId, file),
-  };
-
-  const cardData = cardContent?.card_data ?? {};
-  const chatState = board.chatStates?.[cardId] ?? null;
-  const watchpartyState = board.watchpartyById?.[cardId] ?? {};
-  const copilotOutputEvents = Array.isArray(watchpartyState[COPILOT_OUTPUT_CHANNEL])
-    ? watchpartyState[COPILOT_OUTPUT_CHANNEL]
-    : [];
-  const copilotToolsEvents = Array.isArray(watchpartyState[COPILOT_TOOLS_CHANNEL])
-    ? watchpartyState[COPILOT_TOOLS_CHANNEL]
-    : [];
-  const copilotOutputEvent = copilotOutputEvents.at(-1) ?? null;
-  const copilotToolsEvent = copilotToolsEvents.at(-1) ?? null;
-  const copilotOutput = String(copilotOutputEvents.at(-1)?.payload?.text ?? '');
-  const copilotTools = String(copilotToolsEvents.at(-1)?.payload?.text ?? '');
-  const filesUploaded = cardData.files ?? [];
-  const filesUploadedCount = filesUploaded.length;
+  }), [boardId, canRefresh, cardId]);
 
   return {
-    boardSseClientId: board.sseClientId ?? null,
+    boardSseClientId: boardInfo?.sseClientId ?? null,
     cardContent,
     canRefresh,
     cardData,
-    cardRuntime: board.cardRuntimes[cardId] ?? null,
-    chatState,
-    copilotOutput,
-    copilotOutputEvent,
-    copilotTools,
-    copilotToolsEvent,
+    cardRuntime,
     requiresDataObjects,
-    filesUploaded,
-    filesUploadedCount,
     cardActions,
   };
 }

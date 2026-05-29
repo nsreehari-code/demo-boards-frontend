@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
 import { ChatPane } from './ChatPane.jsx';
 
-export function IngestCard({ boardId, cardId }) {
+function IngestCardComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
 
   if (!cardState?.cardContent) return null;
@@ -20,3 +20,5 @@ export function IngestCard({ boardId, cardId }) {
     </div>
   );
 }
+
+export const IngestCard = memo(IngestCardComponent);

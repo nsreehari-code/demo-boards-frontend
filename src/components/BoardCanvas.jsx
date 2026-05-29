@@ -560,14 +560,6 @@ export function BoardCanvas({ board, boardId, cardIds }) {
   }, [graphNodes, setNodes]);
 
   useEffect(() => {
-    if (!nodes.length) {
-      return;
-    }
-    const viewport = reactFlowInstance?.getViewport?.() ?? (canReusePersistedViewport ? persistedCanvasState?.viewport : null) ?? null;
-    persistNodes(nodes, viewport);
-  }, [canReusePersistedViewport, nodes, persistNodes, reactFlowInstance, persistedCanvasState?.viewport]);
-
-  useEffect(() => {
     setEdges(graph.edges.map((edge) => ({
       ...edge,
       className: [
@@ -630,18 +622,21 @@ export function BoardCanvas({ board, boardId, cardIds }) {
     return () => window.cancelAnimationFrame(frameId);
   }, [canReusePersistedViewport, cardIds, highlightedNodeIds, nodes, persistedCanvasState?.viewport, reactFlowInstance, selectedToken]);
 
-  const handleMoveEnd = useCallback((_event, viewport) => {
-    writeCanvasState(boardId, {
-      cardIds: nodes.map((node) => node.id),
-      positions: Object.fromEntries(nodes.map((node) => [node.id, node.position])),
-      viewport,
-    });
-  }, [boardId, nodes]);
-
-  const handleNodeDragStop = useCallback(() => {
+  const latestPersistRef = useRef(null);
+  latestPersistRef.current = () => {
+    if (!nodes.length) return;
     const viewport = reactFlowInstance?.getViewport?.() ?? null;
     persistNodes(nodes, viewport);
-  }, [nodes, persistNodes, reactFlowInstance]);
+  };
+
+  useEffect(() => {
+    const handler = () => latestPersistRef.current?.();
+    window.addEventListener('demo-board:persist-canvas', handler);
+    return () => {
+      window.removeEventListener('demo-board:persist-canvas', handler);
+      latestPersistRef.current?.();
+    };
+  }, []);
 
   return (
     <div className="board-centre-canvas__viewport">
@@ -663,8 +658,6 @@ export function BoardCanvas({ board, boardId, cardIds }) {
         panOnScroll
         selectionOnDrag
         onInit={setReactFlowInstance}
-        onMoveEnd={handleMoveEnd}
-        onNodeDragStop={handleNodeDragStop}
       >
         {selectedToken ? (
           <div className="board-canvas-token-banner">

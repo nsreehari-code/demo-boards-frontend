@@ -1,42 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useChatState } from '../hooks/useChatState.js';
+import { useChatState, useChatWatchParty } from '../hooks/useChatState.js';
+import { useCardStateFilesData } from '../hooks/useCardState.js';
 import { SERVER } from '../lib/client.js';
 
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
-function useChatSubscription(
-  subscribeChat,
-  unsubscribeChat,
-  subscribeCopilotOutput,
-  unsubscribeCopilotOutput,
-  subscribeCopilotTools,
-  unsubscribeCopilotTools,
-  boardId,
-  cardId,
-  boardSseClientId,
-) {
+function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
   useEffect(() => {
     if (!subscribeChat || !unsubscribeChat || !boardId || !cardId || !boardSseClientId) return;
     subscribeChat().catch(() => {});
-    subscribeCopilotOutput?.().catch(() => {});
-    subscribeCopilotTools?.().catch(() => {});
     return () => {
-      unsubscribeCopilotTools?.().catch(() => {});
-      unsubscribeCopilotOutput?.().catch(() => {});
       unsubscribeChat().catch(() => {});
     };
-  }, [
-    subscribeChat,
-    unsubscribeChat,
-    subscribeCopilotOutput,
-    unsubscribeCopilotOutput,
-    subscribeCopilotTools,
-    unsubscribeCopilotTools,
-    boardId,
-    cardId,
-    boardSseClientId,
-  ]);
+  }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
 }
 
 function UserBubbleIcon() {
@@ -254,7 +231,8 @@ function SystemAttachmentChip({ boardId, cardId, file, index, label }) {
   );
 }
 
-function SystemMessage({ msg, boardId, cardId, filesUploaded = [] }) {
+function SystemMessage({ msg, boardId, cardId }) {
+  const filesUploaded = useCardStateFilesData(boardId, cardId);
   const text = typeof msg?.text === 'string' ? msg.text : '';
   const indexedAttachment = parseIndexedSystemAttachment(text);
   const indexedFile = indexedAttachment ? filesUploaded[indexedAttachment.index] : null;
@@ -276,12 +254,12 @@ function SystemMessage({ msg, boardId, cardId, filesUploaded = [] }) {
   );
 }
 
-function ChatBubble({ msg, compact = false, boardId, cardId, filesUploaded = [] }) {
+function ChatBubbleImpl({ msg, compact = false, boardId, cardId }) {
   const { role, text, files } = msg;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   if (role === 'system') {
-    return <SystemMessage msg={msg} boardId={boardId} cardId={cardId} filesUploaded={filesUploaded} />;
+    return <SystemMessage msg={msg} boardId={boardId} cardId={cardId} />;
   }
   const isUser = role === 'user';
   return (
@@ -338,6 +316,29 @@ function ChatBubble({ msg, compact = false, boardId, cardId, filesUploaded = [] 
   );
 }
 
+const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
+  prev.msg === next.msg
+  && prev.compact === next.compact
+  && prev.boardId === next.boardId
+  && prev.cardId === next.cardId
+));
+
+const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId }) {
+  return (
+    <>
+      {messages.map((msg, i) => (
+        <ChatBubble
+          key={i}
+          msg={msg}
+          compact={compact}
+          boardId={boardId}
+          cardId={cardId}
+        />
+      ))}
+    </>
+  );
+});
+
 function toChipPreview(text) {
   const source = String(text ?? '');
   const lines = source.split(/\r?\n/g);
@@ -345,7 +346,8 @@ function toChipPreview(text) {
   return raw || '';
 }
 
-function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false }) {
+function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
+  const { copilotOutput = '', copilotTools = '' } = useChatWatchParty(boardId, cardId) ?? {};
   const [activeChipKey, setActiveChipKey] = useState('');
   const liveOutput = typeof copilotOutput === 'string' ? copilotOutput : '';
   const liveTools = typeof copilotTools === 'string' ? copilotTools : '';
@@ -354,6 +356,10 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
     liveTools ? { key: 'tools', label: 'Copilot Tools', value: toChipPreview(liveTools), fullText: liveTools } : null,
   ].filter(Boolean);
   const activeChip = compact ? null : (chips.find((chip) => chip.key === activeChipKey) ?? null);
+
+  useEffect(() => {
+    onLayoutChange?.();
+  }, [activeChipKey, chips.length, onLayoutChange]);
 
   return (
     <div className="d-flex mb-2 w-100">
@@ -446,7 +452,7 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
   );
 }
 
-function ChatComposer({ chatActions, placeholder, processing, turnId }) {
+const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder, processing, turnId }) {
   const [text, setText] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef(null);
@@ -526,7 +532,7 @@ function ChatComposer({ chatActions, placeholder, processing, turnId }) {
       </div>
     </div>
   );
-}
+});
 
 function makeTurnId() {
   return Math.random().toString(36).slice(2, 8).padEnd(6, '0');
@@ -542,15 +548,13 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const chat = useChatState(boardId, cardId);
   const messages = chat?.messages ?? [];
   const processing = chat?.processing ?? false;
-  const copilotOutput = chat?.copilotOutput ?? '';
-  const copilotTools = chat?.copilotTools ?? '';
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
-  const filesUploaded = chat?.filesUploaded ?? [];
   const messagesRef = useRef(null);
   const bottomRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const initialScrollDoneRef = useRef(false);
+  const scrollFrameRef = useRef(null);
   const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
 
   const scrollToBottom = (behavior = 'auto') => {
@@ -565,6 +569,17 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
       behavior,
     });
   };
+
+  const scheduleScrollToBottom = useCallback((behavior = 'auto') => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      scrollToBottom(behavior);
+    });
+  }, []);
 
   useEffect(() => {
     const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
@@ -582,10 +597,6 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   useChatSubscription(
     chatActions?.subscribeChat,
     chatActions?.unsubscribeChat,
-    chatActions?.subscribeCopilotOutput,
-    chatActions?.unsubscribeCopilotOutput,
-    chatActions?.subscribeCopilotTools,
-    chatActions?.unsubscribeCopilotTools,
     boardId,
     cardId,
     boardSseClientId,
@@ -617,13 +628,23 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
       return;
     }
 
-    const frameId = window.requestAnimationFrame(() => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
       scrollToBottom('auto');
       shouldStickToBottomRef.current = true;
       initialScrollDoneRef.current = true;
     });
 
-    return () => window.cancelAnimationFrame(frameId);
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
   }, [messages.length, processing, boardId, cardId]);
 
   useEffect(() => {
@@ -631,37 +652,31 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
       return;
     }
 
-    const frameId = window.requestAnimationFrame(() => {
-      scrollToBottom(messages.length > 0 || processing ? 'smooth' : 'auto');
-    });
+    scheduleScrollToBottom(messages.length > 0 || processing ? 'smooth' : 'auto');
 
-    return () => window.cancelAnimationFrame(frameId);
-  }, [messages.length, processing, copilotOutput, copilotTools]);
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [messages.length, processing]);
 
   useEffect(() => {
-    const element = messagesRef.current;
-    if (!element) {
-      return undefined;
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, []);
+
+  const handleWorkingBubbleLayoutChange = useCallback(() => {
+    if (!shouldStickToBottomRef.current) {
+      return;
     }
 
-    const observer = new MutationObserver(() => {
-      if (!shouldStickToBottomRef.current) {
-        return;
-      }
-
-      window.requestAnimationFrame(() => {
-        scrollToBottom('auto');
-      });
-    });
-
-    observer.observe(element, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    return () => observer.disconnect();
-  }, []);
+    scheduleScrollToBottom('auto');
+  }, [scheduleScrollToBottom]);
 
   if (!chat) return null;
 
@@ -671,17 +686,20 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
         ref={messagesRef}
         className="board-chat-pane__messages p-2"
       >
-        {messages.map((msg, i) => (
-          <ChatBubble
-            key={i}
-            msg={msg}
-            compact={compact}
+        <MessageList
+          messages={messages}
+          compact={compact}
+          boardId={boardId}
+          cardId={cardId}
+        />
+        {processing && (
+          <WorkingBubble
             boardId={boardId}
             cardId={cardId}
-            filesUploaded={filesUploaded}
+            compact={compact}
+            onLayoutChange={handleWorkingBubbleLayoutChange}
           />
-        ))}
-        {processing && <WorkingBubble copilotOutput={copilotOutput} copilotTools={copilotTools} compact={compact} />}
+        )}
         <div ref={bottomRef} />
       </div>
       {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} turnId={draftTurnId} />}

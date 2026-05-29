@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
+import { useChatStateAIWorking } from '../hooks/useChatState.js';
 import { useBoardFlipState } from '../hooks/useBoardState.js';
 import { callBoardMcp } from '../lib/client.js';
 import { CardCore } from './CardCore.jsx';
@@ -11,6 +12,20 @@ const CHAT_PROCESSING_PULSE_STYLE = {
   animation: 'card-shell-chat-pulse 0.9s ease-in-out infinite',
   transformOrigin: 'center',
 };
+
+const ChatHeaderButton = memo(function ChatHeaderButton({ boardId, cardId, onOpenChat }) {
+  const chatProcessing = useChatStateAIWorking(boardId, cardId);
+  return (
+    <button
+      type="button"
+      className="board-icon-button"
+      onClick={onOpenChat}
+      title={chatProcessing ? 'Chat processing' : 'Open chat'}
+    >
+      <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
+    </button>
+  );
+});
 
 const CLOSE_DETAILS_SVG = (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -231,10 +246,11 @@ function ChatModal({ boardId, cardId, title, onClose }) {
   );
 }
 
-export function CardShell({ boardId, cardId }) {
+function CardShellComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const { flippedCardId, setFlippedCardId } = useBoardFlipState(boardId);
   const [chatOpen, setChatOpen] = useState(false);
+  const handleOpenChat = useCallback(() => setChatOpen(true), []);
   const [sourceLoadingSet, setSourceLoadingSet] = useState(new Set());
   const [cardFlightLoading, setCardFlightLoading] = useState(false);
   const [flightModal, setFlightModal] = useState(null);
@@ -252,7 +268,6 @@ export function CardShell({ boardId, cardId }) {
   const statusTone = getStatusTone(status);
   const showBackface = flippedCardId === cardId;
   const refreshDisabled = cardState.cardRuntime?.status === 'running';
-  const chatProcessing = cardState.chatState?.processing === true;
   const showRefresh = cardState.canRefresh === true;
 
   const loadingBySource = Object.fromEntries([...sourceLoadingSet].map((idx) => [idx, true]));
@@ -328,7 +343,6 @@ export function CardShell({ boardId, cardId }) {
 
   return (
     <>
-      <style>{`@keyframes card-shell-chat-pulse { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 1; transform: scale(1.24); } }`}</style>
       <div className={`board-card ${statusTone} ${showBackface ? 'board-card--backface' : ''}`}>
         <div className="board-card__header">
           <div className="board-card__title-wrap">
@@ -381,14 +395,11 @@ export function CardShell({ boardId, cardId }) {
                     </button>
                   )
                 ) : null}
-                <button
-                  type="button"
-                  className="board-icon-button"
-                  onClick={() => setChatOpen(true)}
-                  title={chatProcessing ? 'Chat processing' : 'Open chat'}
-                >
-                  <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
-                </button>
+                <ChatHeaderButton
+                  boardId={boardId}
+                  cardId={cardId}
+                  onOpenChat={handleOpenChat}
+                />
               </>
             )}
           </div>
@@ -424,3 +435,5 @@ export function CardShell({ boardId, cardId }) {
     </>
   );
 }
+
+export const CardShell = memo(CardShellComponent);

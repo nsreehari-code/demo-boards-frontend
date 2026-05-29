@@ -1,352 +1,33 @@
-import { useCallback, useSyncExternalStore } from 'react';
-import { SERVER, initBoard, refreshCard } from '../lib/client.js';
+import { initBoard } from '../lib/client.js';
+import {
+  buildBoardCardState,
+  normalizeFilterFns,
+  refreshCard,
+  resolveCanRefresh,
+  resolveRequireTokens,
+  useBoardCardDefinitionsAndData,
+  useBoardCardIds,
+  useBoardCardRuntimes,
+  useBoardDataObjects,
+  useBoardFlipState,
+  useBoardInfo,
+  useBoardStatus,
+} from './useSseSlices.js';
 
-const boardStores = new Map();
-const boardUiStores = new Map();
+export { resolveCanRefresh, resolveRequireTokens, useBoardFlipState };
 
-function emitBoardStore(store) {
-  store.listeners.forEach((listener) => listener());
-}
-
-function emitBoardUiStore(store) {
-  store.listeners.forEach((listener) => listener());
-}
-
-function stopBoardStore(boardId, store) {
-  store.es?.close();
-  store.es = null;
-  store.started = false;
-  boardStores.delete(boardId);
-}
-
-function startBoardStore(boardId, store) {
-  if (store.started) return;
-  store.started = true;
-
-  initBoard(boardId)
-    .then(() => {
-      if (!store.started) return;
-
-      const clientId = crypto.randomUUID();
-      store.clientId = clientId;
-      const url = `${SERVER}/api/boards/${boardId}/sse?clientId=${encodeURIComponent(clientId)}`;
-      const es = new EventSource(url);
-      store.es = es;
-
-      es.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          store.snapshot = applyFrame(store.snapshot ?? {}, payload);
-          emitBoardStore(store);
-        } catch {
-          // ignore malformed frames
-        }
-      };
-
-      es.onerror = () => {
-        // EventSource reconnects automatically.
-        console.debug('[useBoardSSE] SSE error — will retry');
-      };
-    })
-    .catch((err) => console.error('[useBoardSSE] init-board failed', err));
-}
-
-function getOrCreateBoardStore(boardId) {
-  if (!boardStores.has(boardId)) {
-    boardStores.set(boardId, {
-      snapshot: null,
-      clientId: null,
-      listeners: new Set(),
-      es: null,
-      started: false,
-    });
-  }
-
-  return boardStores.get(boardId);
-}
-
-function getOrCreateBoardUiStore(boardId) {
-  if (!boardUiStores.has(boardId)) {
-    boardUiStores.set(boardId, {
-      snapshot: {
-        flippedCardId: null,
-      },
-      listeners: new Set(),
-    });
-  }
-
-  return boardUiStores.get(boardId);
-}
-
-function subscribeBoardStore(boardId, listener) {
-  if (!boardId) return () => {};
-
-  const store = getOrCreateBoardStore(boardId);
-  store.listeners.add(listener);
-  startBoardStore(boardId, store);
-
-  return () => {
-    store.listeners.delete(listener);
-  };
-}
-
-function subscribeBoardUiStore(boardId, listener) {
-  if (!boardId) return () => {};
-
-  const store = getOrCreateBoardUiStore(boardId);
-  store.listeners.add(listener);
-
-  return () => {
-    store.listeners.delete(listener);
-  };
-}
-
-function setBoardFlippedCardId(boardId, nextValue) {
-  if (!boardId) return;
-
-  const store = getOrCreateBoardUiStore(boardId);
-  const currentValue = store.snapshot?.flippedCardId ?? null;
-  const resolvedValue = typeof nextValue === 'function'
-    ? nextValue(currentValue)
-    : nextValue;
-  const flippedCardId = resolvedValue ? String(resolvedValue) : null;
-
-  if (currentValue === flippedCardId) {
-    return;
-  }
-
-  store.snapshot = {
-    ...store.snapshot,
-    flippedCardId,
-  };
-  emitBoardUiStore(store);
-}
-
-function normalizeFilterFns(filterFns) {
-  if (!filterFns) return [];
-  return (Array.isArray(filterFns) ? filterFns : [filterFns]).filter((filterFn) => typeof filterFn === 'function');
-}
-
-export function resolveRequireTokens(cardContent) {
-  if (Array.isArray(cardContent?.requires)) {
-    return cardContent.requires.filter(Boolean).map(String);
-  }
-  if (cardContent?.requires && typeof cardContent.requires === 'object') {
-    return Object.keys(cardContent.requires).filter(Boolean);
-  }
-  return [];
-}
-
-export function resolveCanRefresh(cardContent) {
-  return (cardContent?.source_defs?.length ?? 0) > 0;
-}
-
-function buildBoardCardState(cardId, cardContents, cardRuntimes, chatStates, dataObjects) {
-  const cardContent = cardContents[cardId] ?? null;
-  const requiresDataObjects = {};
-  for (const token of resolveRequireTokens(cardContent)) {
-    if (token in dataObjects) {
-      requiresDataObjects[token] = dataObjects[token];
-    }
-  }
-
-  return {
-    cardId,
-    cardContent,
-    canRefresh: resolveCanRefresh(cardContent),
-    cardData: cardContent?.card_data ?? {},
-    cardRuntime: cardRuntimes[cardId] ?? null,
-    chatState: chatStates[cardId] ?? null,
-    requiresDataObjects,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// State builder — converts the raw SSE initial payload into React state
-// ---------------------------------------------------------------------------
-function buildState(payload) {
-  // statusSnapshot.cards is an ARRAY: [{name, status, runtime, ...}]
-  const statusByName = {};
-  for (const entry of (payload.statusSnapshot?.cards ?? [])) {
-    statusByName[entry.name] = entry;
-  }
-
-  const cardContentsById = Object.fromEntries(
-    (payload.cardDefinitions ?? []).map((def) => [def.id, def]),
-  );
-
-  const cardRuntimesById = {};
-  for (const def of (payload.cardDefinitions ?? [])) {
-    const runtime = payload.cardRuntimeById?.[def.id] ?? {};
-    const statusInfo = statusByName[def.id] ?? {};
-    cardRuntimesById[def.id] = {
-      status:          statusInfo.status ?? '',
-      runtime:         statusInfo.runtime ?? {},
-      computed_values: runtime.computed_values ?? {},
-    };
-  }
-
-  // cardChatsByCardId values are objects: { messages: [...], processing, receiving }
-  const chatsById = {};
-  for (const [cardId, chatSnapshot] of Object.entries(payload.cardChatsByCardId ?? {})) {
-    chatsById[cardId] = {
-      messages:   chatSnapshot?.messages   ?? [],
-      processing: !!chatSnapshot?.processing,
-      receiving:  !!chatSnapshot?.receiving,
-    };
-  }
-
-  return {
-    boardId:          payload.boardId,
-    cardIds:          (payload.cardDefinitions ?? []).map(c => c.id),
-    cardContentsById,
-    cardRuntimesById,
-    chatsById,
-    watchpartyById:   {},
-    statusSummary:    payload.statusSnapshot?.summary ?? null,
-    dataObjects:      payload.dataObjectsByToken ?? {},
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Incremental updater — applies a notification-batch frame onto existing state
-// ---------------------------------------------------------------------------
-function applyFrame(prev, payload) {
-  if (Array.isArray(payload.cardDefinitions)) {
-    return buildState(payload);
-  }
-
-  if (payload.kind === 'notification-batch') {
-    const next = {
-      ...prev,
-      cardContentsById: { ...prev.cardContentsById },
-      cardRuntimesById: { ...prev.cardRuntimesById },
-      chatsById:        { ...prev.chatsById },
-      dataObjects:      { ...prev.dataObjects },
-      watchpartyById:   { ...(prev.watchpartyById ?? {}) },
-    };
-    for (const n of (payload.notifications ?? [])) {
-      if (n.kind === 'status') {
-        if (n.status?.summary) next.statusSummary = n.status.summary;
-        for (const entry of (n.status?.cards ?? [])) {
-          if (next.cardRuntimesById[entry.name]) {
-            next.cardRuntimesById[entry.name] = {
-              ...next.cardRuntimesById[entry.name],
-              status:  entry.status,
-              runtime: entry.runtime ?? next.cardRuntimesById[entry.name].runtime,
-            };
-          }
-        }
-      } else if (n.kind === 'data_object' && n.key) {
-        next.dataObjects[n.key] = n.payload;
-      } else if (n.kind === 'computed_values' && n.cardId) {
-        if (next.cardRuntimesById[n.cardId]) {
-          next.cardRuntimesById[n.cardId] = {
-            ...next.cardRuntimesById[n.cardId],
-            computed_values: n.values ?? {},
-          };
-        }
-      } else if (n.kind === 'card_chats' && n.cardId) {
-        next.chatsById[n.cardId] = {
-          messages:   n.messages   ?? [],
-          processing: !!n.processing,
-          receiving:  !!n.receiving,
-        };
-      } else if (n.kind === 'card_watchparty' && n.cardId && n.channel) {
-        const cardParty = { ...(next.watchpartyById[n.cardId] ?? {}) };
-        if (n.clear) {
-          cardParty[n.channel] = [];
-        } else if (n.replace) {
-          cardParty[n.channel] = [{ payload: n.payload, ts: Date.now() }];
-        } else {
-          cardParty[n.channel] = [...(cardParty[n.channel] ?? []), { payload: n.payload, ts: Date.now() }];
-        }
-        next.watchpartyById[n.cardId] = cardParty;
-      } else if (n.kind === 'card_refreshed' && n.cardId && n.card) {
-        const { computed_values, runtime, status, ...cardContent } = n.card;
-
-        if (next.cardContentsById[n.cardId]) {
-          next.cardContentsById[n.cardId] = {
-            ...next.cardContentsById[n.cardId],
-            ...cardContent,
-          };
-        }
-
-        if (next.cardRuntimesById[n.cardId]) {
-          next.cardRuntimesById[n.cardId] = {
-            ...next.cardRuntimesById[n.cardId],
-            ...(status !== undefined ? { status } : null),
-            ...(runtime !== undefined ? { runtime } : null),
-            ...(computed_values !== undefined ? { computed_values } : null),
-          };
-        }
-      }
-    }
-    return next;
-  }
-
-  return prev;
-}
-
-// ---------------------------------------------------------------------------
-// useBoardSSE — shared per-board subscription across all consumers
-// ---------------------------------------------------------------------------
-export function useBoardSSE(boardId) {
-  const subscribe = useCallback((listener) => subscribeBoardStore(boardId, listener), [boardId]);
-  const getSnapshot = useCallback(() => (boardId ? getOrCreateBoardStore(boardId).snapshot : null), [boardId]);
-
-  return useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    () => null,
-  );
-}
-
-export function useBoardFlipState(boardId) {
-  const subscribe = useCallback((listener) => subscribeBoardUiStore(boardId, listener), [boardId]);
-  const getSnapshot = useCallback(
-    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { flippedCardId: null }),
-    [boardId],
-  );
-
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    () => ({ flippedCardId: null }),
-  );
-
-  const setFlippedCardId = useCallback((nextValue) => {
-    setBoardFlippedCardId(boardId, nextValue);
-  }, [boardId]);
-
-  return {
-    flippedCardId: snapshot?.flippedCardId ?? null,
-    setFlippedCardId,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// useBoardState — structured view on top of the raw SSE state
-// ---------------------------------------------------------------------------
 export function useBoardState(boardId) {
-  const raw = useBoardSSE(boardId);
+  const boardInfo = useBoardInfo(boardId);
+  const boardStatus = useBoardStatus(boardId);
+  const dataObjects = useBoardDataObjects(boardId);
+  const cardContents = useBoardCardDefinitionsAndData(boardId);
+  const cardRuntimes = useBoardCardRuntimes(boardId);
+  const cardIds = useBoardCardIds(boardId);
 
-  if (!raw) return null;
-
-  const cardContents = raw.cardContentsById ?? {};
-  const cardRuntimes = raw.cardRuntimesById ?? {};
-
-  // boardStatus: summary-level status (no per-card runtimes)
-  const boardStatus = raw.statusSummary ?? null;
-
-  // dataObjects: board-level map keyed by token, from dataObjectsByToken + data_object notifications
-  const dataObjects = raw.dataObjects ?? {};
-
-  // chatStates: chat state keyed by cardId
-  const chatStates = raw.chatsById ?? {};
+  if (!boardInfo) return null;
 
   const refreshableCardIds = [];
-  for (const cardId of (raw.cardIds ?? [])) {
+  for (const cardId of cardIds) {
     if (resolveCanRefresh(cardContents[cardId])) {
       refreshableCardIds.push(cardId);
     }
@@ -356,8 +37,8 @@ export function useBoardState(boardId) {
     const filters = normalizeFilterFns(filterFns);
     const matchedCardIds = new Set();
 
-    for (const cardId of (raw.cardIds ?? [])) {
-      const cardState = buildBoardCardState(cardId, cardContents, cardRuntimes, chatStates, dataObjects);
+    for (const cardId of cardIds) {
+      const cardState = buildBoardCardState(cardId, cardContents, cardRuntimes, dataObjects);
       if (filters.some((filterFn) => filterFn(cardState))) {
         matchedCardIds.add(cardId);
       }
@@ -370,7 +51,7 @@ export function useBoardState(boardId) {
     const matchedCardIds = filterCards(filterFns);
     const remainingCardIds = new Set();
 
-    for (const cardId of (raw.cardIds ?? [])) {
+    for (const cardId of cardIds) {
       if (!matchedCardIds.has(cardId)) {
         remainingCardIds.add(cardId);
       }
@@ -387,15 +68,13 @@ export function useBoardState(boardId) {
   };
 
   return {
-    boardId:     raw.boardId,
-    sseClientId: getOrCreateBoardStore(boardId).clientId,
-    boardInfo:   null,
+    boardId: boardInfo.boardId,
+    sseClientId: boardInfo.sseClientId,
+    boardInfo: boardInfo.boardInfo,
     cardContents,
     cardRuntimes,
     boardStatus,
     dataObjects,
-    chatStates,
-    watchpartyById: raw.watchpartyById ?? {},
     refreshableCardIds,
     hasRefreshableCards: refreshableCardIds.length > 0,
     filterCards,
@@ -403,3 +82,4 @@ export function useBoardState(boardId) {
     boardActions,
   };
 }
+

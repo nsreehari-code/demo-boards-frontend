@@ -708,6 +708,19 @@ a {
   flex-shrink: 0;
 }
 
+@keyframes card-shell-chat-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.24);
+  }
+}
+
 .board-icon-button {
   display: inline-flex;
   align-items: center;
