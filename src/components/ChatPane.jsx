@@ -338,27 +338,20 @@ function ChatBubble({ msg, compact = false, boardId, cardId, filesUploaded = [] 
   );
 }
 
-function toChipPreview(text, maxLength = 40) {
+function toChipPreview(text) {
   const source = String(text ?? '');
   const lines = source.split(/\r?\n/g);
   const raw = [...lines].reverse().find((line) => line.trim())?.trim() || source.trim();
-  if (!raw) {
-    return '';
-  }
-  const normalizedMaxLength = Number.isInteger(maxLength) && maxLength > 8 ? maxLength : 40;
-  return raw.length > normalizedMaxLength
-    ? `${raw.slice(0, normalizedMaxLength - 3)}...`
-    : raw;
+  return raw || '';
 }
 
 function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false }) {
   const [activeChipKey, setActiveChipKey] = useState('');
-  const chipPreviewLength = compact ? 30 : 40;
   const liveOutput = typeof copilotOutput === 'string' ? copilotOutput : '';
   const liveTools = typeof copilotTools === 'string' ? copilotTools : '';
   const chips = [
-    liveOutput ? { key: 'output', label: 'Copilot Output', value: toChipPreview(liveOutput, chipPreviewLength), fullText: liveOutput } : null,
-    liveTools ? { key: 'tools', label: 'Copilot Tools', value: toChipPreview(liveTools, chipPreviewLength), fullText: liveTools } : null,
+    liveOutput ? { key: 'output', label: 'Copilot Output', value: toChipPreview(liveOutput), fullText: liveOutput } : null,
+    liveTools ? { key: 'tools', label: 'Copilot Tools', value: toChipPreview(liveTools), fullText: liveTools } : null,
   ].filter(Boolean);
   const activeChip = compact ? null : (chips.find((chip) => chip.key === activeChipKey) ?? null);
 
@@ -386,7 +379,7 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
           />
         </div>
         {chips.length > 0 ? (
-          <div className="d-flex flex-wrap" style={{ gap: '0.35rem' }}>
+          <div className="d-flex flex-column align-items-stretch" style={{ gap: '0.35rem' }}>
             {chips.map((chip) => (
               <button
                 key={chip.label}
@@ -394,10 +387,13 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
                 className={`badge rounded-pill border text-body-emphasis ${activeChipKey === chip.key ? 'text-bg-primary' : 'text-bg-light'}`}
                 title={chip.value}
                 style={{
-                  maxWidth: compact ? '100%' : '100%',
+                  width: '100%',
+                  maxWidth: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  minWidth: 0,
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}
                 onClick={() => {
                   if (compact) {
@@ -409,8 +405,20 @@ function WorkingBubble({ copilotOutput = '', copilotTools = '', compact = false 
                 <span className={`board-chat-pane__chip-label${activeChipKey === chip.key || compact ? '' : ' board-chat-pane__chip-label--shimmer'}`}>
                   {chip.label}
                 </span>
-                <span className="board-chat-pane__chip-separator"> </span>
-                <span className="board-chat-pane__chip-value">{chip.value}</span>
+                <span className="board-chat-pane__chip-separator">&nbsp;&nbsp;</span>
+                <span
+                  className="board-chat-pane__chip-value"
+                  style={{
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'left',
+                  }}
+                >
+                  {chip.value}
+                </span>
               </button>
             ))}
           </div>
