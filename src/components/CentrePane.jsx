@@ -39,7 +39,13 @@ export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flo
   if (layoutStrategy === 'infinite-canvas') {
     return (
       <div className={layout.containerClassName}>
-        <BoardCanvas board={board} boardId={boardId} cardIds={visibleCardIds} />
+        <BoardCanvas
+          boardId={boardId}
+          cardIds={visibleCardIds}
+          cardContents={board.cardContents}
+          cardRuntimes={board.cardRuntimes}
+          dataObjects={board.dataObjects}
+        />
       </div>
     );
   }

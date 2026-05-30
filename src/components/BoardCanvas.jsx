@@ -131,17 +131,17 @@ function resolveCanvasPosition(card) {
   return { x, y };
 }
 
-function buildGraph(cardIds, board) {
+function buildGraph(cardIds, cardContents, cardRuntimes, dataObjects) {
   const visibleIds = new Set(cardIds);
   const cards = {};
   const tokenProviders = new Map();
 
   for (const cardId of cardIds) {
-    const card = board.cardContents[cardId] ?? {};
-    const status = board.cardRuntimes[cardId]?.status ?? 'fresh';
+    const card = cardContents[cardId] ?? {};
+    const status = cardRuntimes[cardId]?.status ?? 'fresh';
     const requires = resolveRequiredTokens(card);
     const provides = resolveProvidedTokens(card);
-    const providesActive = provides.filter((token) => token in (board.dataObjects ?? {}));
+    const providesActive = provides.filter((token) => token in (dataObjects ?? {}));
 
     cards[cardId] = {
       id: cardId,
@@ -467,7 +467,7 @@ function getMiniMapNodeClassName(node) {
   return node?.data?.status === 'running' ? 'is-running' : '';
 }
 
-export function BoardCanvas({ board, boardId, cardIds }) {
+export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects }) {
   const [selectedToken, setSelectedToken] = useState(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const persistedCanvasState = useMemo(() => readCanvasState(boardId), [boardId]);
@@ -477,9 +477,9 @@ export function BoardCanvas({ board, boardId, cardIds }) {
   );
   const hasRestoredViewportRef = useRef(false);
   const previousSelectedTokenRef = useRef(null);
-  const graph = useMemo(() => buildGraph(cardIds, board), [board, cardIds]);
+  const graph = useMemo(() => buildGraph(cardIds, cardContents, cardRuntimes, dataObjects), [cardIds, cardContents, cardRuntimes, dataObjects]);
   const baseLayout = useMemo(() => buildLayout(cardIds, graph.incoming, graph.outgoing), [cardIds, graph.incoming, graph.outgoing]);
-  const availableTokens = useMemo(() => Object.keys(board.dataObjects ?? {}), [board.dataObjects]);
+  const availableTokens = useMemo(() => Object.keys(dataObjects ?? {}), [dataObjects]);
 
   const highlightedEdgeIds = useMemo(() => {
     if (!selectedToken) {
@@ -520,7 +520,7 @@ export function BoardCanvas({ board, boardId, cardIds }) {
     id: cardId,
     type: 'boardCard',
     position: canReusePersistedViewport ? persistedCanvasState?.positions?.[cardId] : null
-      ?? resolveCanvasPosition(board.cardContents[cardId])
+      ?? resolveCanvasPosition(cardContents[cardId])
       ?? baseLayout.get(cardId)
       ?? { x: 0, y: 0 },
     draggable: true,
@@ -538,7 +538,7 @@ export function BoardCanvas({ board, boardId, cardIds }) {
       isDimmed: !!selectedToken && !highlightedNodeIds.has(cardId),
     },
     style: { width: NODE_WIDTH },
-  })), [availableTokens, baseLayout, board.cardContents, boardId, canReusePersistedViewport, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, persistedCanvasState?.positions, selectedToken]);
+  })), [availableTokens, baseLayout, cardContents, boardId, canReusePersistedViewport, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, persistedCanvasState?.positions, selectedToken]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
