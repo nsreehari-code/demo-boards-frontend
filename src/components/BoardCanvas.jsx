@@ -560,13 +560,23 @@ export function BoardCanvas({ board, boardId, cardIds }) {
   }, [graphNodes, setNodes]);
 
   useEffect(() => {
-    setEdges(graph.edges.map((edge) => ({
-      ...edge,
-      className: [
-        'board-flow__edge',
-        selectedToken ? (highlightedEdgeIds.has(edge.id) ? 'is-highlighted' : 'is-dimmed') : '',
-      ].filter(Boolean).join(' '),
-    })));
+    setEdges((currentEdges) => {
+      const currentById = new Map(currentEdges.map((e) => [e.id, e]));
+      let changed = currentEdges.length !== graph.edges.length;
+      const nextEdges = graph.edges.map((edge) => {
+        const className = [
+          'board-flow__edge',
+          selectedToken ? (highlightedEdgeIds.has(edge.id) ? 'is-highlighted' : 'is-dimmed') : '',
+        ].filter(Boolean).join(' ');
+        const prev = currentById.get(edge.id);
+        if (prev && prev.className === className && prev.source === edge.source && prev.target === edge.target) {
+          return prev;
+        }
+        changed = true;
+        return { ...edge, className };
+      });
+      return changed ? nextEdges : currentEdges;
+    });
   }, [graph.edges, highlightedEdgeIds, selectedToken, setEdges]);
 
   useEffect(() => {

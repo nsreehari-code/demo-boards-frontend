@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SERVER } from '../lib/client.js';
 import { useCardState } from '../hooks/useCardState.js';
 import { CardCoreView } from './CardCoreView.jsx';
@@ -155,7 +155,7 @@ async function patchCardDataValue(cardActions, cardData, writeTo, value) {
   }
 }
 
-export function CardCore({ boardId, cardId }) {
+function CardCoreComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const [saving, setSaving] = useState(false);
   const pendingUpstreamSignatureRef = useRef(null);
@@ -291,3 +291,5 @@ export function CardCore({ boardId, cardId }) {
     </div>
   );
 }
+
+export const CardCore = memo(CardCoreComponent);

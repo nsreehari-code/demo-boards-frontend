@@ -270,7 +270,10 @@ function CardShellComponent({ boardId, cardId }) {
   const refreshDisabled = cardState.cardRuntime?.status === 'running';
   const showRefresh = cardState.canRefresh === true;
 
-  const loadingBySource = Object.fromEntries([...sourceLoadingSet].map((idx) => [idx, true]));
+  const loadingBySource = React.useMemo(
+    () => Object.fromEntries([...sourceLoadingSet].map((idx) => [idx, true])),
+    [sourceLoadingSet],
+  );
 
   const handleRunFlight = async ({ sourceIndex, bindTo }) => {
     if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {

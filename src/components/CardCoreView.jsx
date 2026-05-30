@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -14,6 +14,8 @@ const CHART_PALETTE = [
   '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
   '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
 ];
+
+const LEGEND_STYLE = { fontSize: 11 };
 
 export const CARD_CORE_VIEW_KINDS = {
   table: { Component: TableView, isEditable: false },
@@ -443,7 +445,7 @@ function ChartView({ data, renderDef }) {
           ))}
         </Pie>
         <Tooltip />
-        {showLegend ? <Legend wrapperStyle={{ fontSize: 11 }} /> : null}
+        {showLegend ? <Legend wrapperStyle={LEGEND_STYLE} /> : null}
       </PieChart>
     );
   } else if (chartType === 'line' || chartType === 'area') {
@@ -455,7 +457,7 @@ function ChartView({ data, renderDef }) {
         <XAxis dataKey={labelKey} tick={{ fontSize: 10 }} />
         <YAxis tick={{ fontSize: 10 }} />
         <Tooltip />
-        {showLegend ? <Legend wrapperStyle={{ fontSize: 11 }} /> : null}
+        {showLegend ? <Legend wrapperStyle={LEGEND_STYLE} /> : null}
         {seriesKeys.map((key, i) => (
           <SeriesC
             key={key}
@@ -489,7 +491,7 @@ function ChartView({ data, renderDef }) {
         <XAxis dataKey={labelKey} tick={{ fontSize: 10 }} />
         <YAxis tick={{ fontSize: 10 }} />
         <Tooltip />
-        {showLegend ? <Legend wrapperStyle={{ fontSize: 11 }} /> : null}
+        {showLegend ? <Legend wrapperStyle={LEGEND_STYLE} /> : null}
         {seriesKeys.map((key, i) => (
           <Bar
             key={key}
@@ -1138,6 +1140,10 @@ function MarkdownView({ data }) {
   );
 }
 
+const MemoMarkdownView = memo(MarkdownView);
+CARD_CORE_VIEW_KINDS.markdown.Component = MemoMarkdownView;
+CARD_CORE_VIEW_KINDS.markup.Component = MemoMarkdownView;
+
 function ActionsView({ data, renderDef, onSave }) {
   const buttons = renderDef?.data?.buttons ?? (Array.isArray(data) ? data : []);
   if (!buttons.length) return null;
@@ -1159,7 +1165,7 @@ function ActionsView({ data, renderDef, onSave }) {
   );
 }
 
-export function CardCoreView({ kind, renderDef, data, onSave }) {
+function CardCoreViewComponent({ kind, renderDef, data, onSave }) {
   const effectiveKind = normalizeLegacyKind(kind, renderDef, data);
   const viewEntry = CARD_CORE_VIEW_KINDS[effectiveKind] ?? CARD_CORE_VIEW_KINDS.text;
   const ViewComponent = viewEntry.Component;
@@ -1176,3 +1182,5 @@ export function CardCoreView({ kind, renderDef, data, onSave }) {
     </div>
   );
 }
+
+export const CardCoreView = memo(CardCoreViewComponent);
