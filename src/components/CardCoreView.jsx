@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import BoardMarkdown from './BoardMarkdown.jsx';
 import {
   PieChart, Pie, Cell,
   BarChart, Bar,
@@ -1091,52 +1090,12 @@ function MarkdownView({ data }) {
   else if (data != null) text = JSON.stringify(data, null, 2);
   if (!text) return null;
 
-  const normalizedText = text
-    .replace(/\s*\[(\d+)\]\((https?:\/\/[^)]+)\)/g, '')
-    .replace(/\s+$/gm, '')
-    .trim();
-
-  if (!normalizedText) return null;
-
   return (
-    <div className="small mb-0 markdown-body lh-sm board-markdown board-card-copy-block" style={{ color: 'var(--color-text)' }}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h1: ({ node, ...props }) => <h1 className="h5 fw-bold mb-2 pb-1 border-bottom" {...props} />,
-          h2: ({ node, ...props }) => <h2 className="fs-6 fw-bold text-uppercase board-text-soft mb-2 mt-3" {...props} />,
-          h3: ({ node, ...props }) => <h3 className="fs-6 fw-semibold mb-2 mt-2" {...props} />,
-          h4: ({ node, ...props }) => <h4 className="small fw-semibold mb-1 mt-2" {...props} />,
-          h5: ({ node, ...props }) => <h5 className="small fw-semibold mb-1 mt-2" {...props} />,
-          h6: ({ node, ...props }) => <h6 className="small fw-semibold board-text-soft mb-1 mt-2" {...props} />,
-          p: ({ node, ...props }) => <p className="mb-1" {...props} />,
-          ul: ({ node, ...props }) => <ul className="mb-1 ps-3" {...props} />,
-          ol: ({ node, ...props }) => <ol className="mb-1 ps-3" {...props} />,
-          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-          a: ({ node, ...props }) => <a className="link-primary text-decoration-none" target="_blank" rel="noreferrer" {...props} />,
-          blockquote: ({ node, ...props }) => <blockquote className="border-start border-3 ps-2 board-text-muted fst-italic my-2" style={{ borderColor: 'var(--color-border-strong)' }} {...props} />,
-          hr: ({ node, ...props }) => <hr className="my-2 opacity-25" {...props} />,
-          strong: ({ node, ...props }) => <strong className="fw-semibold" {...props} />,
-          code: ({ inline, className, children, ...props }) => (
-            inline ? (
-              <code className="board-code rounded px-1 py-0" style={{ background: 'rgba(255, 255, 255, 0.06)' }} {...props}>{children}</code>
-            ) : (
-              <code className={`${className ?? ''} board-code small`.trim()} {...props}>{children}</code>
-            )
-          ),
-          pre: ({ node, ...props }) => <pre className="board-code-block p-2 mb-2 overflow-auto" style={{ lineHeight: 1.4 }} {...props} />,
-          table: ({ node, ...props }) => (
-            <div className="table-responsive my-2">
-              <table className="table table-sm table-striped align-middle mb-0 board-data-table" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead {...props} />,
-          img: ({ node, ...props }) => <img className="img-fluid rounded my-2" style={{ border: '1px solid var(--color-border)' }} loading="lazy" {...props} />,
-        }}
-      >
-        {normalizedText}
-      </ReactMarkdown>
-    </div>
+    <BoardMarkdown
+      text={text}
+      className="board-card-copy-block"
+      style={{ color: 'var(--color-text)' }}
+    />
   );
 }
 

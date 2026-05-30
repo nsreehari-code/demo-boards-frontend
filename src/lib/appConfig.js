@@ -15,8 +15,8 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   refreshAllIntervalSeconds: DEFAULT_REFRESH_ALL_INTERVAL_SECONDS,
   serverOrigin: 'http://localhost:7799',
   boardServerConstants: {
-    copilotOutputChannel: 'copilot-output',
-    copilotToolsChannel: 'copilot-tools',
+    agentOutputChannel: 'agent-output',
+    agentToolsChannel: 'agent-tools',
   },
 });
 
@@ -25,12 +25,12 @@ function normalizeBoardServerConstants(constants) {
   const source = constants && typeof constants === 'object' ? constants : {};
 
   return {
-    copilotOutputChannel: typeof source.copilotOutputChannel === 'string' && source.copilotOutputChannel.trim()
-      ? source.copilotOutputChannel.trim()
-      : fallback.copilotOutputChannel,
-    copilotToolsChannel: typeof source.copilotToolsChannel === 'string' && source.copilotToolsChannel.trim()
-      ? source.copilotToolsChannel.trim()
-      : fallback.copilotToolsChannel,
+    agentOutputChannel: typeof source.agentOutputChannel === 'string' && source.agentOutputChannel.trim()
+      ? source.agentOutputChannel.trim()
+      : fallback.agentOutputChannel,
+    agentToolsChannel: typeof source.agentToolsChannel === 'string' && source.agentToolsChannel.trim()
+      ? source.agentToolsChannel.trim()
+      : fallback.agentToolsChannel,
   };
 }
 
@@ -161,8 +161,8 @@ export let PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
 export let REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
 export let SERVER = currentAppConfig.serverOrigin;
 export let BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
-export let COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
-export let COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
+export let AGENT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.agentOutputChannel;
+export let AGENT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.agentToolsChannel;
 
 function applyAppConfig(config) {
   currentAppConfig = normalizeAppConfig(config);
@@ -174,8 +174,8 @@ function applyAppConfig(config) {
   REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
   SERVER = currentAppConfig.serverOrigin;
   BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
-  COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
-  COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
+  AGENT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.agentOutputChannel;
+  AGENT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.agentToolsChannel;
   return currentAppConfig;
 }
 

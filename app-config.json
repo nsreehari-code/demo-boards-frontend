@@ -10,6 +10,6 @@
   "refreshAllIntervalSeconds": 300,
   "serverOrigin": "http://localhost:7799",
   "boardServerConstants": {
-    "copilotOutputChannel": "copilot-output"
+    "agentOutputChannel": "agent-output"
   }
 }
