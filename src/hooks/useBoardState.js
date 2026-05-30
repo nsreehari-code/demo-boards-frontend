@@ -10,12 +10,13 @@ import {
   useBoardCardIds,
   useBoardCardRuntimes,
   useBoardDataObjects,
+  useBoardInspectState,
   useBoardFlipState,
   useBoardInfo,
   useBoardStatus,
 } from './useSseSlices.js';
 
-export { resolveCanRefresh, resolveRequireTokens, useBoardFlipState };
+export { resolveCanRefresh, resolveRequireTokens, useBoardFlipState, useBoardInspectState };
 
 export function useBoardState(boardId) {
   const boardInfo = useBoardInfo(boardId);

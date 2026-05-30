@@ -793,6 +793,15 @@ a {
 }
 
 .board-card-backface {
+  --backface-surface: linear-gradient(180deg, rgba(8, 15, 27, 0.98), rgba(5, 11, 20, 0.98));
+  --backface-surface-muted: rgba(12, 21, 36, 0.94);
+  --backface-panel: rgba(16, 28, 46, 0.88);
+  --backface-panel-strong: rgba(9, 18, 30, 0.98);
+  --backface-border: rgba(93, 144, 224, 0.26);
+  --backface-border-strong: rgba(116, 170, 255, 0.38);
+  --backface-text: #e6eef8;
+  --backface-text-soft: #89a0bb;
+  --backface-accent: #8ec5ff;
   min-height: 0;
   height: 100%;
   max-height: min(28rem, 100%);
@@ -2134,6 +2143,180 @@ a {
 .global-modal__body--chat {
   padding: 0;
   overflow: hidden;
+}
+
+.inspect-card-modal {
+  max-width: min(96vw, 1540px);
+  width: min(96vw, 1540px);
+  height: min(92vh, 980px);
+  contain: layout paint style;
+}
+
+.inspect-card-modal__body {
+  padding: 0;
+  overflow: hidden;
+  contain: layout paint style;
+}
+
+/* Disable the running-pulse animation for the preview copy of the card —
+   doubling animated cards combined with the topbar's backdrop-filter caused
+   full-screen repaint storms while the modal was open. */
+.inspect-card .board-card.board-tone--running {
+  animation: none;
+}
+
+.inspect-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.95fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.inspect-card__preview-pane,
+.inspect-card__sidebar,
+.inspect-card__sidebar-pane {
+  min-height: 0;
+}
+
+.inspect-card__preview-pane {
+  padding: 1rem;
+  border-right: 1px solid var(--color-border-strong);
+  overflow: auto;
+  min-height: 0;
+  background: rgba(9, 17, 30, 0.55);
+}
+
+.inspect-card__preview-shell {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1.4rem 1rem;
+}
+
+.inspect-card__preview-node {
+  flex: 0 1 min(100%, 34rem);
+  width: min(100%, 34rem);
+}
+
+.inspect-card__preview-node .board-flow-node__card {
+  width: 100%;
+}
+
+.inspect-card__preview-theme-scope.board-app-shell {
+  min-height: auto;
+  background: none;
+}
+
+.inspect-card__sidebar {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.inspect-card__sidebar-pane {
+  min-height: 0;
+  padding: 1rem;
+}
+
+.inspect-card__sidebar-pane--top {
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.inspect-card__sidebar-pane--top .board-card-backface {
+  max-height: 100%;
+}
+
+.inspect-card__sidebar-pane--bottom {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspect-card__output-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  height: 100%;
+}
+
+.inspect-card__output-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.inspect-card__pane-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-soft);
+  margin-bottom: 0.2rem;
+}
+
+.inspect-card__output-title,
+.inspect-card__empty-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.inspect-card__output-content {
+  min-height: 0;
+  overflow: auto;
+}
+
+.inspect-card__empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+}
+
+.inspect-card__empty-copy {
+  max-width: 34rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--color-text-soft);
+}
+
+@media (max-width: 1100px) {
+  .inspect-card {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr);
+  }
+
+  .inspect-card__preview-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+}
+
+@media (max-width: 720px) {
+  .inspect-card-modal {
+    width: min(100vw, 100%);
+    max-width: min(100vw, 100%);
+    height: calc(100dvh - 1.5rem);
+  }
+
+  .inspect-card__sidebar {
+    grid-template-rows: minmax(260px, 1fr) minmax(220px, 0.9fr);
+  }
+
+  .inspect-card__preview-pane,
+  .inspect-card__sidebar-pane {
+    padding: 0.8rem;
+  }
 }
 
 .global-modal__section {

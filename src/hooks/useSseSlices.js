@@ -110,7 +110,7 @@ function getOrCreateBoardUiStore(boardId) {
   if (!boardUiStores.has(boardId)) {
     boardUiStores.set(boardId, {
       snapshot: {
-        flippedCardId: null,
+        inspectedCardId: null,
       },
       listeners: new Set(),
     });
@@ -142,23 +142,23 @@ function subscribeBoardUiStore(boardId, listener) {
   };
 }
 
-function setBoardFlippedCardId(boardId, nextValue) {
+function setBoardInspectedCardId(boardId, nextValue) {
   if (!boardId) return;
 
   const store = getOrCreateBoardUiStore(boardId);
-  const currentValue = store.snapshot?.flippedCardId ?? null;
+  const currentValue = store.snapshot?.inspectedCardId ?? null;
   const resolvedValue = typeof nextValue === 'function'
     ? nextValue(currentValue)
     : nextValue;
-  const flippedCardId = resolvedValue ? String(resolvedValue) : null;
+  const inspectedCardId = resolvedValue ? String(resolvedValue) : null;
 
-  if (currentValue === flippedCardId) {
+  if (currentValue === inspectedCardId) {
     return;
   }
 
   store.snapshot = {
     ...store.snapshot,
-    flippedCardId,
+    inspectedCardId,
   };
   emitBoardUiStore(store);
 }
@@ -708,26 +708,35 @@ export function useCardChatWatchParty(boardId, cardId) {
   );
 }
 
-export function useBoardFlipState(boardId) {
+export function useBoardInspectState(boardId) {
   const subscribe = useCallback((listener) => subscribeBoardUiStore(boardId, listener), [boardId]);
   const getSnapshot = useCallback(
-    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { flippedCardId: null }),
+    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { inspectedCardId: null }),
     [boardId],
   );
 
   const snapshot = useSyncExternalStore(
     subscribe,
     getSnapshot,
-    () => ({ flippedCardId: null }),
+    () => ({ inspectedCardId: null }),
   );
 
-  const setFlippedCardId = useCallback((nextValue) => {
-    setBoardFlippedCardId(boardId, nextValue);
+  const setInspectedCardId = useCallback((nextValue) => {
+    setBoardInspectedCardId(boardId, nextValue);
   }, [boardId]);
 
   return {
-    flippedCardId: snapshot?.flippedCardId ?? null,
-    setFlippedCardId,
+    inspectedCardId: snapshot?.inspectedCardId ?? null,
+    setInspectedCardId,
+  };
+}
+
+export function useBoardFlipState(boardId) {
+  const { inspectedCardId, setInspectedCardId } = useBoardInspectState(boardId);
+
+  return {
+    flippedCardId: inspectedCardId,
+    setFlippedCardId: setInspectedCardId,
   };
 }
 
