@@ -14,9 +14,7 @@ export function useChatState(boardId, cardId) {
   const boardInfo = useBoardInfo(boardId);
   const chat = useCardChatViews(boardId, cardId);
 
-  if (!chat || !cardId) return null;
-
-  const chatState = chat.chatState ?? null;
+  const chatState = chat?.chatState ?? null;
   const boardSseClientId = boardInfo?.sseClientId ?? null;
 
   const sendChat = useCallback(
@@ -55,11 +53,14 @@ export function useChatState(boardId, cardId) {
     unsubscribeChat,
   }), [sendChat, uploadChatFile, subscribeChat, unsubscribeChat]);
 
-  return {
-    ...(chatState ?? {}),
-    boardSseClientId,
-    chatActions,
-  };
+  return useMemo(() => {
+    if (!chat || !cardId) return null;
+    return {
+      ...(chatState ?? {}),
+      boardSseClientId,
+      chatActions,
+    };
+  }, [chat, cardId, chatState, boardSseClientId, chatActions]);
 }
 
 export function useChatStateAIWorking(boardId, cardId) {
