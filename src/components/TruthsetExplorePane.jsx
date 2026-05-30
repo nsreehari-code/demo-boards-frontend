@@ -94,7 +94,7 @@ export function TruthsetExplorePane({ boardId, includeFilters = [], layoutStrate
   const safeIdx = Math.min(idx, Math.max(0, truthsetCardIds.length - 1));
   const cardId = truthsetCardIds[safeIdx] ?? null;
   const cards = useMemo(() => {
-    if (!board) return [];
+    if (!board || !visible) return [];
     return truthsetCardIds.map((currentCardId) => {
       const cardContent = board.cardContents[currentCardId] ?? null;
       return {

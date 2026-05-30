@@ -86,7 +86,7 @@ export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'ver
   const safeIdx = Math.min(idx, Math.max(0, ingestCardIds.length - 1));
   const cardId = ingestCardIds[safeIdx] ?? null;
   const cards = useMemo(() => {
-    if (!board) return [];
+    if (!board || !visible) return [];
     return ingestCardIds.map((currentCardId) => {
       const cardContent = board.cardContents[currentCardId] ?? null;
       return {
@@ -95,7 +95,7 @@ export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'ver
         card_data: cardContent?.card_data ?? {},
       };
     });
-  }, [board, ingestCardIds]);
+  }, [board, ingestCardIds, visible]);
 
   if (!board || ingestCardIds.length === 0) return null;
 
