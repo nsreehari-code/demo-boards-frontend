@@ -32,6 +32,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
   const [refreshingAll, setRefreshingAll] = useState(false);
   const refreshAllRef = useRef(null);
   const isMountedRef = useRef(true);
+  const timerArmedRef = useRef(false);
 
   const remainingMs = Math.max(0, nextRefreshAt - nowMs);
 
@@ -41,6 +42,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
     const currentTime = Date.now();
     setNowMs(currentTime);
     setNextRefreshAt(currentTime + REFRESH_ALL_INTERVAL_MS);
+    timerArmedRef.current = false;
   };
 
   useEffect(() => () => {
@@ -53,6 +55,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
     }
 
     const timerId = window.setInterval(() => {
+      timerArmedRef.current = true;
       setNowMs(Date.now());
     }, 1000);
 
@@ -60,7 +63,7 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
   }, [refreshingAll]);
 
   useEffect(() => {
-    if (remainingMs > 0 || refreshingAll || !canRefreshAll) {
+    if (!timerArmedRef.current || remainingMs > 0 || refreshingAll || !canRefreshAll) {
       return;
     }
 

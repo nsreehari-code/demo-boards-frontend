@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  ResponsiveContainer,
   PieChart, Pie, Cell,
   BarChart, Bar,
   LineChart, Line,
@@ -504,11 +503,31 @@ function ChartView({ data, renderDef }) {
   }
 
   const height = viewData.height ?? 220;
+  return <MeasuredChart height={height}>{chart}</MeasuredChart>;
+}
+
+function MeasuredChart({ height, children }) {
+  const ref = useRef(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        {chart}
-      </ResponsiveContainer>
+    <div ref={ref} style={{ width: '100%', height }}>
+      {width > 0
+        ? React.cloneElement(children, { width, height })
+        : null}
     </div>
   );
 }

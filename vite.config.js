@@ -10,5 +10,15 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          recharts: ['recharts'],
+          xyflow: ['@xyflow/react'],
+          markdown: ['react-markdown', 'remark-gfm'],
+        },
+      },
+    },
   },
 }));
