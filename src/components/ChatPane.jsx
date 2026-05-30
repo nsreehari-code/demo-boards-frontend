@@ -42,6 +42,32 @@ function WorkingBubbleIcon() {
   );
 }
 
+const processingStates = [
+  'The mission is underway…',
+  'Engaging hyperdrive…',
+  'Activating mission protocols…',
+  'Calculating the jump…',
+  'Scanning the galaxy…',
+  'The Force is in motion…',
+  'Forces are at work…',
+];
+
+const toolStates = [
+  'Chewie, get us ready…',
+  'Summoning the council…',
+  'R2 is working on it…',
+  'Summoning the squadron…',
+  'Deploying the squadron…',
+  'Calling in support…',
+  'Tactical units mobilised',
+  'Companions joining',
+  'Power is gathering',
+];
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function ChatIconShell({ children }) {
   return (
     <span
@@ -349,11 +375,15 @@ function toChipPreview(text) {
 function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
   const { copilotOutput = '', copilotTools = '' } = useChatWatchParty(boardId, cardId) ?? {};
   const [activeChipKey, setActiveChipKey] = useState('');
+  const [chipLabels] = useState(() => ({
+    output: pickRandom(processingStates),
+    tools: pickRandom(toolStates),
+  }));
   const liveOutput = typeof copilotOutput === 'string' ? copilotOutput : '';
   const liveTools = typeof copilotTools === 'string' ? copilotTools : '';
   const chips = [
-    liveOutput ? { key: 'output', label: 'Copilot Output', value: toChipPreview(liveOutput), fullText: liveOutput } : null,
-    liveTools ? { key: 'tools', label: 'Copilot Tools', value: toChipPreview(liveTools), fullText: liveTools } : null,
+    liveOutput ? { key: 'output', label: chipLabels.output, value: toChipPreview(liveOutput), fullText: liveOutput } : null,
+    liveTools ? { key: 'tools', label: chipLabels.tools, value: toChipPreview(liveTools), fullText: liveTools } : null,
   ].filter(Boolean);
   const activeChip = compact ? null : (chips.find((chip) => chip.key === activeChipKey) ?? null);
 
