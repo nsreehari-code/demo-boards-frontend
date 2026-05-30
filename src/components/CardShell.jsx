@@ -347,7 +347,16 @@ function CardShellComponent({ boardId, cardId }) {
   return (
     <>
       <div className={`board-card ${statusTone} ${showBackface ? 'board-card--backface' : ''}`}>
-        <div className="board-card__header">
+        <div
+          className="board-card__header"
+          onDoubleClick={(event) => {
+            if (event.target.closest('button')) return;
+            event.stopPropagation();
+            window.dispatchEvent(new CustomEvent('demo-board:toggle-card-focus', {
+              detail: { boardId, cardId },
+            }));
+          }}
+        >
           <div className="board-card__title-wrap">
             <div className="board-card__title-block">
               <div className="board-card__title text-truncate">{title}</div>

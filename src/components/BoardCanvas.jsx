@@ -648,6 +648,57 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     };
   }, []);
 
+  const focusedCardIdRef = useRef(null);
+  const savedViewportRef = useRef(null);
+
+  useEffect(() => {
+    if (!reactFlowInstance) return undefined;
+
+    const handler = (event) => {
+      const detail = event?.detail;
+      if (!detail || detail.boardId !== boardId || !detail.cardId) return;
+
+      const cardId = detail.cardId;
+
+      if (focusedCardIdRef.current === cardId) {
+        const saved = savedViewportRef.current;
+        focusedCardIdRef.current = null;
+        savedViewportRef.current = null;
+        if (saved) {
+          reactFlowInstance.setViewport(saved, { duration: 280 });
+        }
+        return;
+      }
+
+      const node = reactFlowInstance.getNode?.(cardId);
+      if (!node) return;
+
+      const nodeWidth = node.measured?.width ?? node.width ?? NODE_WIDTH;
+      const nodeHeight = node.measured?.height ?? node.height;
+      const container = document.querySelector('.board-centre-canvas__viewport');
+      const viewportHeight = container?.clientHeight ?? window.innerHeight;
+      const viewportWidth = container?.clientWidth ?? window.innerWidth;
+      if (!nodeHeight || !viewportHeight) return;
+
+      const zoomForHeight = (viewportHeight * 0.9) / nodeHeight;
+      const zoomForWidth = (viewportWidth * 0.95) / nodeWidth;
+      const targetZoom = Math.min(zoomForHeight, zoomForWidth, 1.35);
+
+      if (focusedCardIdRef.current === null) {
+        savedViewportRef.current = reactFlowInstance.getViewport?.() ?? null;
+      }
+      focusedCardIdRef.current = cardId;
+
+      const centerX = (node.position?.x ?? 0) + nodeWidth / 2;
+      const centerY = (node.position?.y ?? 0) + nodeHeight / 2;
+
+      reactFlowInstance.setCenter(centerX, centerY, { zoom: targetZoom, duration: 280 });
+    };
+
+    window.addEventListener('demo-board:toggle-card-focus', handler);
+    return () => window.removeEventListener('demo-board:toggle-card-focus', handler);
+  }, [boardId, reactFlowInstance]);
+
   return (
     <div className="board-centre-canvas__viewport">
       <ReactFlow
