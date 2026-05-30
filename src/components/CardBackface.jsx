@@ -1,4 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+
+const EMPTY_ARRAY = [];
+const SOURCE_SUMMARY_EXCLUDED_KEYS = new Set([
+  'bindTo',
+  'outputFile',
+  'projections',
+  'optionalForCompletionGating',
+  'timeout',
+  'script',
+]);
 
 function formatScalar(value) {
   if (value == null) {
@@ -77,16 +87,8 @@ function renderYamlStyledLine(line, key) {
 }
 
 function buildSourceSummary(sourceDef, index) {
-  const excludedKeys = new Set([
-    'bindTo',
-    'outputFile',
-    'projections',
-    'optionalForCompletionGating',
-    'timeout',
-    'script',
-  ]);
   const kindKey = Object.keys(sourceDef ?? {}).find((key) => {
-    return !excludedKeys.has(key) && !key.startsWith('_');
+    return !SOURCE_SUMMARY_EXCLUDED_KEYS.has(key) && !key.startsWith('_');
   });
   const kindValue = kindKey ? sourceDef?.[kindKey] : null;
   const projections = sourceDef?.projections && typeof sourceDef.projections === 'object'
@@ -166,15 +168,28 @@ export function CardBackface({
   onRunCardFlight,
   onRunFlight,
 }) {
-  const requires = Array.isArray(cardContent?.requires) ? cardContent.requires : [];
-  const provides = Array.isArray(cardContent?.provides) ? cardContent.provides : [];
-  const sourceDefs = Array.isArray(cardContent?.source_defs) ? cardContent.source_defs : [];
-  const viewElements = Array.isArray(cardContent?.view?.elements) ? cardContent.view.elements : [];
-  const renderedViews = viewElements
-    .map((element) => (typeof element?.kind === 'string' ? element.kind.trim() : ''))
-    .filter((kind, index, allKinds) => kind && allKinds.indexOf(kind) === index);
+  const requires = Array.isArray(cardContent?.requires) ? cardContent.requires : EMPTY_ARRAY;
+  const provides = Array.isArray(cardContent?.provides) ? cardContent.provides : EMPTY_ARRAY;
+  const sourceDefs = Array.isArray(cardContent?.source_defs) ? cardContent.source_defs : EMPTY_ARRAY;
+  const viewElements = Array.isArray(cardContent?.view?.elements) ? cardContent.view.elements : EMPTY_ARRAY;
 
-  const sourceSummaries = sourceDefs.map((sourceDef, index) => buildSourceSummary(sourceDef, index));
+  const renderedViews = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const element of viewElements) {
+      const kind = typeof element?.kind === 'string' ? element.kind.trim() : '';
+      if (kind && !seen.has(kind)) {
+        seen.add(kind);
+        result.push(kind);
+      }
+    }
+    return result;
+  }, [viewElements]);
+
+  const sourceSummaries = useMemo(
+    () => sourceDefs.map((sourceDef, index) => buildSourceSummary(sourceDef, index)),
+    [sourceDefs],
+  );
 
   return (
     <div className="board-card-backface h-100 d-flex flex-column">
