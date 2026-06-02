@@ -1,3 +1,10 @@
 node_modules/
-npm-debug.log*
 dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+PLAYWRIGHT_SMOKE_SKETCH.md
