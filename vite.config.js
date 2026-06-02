@@ -1,5 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const packageJson = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8'));
+const yamlFlowCdnVersion = String(packageJson.yamlFlowCdnVersion || '').trim();
+
+if (!yamlFlowCdnVersion) {
+  throw new Error('package.json must define a non-empty yamlFlowCdnVersion');
+}
 
 function manualChunks(id) {
   if (id.includes('/node_modules/react/')) return 'react';
@@ -14,7 +23,15 @@ function manualChunks(id) {
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/demo-boards-frontend/' : '/',
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'inject-yaml-flow-cdn-version',
+      transformIndexHtml(html) {
+        return html.replaceAll('%YAML_FLOW_CDN_VERSION%', yamlFlowCdnVersion);
+      },
+    },
+  ],
   server: {
     port: 5510,
     fs: {
