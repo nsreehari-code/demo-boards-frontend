@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatState, useChatWatchParty } from '../hooks/useChatState.js';
 import { useCardStateFilesData } from '../hooks/useCardState.js';
-import { SERVER } from '../lib/client.js';
+import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
 
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
 function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
@@ -210,7 +210,7 @@ function resolveChatAttachmentDownloadUrl(boardId, cardId, file, index) {
     return null;
   }
 
-  return `${SERVER}/api/boards/${boardId}/cards/${cardId}/files/${index}?sn=${encodeURIComponent(storedName)}`;
+  return getCardFileUrl(boardId, cardId, index, storedName);
 }
 
 function parseIndexedSystemAttachment(text) {
@@ -236,16 +236,43 @@ function parseIndexedSystemAttachment(text) {
 }
 
 function SystemAttachmentChip({ boardId, cardId, file, index, label }) {
-  const href = resolveChatAttachmentDownloadUrl(boardId, cardId, file, index);
+  const [resolvedHref, setResolvedHref] = useState(() => resolveChatAttachmentDownloadUrl(boardId, cardId, file, index));
   const displayLabel = label || file?.name || file?.stored_name || `Attachment #${index}`;
 
-  if (!href) {
+  useEffect(() => {
+    const nextHref = resolveChatAttachmentDownloadUrl(boardId, cardId, file, index);
+    if (nextHref) {
+      setResolvedHref(nextHref);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const storedName = typeof file?.stored_name === 'string' ? file.stored_name : '';
+    if (!storedName) {
+      setResolvedHref('');
+      return undefined;
+    }
+
+    void ensureCardFileUrl(boardId, cardId, index, storedName)
+      .then((href) => {
+        if (!cancelled) setResolvedHref(href || '');
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedHref('');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardId, cardId, file, index]);
+
+  if (!resolvedHref) {
     return null;
   }
 
   return (
     <a
-      href={href}
+      href={resolvedHref}
       className="badge rounded-pill text-bg-light border text-decoration-none text-body-emphasis"
       target="_blank"
       rel="noreferrer"

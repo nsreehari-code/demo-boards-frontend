@@ -1,12 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  BOARD_TRANSPORT_MODE_INBROWSER,
+  BOARD_TRANSPORT_MODE_SERVER_URL,
+  STORAGE_ADAPTER_FIRESTORE,
+  STORAGE_ADAPTER_LOCALSTORAGE,
   clearStoredAppConfigOverride,
   getAppConfig,
   hasStoredAppConfigOverride,
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
-import { resetRuntimeFromSeedCards, reverseSaveRuntimeToSeedCards } from '../lib/client.js';
+import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/client.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
+
+const RUNTIME_DUMP_VERSION = 1;
+
+function normalizeRuntimeDumpCards(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === 'object' && Array.isArray(payload.cards)) return payload.cards;
+  return null;
+}
+
+function downloadJsonFile(fileName, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
 
 function toFormState(config) {
   return {
@@ -14,11 +38,16 @@ function toFormState(config) {
     defaultBoardLabel: config?.defaultBoard?.label ?? '',
     defaultBoardSubtitle: config?.defaultBoard?.subtitle ?? '',
     refreshAllIntervalSeconds: String(config?.refreshAllIntervalSeconds ?? ''),
+    transportMode: config?.transportMode ?? BOARD_TRANSPORT_MODE_SERVER_URL,
     serverOrigin: config?.serverOrigin ?? '',
+    storageAdapter: config?.storage?.adapter ?? STORAGE_ADAPTER_FIRESTORE,
   };
 }
 
-function normalizeFormState(formState) {
+function normalizeFormState(formState, currentConfig) {
+  const currentStorage = currentConfig?.storage && typeof currentConfig.storage === 'object'
+    ? currentConfig.storage
+    : {};
   return {
     defaultBoardId: formState.defaultBoardId,
     defaultBoard: {
@@ -26,7 +55,12 @@ function normalizeFormState(formState) {
       subtitle: formState.defaultBoardSubtitle,
     },
     refreshAllIntervalSeconds: Number(formState.refreshAllIntervalSeconds),
+    transportMode: formState.transportMode,
     serverOrigin: formState.serverOrigin,
+    storage: {
+      ...currentStorage,
+      adapter: formState.storageAdapter,
+    },
   };
 }
 
@@ -37,7 +71,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [resettingSeeds, setResettingSeeds] = useState(false);
   const [savingSeeds, setSavingSeeds] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
+  const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
+  const serverOriginHasError = serverUnreachable && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL;
+  const runtimeAlertBadge = formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
+    ? 'Runtime storage init failed'
+    : 'Server unreachable';
 
   useEffect(() => {
     if (autoOpen) {
@@ -78,7 +117,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    saveAppConfigOverride(normalizeFormState(formState));
+    saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));
     window.location.reload();
   };
 
@@ -87,27 +126,51 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     window.location.reload();
   };
 
-  const handleResetFromSeeds = async () => {
+  const handleImportRuntimeDump = async (file) => {
     if (!boardId || resettingSeeds) return;
     setResettingSeeds(true);
     try {
-      const response = await resetRuntimeFromSeedCards(boardId);
-      if (!response.ok) throw new Error(`Reset from seed cards failed with status ${response.status}`);
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const nextCards = normalizeRuntimeDumpCards(parsed);
+      if (!Array.isArray(nextCards)) {
+        throw new Error('Runtime dump file must be a JSON array of cards or an object with a cards array');
+      }
+      const currentCards = await listRuntimeCards(boardId);
+      const nextIds = new Set(nextCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
+      const currentIds = new Set(currentCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
+
+      for (const card of nextCards) {
+        const cardId = typeof card?.id === 'string' ? card.id.trim() : '';
+        if (!cardId) throw new Error('Every card in the runtime dump must have a non-empty string id');
+        await upsertRuntimeCard(boardId, card);
+      }
+
+      for (const cardId of currentIds) {
+        if (!nextIds.has(cardId)) {
+          await removeRuntimeCard(boardId, cardId);
+        }
+      }
     } catch (error) {
-      console.error('[AppConfigModal] Failed to reset runtime from seed cards', error);
+      console.error('[AppConfigModal] Failed to import runtime dump', error);
     } finally {
       setResettingSeeds(false);
     }
   };
 
-  const handleSaveToSeeds = async () => {
+  const handleExportRuntimeDump = async () => {
     if (!boardId || savingSeeds) return;
     setSavingSeeds(true);
     try {
-      const response = await reverseSaveRuntimeToSeedCards(boardId);
-      if (!response.ok) throw new Error(`Save runtime to seed cards failed with status ${response.status}`);
+      const cards = await listRuntimeCards(boardId);
+      downloadJsonFile(`${boardId}-runtime-dump.json`, {
+        version: RUNTIME_DUMP_VERSION,
+        boardId,
+        exportedAt: new Date().toISOString(),
+        cards,
+      });
     } catch (error) {
-      console.error('[AppConfigModal] Failed to save runtime cards to seeds', error);
+      console.error('[AppConfigModal] Failed to export runtime dump', error);
     } finally {
       setSavingSeeds(false);
     }
@@ -127,6 +190,19 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       >
         <i className="bi bi-gear-fill" />
       </button>
+
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="d-none"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (!file) return;
+          await handleImportRuntimeDump(file);
+        }}
+      />
 
       {open ? (
         <div className="board-settings-layer" role="presentation">
@@ -165,25 +241,60 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             </div>
 
             <form className="board-settings-form" onSubmit={handleSubmit}>
+              {serverUnreachable ? (
+                <div className="board-settings-alert" role="alert" aria-live="assertive">
+                  <span className="board-settings-alert__badge">
+                    <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
+                    {runtimeAlertBadge}
+                  </span>
+                  <span className="board-settings-alert__message">
+                    {serverUnreachableMessage || (formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
+                      ? 'The configured runtime storage adapter failed to initialize.'
+                      : 'Configured server origin is unreachable.')}
+                  </span>
+                </div>
+              ) : null}
+
+              <label className="board-settings-field">
+                <span>Transport mode</span>
+                <select className="board-input" value={formState.transportMode} onChange={updateField('transportMode')}>
+                  <option value={BOARD_TRANSPORT_MODE_SERVER_URL}>serverUrl</option>
+                  <option value={BOARD_TRANSPORT_MODE_INBROWSER}>inbrowser</option>
+                </select>
+              </label>
+
+              <label className="board-settings-field">
+                <span>Storage adapter</span>
+                <select
+                  className="board-input"
+                  value={formState.storageAdapter}
+                  onChange={updateField('storageAdapter')}
+                  disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER}
+                >
+                  <option value={STORAGE_ADAPTER_FIRESTORE}>firestore</option>
+                  <option value={STORAGE_ADAPTER_LOCALSTORAGE}>localstorage</option>
+                </select>
+                {formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER ? (
+                  <div className="board-settings-form__hint">
+                    Storage adapter is only used in inbrowser transport mode.
+                  </div>
+                ) : null}
+              </label>
+
               <label className="board-settings-field">
                 <span>Server origin</span>
                 <input
-                  className={`board-input${serverUnreachable ? ' board-input--error' : ''}`}
+                  className={`board-input${serverOriginHasError ? ' board-input--error' : ''}`}
                   type="url"
                   value={formState.serverOrigin}
                   onChange={updateField('serverOrigin')}
                   placeholder="http://localhost:7799"
-                  aria-invalid={serverUnreachable ? 'true' : 'false'}
+                  disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL}
+                  aria-invalid={serverOriginHasError ? 'true' : 'false'}
                 />
-                {serverUnreachable ? (
-                  <div className="board-settings-alert" role="alert" aria-live="assertive">
-                    <span className="board-settings-alert__badge">
-                      <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
-                      Server unreachable
-                    </span>
-                    <span className="board-settings-alert__message">
-                      {serverUnreachableMessage || 'Configured server origin is unreachable.'}
-                    </span>
+                {formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL ? (
+                  <div className="board-settings-form__hint">
+                    Server origin is only used in serverUrl mode.
                   </div>
                 ) : null}
               </label>
@@ -219,18 +330,18 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   className="btn btn-outline-danger board-button"
                   onClick={() => setPendingAction('reset')}
                   disabled={resettingSeeds || !boardId}
-                  title="POST /api/boards/:boardId/reset-runtime-from-seed-cards"
+                  title="Import runtime cards from a local JSON file"
                 >
-                  {resettingSeeds ? 'Resetting…' : 'Reset Runtime from Seed Cards'}
+                  {resettingSeeds ? 'Importing…' : 'Import Runtime Dump File'}
                 </button>
                 <button
                   type="button"
                   className="btn btn-outline-warning board-button"
-                  onClick={() => setPendingAction('save')}
+                  onClick={() => { void handleExportRuntimeDump(); }}
                   disabled={savingSeeds || !boardId}
-                  title="POST /api/boards/:boardId/reverse-save-runtime-to-seed-cards"
+                  title="Download the current runtime cards as a local JSON file"
                 >
-                  {savingSeeds ? 'Saving…' : 'Save Runtime to Seed Cards'}
+                  {savingSeeds ? 'Saving…' : 'Save Runtime Dump File'}
                 </button>
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Cancel</button>
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setPendingAction('config')}>Reset to shipped config</button>
@@ -241,15 +352,11 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
           {pendingAction === 'reset' ? (
             <ChallengeConfirmModal
-              message="This will overwrite all runtime card state with the board's seed cards. Any live progress will be lost."
-              onConfirm={() => { setPendingAction(null); handleResetFromSeeds(); }}
-              onCancel={() => setPendingAction(null)}
-            />
-          ) : null}
-          {pendingAction === 'save' ? (
-            <ChallengeConfirmModal
-              message="This will overwrite the board's seed card files with the current runtime state. The previous seed files will be replaced."
-              onConfirm={() => { setPendingAction(null); handleSaveToSeeds(); }}
+              message="This will overwrite the current runtime card state from a local dump file. Cards not present in the file will be removed."
+              onConfirm={() => {
+                setPendingAction(null);
+                importFileInputRef.current?.click();
+              }}
               onCancel={() => setPendingAction(null)}
             />
           ) : null}

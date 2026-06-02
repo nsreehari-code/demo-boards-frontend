@@ -3,6 +3,75 @@ const DEFAULT_PAGE_SUBTITLE = 'Live operational intelligence for agent workflows
 const APP_CONFIG_OVERRIDE_STORAGE_KEY = 'demo-boards.app-config.override';
 const APP_CONFIG_OVERRIDE_VERSION = 1;
 
+import { normalizeBoardRefsConfig } from './board-refs.js';
+
+export const BOARD_TRANSPORT_MODE_SERVER_URL = 'server-url';
+export const BOARD_TRANSPORT_MODE_INBROWSER = 'inbrowser';
+// Back-compat alias: 'inbrowser-firestore' now means 'inbrowser' with the
+// firestore storage adapter; kept exported for older callers.
+export const BOARD_TRANSPORT_MODE_INBROWSER_FIRESTORE = BOARD_TRANSPORT_MODE_INBROWSER;
+
+export const STORAGE_ADAPTER_FIRESTORE = 'firestore';
+export const STORAGE_ADAPTER_LOCALSTORAGE = 'localstorage';
+
+function normalizeStorageAdapter(adapter) {
+  const raw = typeof adapter === 'string' ? adapter.trim().toLowerCase() : '';
+  if (raw === STORAGE_ADAPTER_LOCALSTORAGE) return STORAGE_ADAPTER_LOCALSTORAGE;
+  return STORAGE_ADAPTER_FIRESTORE;
+}
+
+function normalizeFirestoreStorageConfig(config) {
+  const source = config && typeof config === 'object' ? config : {};
+  const firebaseConfig = source.firebaseConfig && typeof source.firebaseConfig === 'object'
+    ? { ...source.firebaseConfig }
+    : {};
+  const appName = typeof source.appName === 'string' && source.appName.trim()
+    ? source.appName.trim()
+    : '';
+  return {
+    firebaseConfig,
+    appName,
+    refs: normalizeBoardRefsConfig(source.refs),
+  };
+}
+
+function normalizeLocalStorageStorageConfig(config) {
+  const source = config && typeof config === 'object' ? config : {};
+  // No connection fields today; reserved for future per-store overrides.
+  return {
+    ...source,
+    refs: normalizeBoardRefsConfig(source.refs),
+  };
+}
+
+function normalizeStorageConfig(config, legacyInBrowserFirestore) {
+  const source = config && typeof config === 'object' ? config : {};
+  const legacy = legacyInBrowserFirestore && typeof legacyInBrowserFirestore === 'object'
+    ? legacyInBrowserFirestore
+    : null;
+
+  // Pick adapter explicitly, otherwise infer firestore when legacy config is present.
+  const adapter = normalizeStorageAdapter(
+    source.adapter ?? (legacy ? STORAGE_ADAPTER_FIRESTORE : STORAGE_ADAPTER_FIRESTORE),
+  );
+
+  const firestoreSource = source.firestore ?? legacy ?? {};
+  const localstorageSource = source.localstorage ?? {};
+
+  const seedCardsUrl = typeof source.seedCardsUrl === 'string' && source.seedCardsUrl.trim()
+    ? source.seedCardsUrl.trim()
+    : (typeof legacy?.seedCardsUrl === 'string' && legacy.seedCardsUrl.trim()
+      ? legacy.seedCardsUrl.trim()
+      : '');
+
+  return {
+    adapter,
+    seedCardsUrl,
+    firestore: normalizeFirestoreStorageConfig(firestoreSource),
+    localstorage: normalizeLocalStorageStorageConfig(localstorageSource),
+  };
+}
+
 export const FALLBACK_APP_CONFIG = Object.freeze({
   defaultBoardId: 'live',
   defaultBoard: {
@@ -13,12 +82,36 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   pageTitle: 'Live',
   pageSubtitle: DEFAULT_PAGE_SUBTITLE,
   refreshAllIntervalSeconds: DEFAULT_REFRESH_ALL_INTERVAL_SECONDS,
+  transportMode: BOARD_TRANSPORT_MODE_SERVER_URL,
   serverOrigin: 'http://localhost:7799',
+  storage: {
+    adapter: STORAGE_ADAPTER_FIRESTORE,
+    seedCardsUrl: '',
+    firestore: { firebaseConfig: {}, appName: '', refs: {} },
+    localstorage: { refs: {} },
+  },
   boardServerConstants: {
     copilotOutputChannel: 'copilot-output',
     copilotToolsChannel: 'copilot-tools',
   },
 });
+
+function normalizeTransportMode(transportMode) {
+  const raw = typeof transportMode === 'string' ? transportMode.trim().toLowerCase() : '';
+  if (
+    raw === 'inbrowser'
+    || raw === 'in-browser'
+    || raw === 'inbrowser+firestore'
+    || raw === 'inbrowser-firestore'
+    || raw === 'inbrowser_firestore'
+  ) {
+    return BOARD_TRANSPORT_MODE_INBROWSER;
+  }
+  if (raw === 'serverurl' || raw === 'server-url' || raw === 'server_url') {
+    return BOARD_TRANSPORT_MODE_SERVER_URL;
+  }
+  return FALLBACK_APP_CONFIG.transportMode;
+}
 
 function normalizeBoardServerConstants(constants) {
   const fallback = FALLBACK_APP_CONFIG.boardServerConstants;
@@ -73,7 +166,9 @@ function normalizeAppConfig(config) {
     pageTitle: defaultBoardLabel,
     pageSubtitle: defaultBoardSubtitle,
     refreshAllIntervalSeconds: resolvedRefreshAllIntervalSeconds,
+    transportMode: normalizeTransportMode(config?.transportMode),
     serverOrigin: normalizeServerOrigin(config?.serverOrigin),
+    storage: normalizeStorageConfig(config?.storage, config?.inBrowserFirestore),
     boardServerConstants: normalizeBoardServerConstants(config?.boardServerConstants),
   };
 }
@@ -159,7 +254,9 @@ export let DEFAULT_BOARD_LABEL = currentAppConfig.defaultBoard.label;
 export let PAGE_TITLE = currentAppConfig.pageTitle;
 export let PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
 export let REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
+export let BOARD_TRANSPORT_MODE = currentAppConfig.transportMode;
 export let SERVER = currentAppConfig.serverOrigin;
+export let STORAGE_CONFIG = currentAppConfig.storage;
 export let BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
 export let COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
 export let COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
@@ -172,7 +269,9 @@ function applyAppConfig(config) {
   PAGE_TITLE = currentAppConfig.pageTitle;
   PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
   REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
+  BOARD_TRANSPORT_MODE = currentAppConfig.transportMode;
   SERVER = currentAppConfig.serverOrigin;
+  STORAGE_CONFIG = currentAppConfig.storage;
   BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
   COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
   COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;

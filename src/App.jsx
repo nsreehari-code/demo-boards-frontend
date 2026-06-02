@@ -1,15 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useBoardState } from './hooks/useBoardState.js';
 import { AppConfigModal } from './components/AppConfigModal.jsx';
-import { MainBoard }  from './components/MainBoard.jsx';
-import { DEFAULT_BOARD_ID, PAGE_SUBTITLE, PAGE_TITLE, REFRESH_ALL_INTERVAL_SECONDS } from './lib/appConfig.js';
+import {
+  BOARD_TRANSPORT_MODE,
+  BOARD_TRANSPORT_MODE_SERVER_URL,
+  DEFAULT_BOARD_ID,
+  PAGE_SUBTITLE,
+  PAGE_TITLE,
+  REFRESH_ALL_INTERVAL_SECONDS,
+} from './lib/appConfig.js';
 import { healthz } from './lib/client.js';
+
+const MainBoard = lazy(() => import('./components/MainBoard.jsx').then((module) => ({ default: module.MainBoard })));
 
 const BOARD_ID = DEFAULT_BOARD_ID;
 const DEFAULT_THEME = 'mist-ops';
 const REFRESH_ALL_INTERVAL_MS = REFRESH_ALL_INTERVAL_SECONDS * 1000;
 const HEALTHZ_POLL_INTERVAL_MS = 60_000;
 const HEALTHZ_RETRY_INTERVAL_MS = 10_000;
+const BOARD_RUNTIME_INIT_STATUS_EVENT = 'demo-board:runtime-init-status';
 
 function getReachabilityMessage(error) {
   if (error instanceof Error && error.message) {
@@ -17,6 +26,16 @@ function getReachabilityMessage(error) {
   }
 
   return 'Configured server origin is unreachable.';
+}
+
+function getRuntimeInitFailureMessage(error, usesServerUrlTransport) {
+  const prefix = usesServerUrlTransport
+    ? 'Board runtime initialization failed'
+    : 'Configured runtime storage adapter failed to initialize';
+  if (error instanceof Error && error.message) {
+    return `${prefix}: ${error.message}`;
+  }
+  return `${prefix}.`;
 }
 
 function formatCountdown(remainingMs) {
@@ -119,13 +138,46 @@ function RefreshAllButton({ canRefreshAll, refreshAll }) {
 export default function App() {
   const board = useBoardState(BOARD_ID);
   const canRefreshAll = board?.hasRefreshableCards === true;
+  const usesServerUrlTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_SERVER_URL;
   const [serverReachability, setServerReachability] = useState({
-    checking: true,
+    checking: usesServerUrlTransport,
     unreachable: false,
+    message: '',
+  });
+  const [runtimeInitFailure, setRuntimeInitFailure] = useState({
+    failed: false,
     message: '',
   });
 
   useEffect(() => {
+    const handleRuntimeInitStatus = (event) => {
+      const detail = event?.detail ?? {};
+      if (detail.boardId !== BOARD_ID) return;
+      if (detail.status === 'success') {
+        setRuntimeInitFailure({ failed: false, message: '' });
+        return;
+      }
+      if (detail.status === 'error') {
+        setRuntimeInitFailure({
+          failed: true,
+          message: getRuntimeInitFailureMessage(
+            detail.message ? new Error(detail.message) : null,
+            usesServerUrlTransport,
+          ),
+        });
+      }
+    };
+
+    window.addEventListener(BOARD_RUNTIME_INIT_STATUS_EVENT, handleRuntimeInitStatus);
+    return () => window.removeEventListener(BOARD_RUNTIME_INIT_STATUS_EVENT, handleRuntimeInitStatus);
+  }, [usesServerUrlTransport]);
+
+  useEffect(() => {
+    if (!usesServerUrlTransport) {
+      setServerReachability({ checking: false, unreachable: false, message: '' });
+      return undefined;
+    }
+
     let cancelled = false;
     let timeoutId = null;
     let hasResolvedOnce = false;
@@ -166,15 +218,20 @@ export default function App() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, []);
+  }, [usesServerUrlTransport]);
+
+  const runtimeUnavailable = serverReachability.unreachable || runtimeInitFailure.failed;
+  const runtimeUnavailableMessage = serverReachability.unreachable
+    ? serverReachability.message
+    : runtimeInitFailure.message;
 
   return (
     <div className="board-app-shell" data-theme={DEFAULT_THEME}>
       <AppConfigModal
         boardId={BOARD_ID}
-        autoOpen={serverReachability.unreachable}
-        serverUnreachable={serverReachability.unreachable}
-        serverUnreachableMessage={serverReachability.message}
+        autoOpen={runtimeUnavailable}
+        serverUnreachable={runtimeUnavailable}
+        serverUnreachableMessage={runtimeUnavailableMessage}
       />
 
       <nav className="board-topbar px-3 px-lg-4 py-1">
@@ -193,18 +250,33 @@ export default function App() {
       </nav>
 
       <main className="board-main">
-        {serverReachability.unreachable
+        {runtimeUnavailable
           ? null
           : !board
           ? (
             <div className="board-loading">
               <span className="spinner-border spinner-border-sm" role="status" />
               <p className="mb-0">
-                {serverReachability.checking ? 'Checking configured server origin…' : 'Connecting to live board state…'}
+                {usesServerUrlTransport && serverReachability.checking
+                  ? 'Checking configured server origin…'
+                  : BOARD_TRANSPORT_MODE === 'inbrowser'
+                    ? 'Connecting to in-browser board runtime…'
+                    : 'Connecting to live board state…'}
               </p>
             </div>
           )
-          : <MainBoard boardId={BOARD_ID} />}
+          : (
+            <Suspense
+              fallback={(
+                <div className="board-loading">
+                  <span className="spinner-border spinner-border-sm" role="status" />
+                  <p className="mb-0">Loading board workspace…</p>
+                </div>
+              )}
+            >
+              <MainBoard boardId={BOARD_ID} />
+            </Suspense>
+          )}
       </main>
     </div>
   );

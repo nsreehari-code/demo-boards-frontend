@@ -4,98 +4,253 @@
  */
 export { SERVER } from './appConfig.js';
 import { SERVER } from './appConfig.js';
+import {
+  BOARD_TRANSPORT_MODE,
+  BOARD_TRANSPORT_MODE_INBROWSER,
+  STORAGE_CONFIG,
+} from './appConfig.js';
+import { createInBrowserBoardTransport } from './client-board-runtime.js';
+
+/**
+ * Build the in-browser storage adapter from the full storage config so the
+ * host can mix ref kinds across backends.
+ */
+function pickStorageAdapterFactory() {
+  return async (boardId, config, runtimeHooks) => {
+    const mod = await import('./storage-hybrid-adapter.js');
+    return mod.createStorageAdapter(boardId, config, runtimeHooks);
+  };
+}
+
 const base = (boardId) => `${SERVER}/api/boards/${boardId}`;
 
-export const healthz = () =>
-  fetch(`${SERVER}/healthz`);
-
-export const initBoard = (boardId) =>
-  fetch(`${base(boardId)}/init-board`);
-
-export const refreshCard = (boardId, cardId) =>
-  fetch(`${base(boardId)}/cards/${cardId}/retrigger`, {
+const createHttpBoardTransport = () => ({
+  healthz: () => fetch(`${SERVER}/healthz`),
+  initBoard: (boardId) => fetch(`${base(boardId)}/init-board`),
+  refreshCard: (boardId, cardId) => fetch(`${base(boardId)}/cards/${cardId}/retrigger`, {
     method: 'POST',
-  });
-
-export const resetRuntimeFromSeedCards = (boardId) =>
-  fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
+  }),
+  resetRuntimeFromSeedCards: (boardId) => fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
     method: 'POST',
-  });
-
-export const reverseSaveRuntimeToSeedCards = (boardId) =>
-  fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
+  }),
+  reverseSaveRuntimeToSeedCards: (boardId) => fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
     method: 'POST',
-  });
-
-export const patchCard = (boardId, cardId, patch) =>
-  fetch(`${base(boardId)}/cards/${cardId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
-  });
-
-export const dispatchAction = (boardId, cardId, type, payload = {}) =>
-  fetch(`${base(boardId)}/cards/${cardId}/actions`, {
+  }),
+  dispatchAction: (boardId, cardId, type, payload = {}) => fetch(`${base(boardId)}/cards/${cardId}/actions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actionType: type, payload }),
-  });
-
-export const callBoardMcp = (boardId, tool, args = {}) =>
-  fetch(`${base(boardId)}/mcp`, {
+  }),
+  callBoardMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tool, args }),
+  }),
+  callBoardWebhooksMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp-webhooks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, args }),
+  }),
+  callBoardControlplaneMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp-controlplane`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, args: { board_id: boardId, ...args } }),
+  }),
+  openBoardSse: (boardId, clientId) => new EventSource(
+    `${base(boardId)}/sse?clientId=${encodeURIComponent(clientId)}`,
+  ),
+  getCardFileUrl: (boardId, cardId, index, storedName = '') => {
+    const query = typeof storedName === 'string' && storedName.trim()
+      ? `?sn=${encodeURIComponent(storedName)}`
+      : '';
+    return `${base(boardId)}/cards/${cardId}/files/${index}${query}`;
+  },
+  subscribeCardChats: (boardId, cardId, clientId) => fetch(`${base(boardId)}/cards/${cardId}/chats/subscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  }),
+  unsubscribeCardChats: (boardId, cardId, clientId) => fetch(`${base(boardId)}/cards/${cardId}/chats/unsubscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  }),
+  subscribeWatchparty: (boardId, cardId, channelName, clientId) => fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/subscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  }),
+  unsubscribeWatchparty: (boardId, cardId, channelName, clientId) => fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/unsubscribe-sse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
+  }),
+});
+
+const boardTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_INBROWSER
+  ? createInBrowserBoardTransport({
+    createStorageAdapter: pickStorageAdapterFactory(),
+    storageConfig: STORAGE_CONFIG,
+    seedCardsUrl: STORAGE_CONFIG.seedCardsUrl,
+    transportName: `inbrowser+${STORAGE_CONFIG.adapter}`,
+  })
+  : createHttpBoardTransport();
+
+const bytesToBase64 = (bytes) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const toAttachmentArg = async (file) => ({
+  file_name: file?.name || 'upload.bin',
+  content_type: file?.type || 'application/octet-stream',
+  base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+});
+
+const requireTurnId = (turnId, helperName) => {
+  const normalizedTurnId = typeof turnId === 'string' ? turnId.trim() : '';
+  if (!normalizedTurnId) {
+    throw new Error(`${helperName} requires a non-empty turnId`);
+  }
+  return normalizedTurnId;
+};
+
+const ensureOkResponse = async (response, operation) => {
+  if (response?.ok) return response;
+  let detail = '';
+  try {
+    detail = await response.text();
+  } catch {
+    detail = '';
+  }
+  const suffix = detail ? `: ${detail}` : '';
+  throw new Error(`${operation} failed with status ${response?.status ?? 'unknown'}${suffix}`);
+};
+
+export const healthz = () =>
+  boardTransport.healthz();
+
+export const initBoard = (boardId) =>
+  boardTransport.initBoard(boardId).then((response) => ensureOkResponse(response, 'init-board'));
+
+export const refreshCard = (boardId, cardId) =>
+  boardTransport.refreshCard(boardId, cardId);
+
+export const resetRuntimeFromSeedCards = (boardId) =>
+  boardTransport.resetRuntimeFromSeedCards(boardId);
+
+export const reverseSaveRuntimeToSeedCards = (boardId) =>
+  boardTransport.reverseSaveRuntimeToSeedCards(boardId);
+
+export async function listRuntimeCards(boardId) {
+  const response = await callBoardControlplaneMcp(boardId, 'list-runtime-cards');
+  if (!response.ok) {
+    throw new Error(`list-runtime-cards failed with status ${response.status}`);
+  }
+  const payload = await response.json();
+  const cards = Array.isArray(payload?.data) ? payload.data : payload?.data?.cards;
+  return Array.isArray(cards) ? cards : [];
+}
+
+export async function upsertRuntimeCard(boardId, candidateCardContent) {
+  const cardId = typeof candidateCardContent?.id === 'string' ? candidateCardContent.id.trim() : '';
+  if (!cardId) throw new Error('upsertRuntimeCard requires candidateCardContent.id');
+  const response = await callBoardControlplaneMcp(boardId, 'manage.upsert-card', {
+    card_id: cardId,
+    candidate_card_content: candidateCardContent,
+  });
+  if (!response.ok) {
+    throw new Error(`manage.upsert-card failed with status ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function removeRuntimeCard(boardId, cardId) {
+  const normalizedCardId = typeof cardId === 'string' ? cardId.trim() : '';
+  if (!normalizedCardId) throw new Error('removeRuntimeCard requires cardId');
+  const response = await callBoardControlplaneMcp(boardId, 'manage.remove-card', {
+    card_id: normalizedCardId,
+  });
+  if (!response.ok) {
+    throw new Error(`manage.remove-card failed with status ${response.status}`);
+  }
+  return response.json();
+}
+
+export const patchCard = (boardId, cardId, patch) =>
+  callBoardControlplaneMcp(boardId, 'manage.patch-card', {
+    card_id: cardId,
+    patch,
   });
 
-export const uploadFile = (boardId, cardId, file) =>
-  fetch(`${base(boardId)}/cards/${cardId}/files`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'x-file-name': encodeURIComponent(file.name),
-    },
-    body: file,
+export const dispatchAction = (boardId, cardId, type, payload = {}) =>
+  boardTransport.dispatchAction(boardId, cardId, type, payload);
+
+export const callBoardMcp = (boardId, tool, args = {}) =>
+  boardTransport.callBoardMcp(boardId, tool, args);
+
+export const callBoardWebhooksMcp = (boardId, tool, args = {}) =>
+  boardTransport.callBoardWebhooksMcp(boardId, tool, args);
+
+export const callBoardControlplaneMcp = (boardId, tool, args = {}) =>
+  boardTransport.callBoardControlplaneMcp(boardId, tool, args);
+
+export const openBoardSse = (boardId, clientId) =>
+  boardTransport.openBoardSse(boardId, clientId);
+
+export const getCardFileUrl = (boardId, cardId, index, storedName = '') =>
+  boardTransport.getCardFileUrl(boardId, cardId, index, storedName);
+
+export const ensureCardFileUrl = (boardId, cardId, index, storedName = '') => {
+  if (typeof boardTransport.ensureCardFileUrl === 'function') {
+    return boardTransport.ensureCardFileUrl(boardId, cardId, index, storedName);
+  }
+  return Promise.resolve(boardTransport.getCardFileUrl(boardId, cardId, index, storedName));
+};
+
+export const addChatAttachment = async (boardId, cardId, file, turnId) =>
+  callBoardControlplaneMcp(boardId, 'manage.add-chat-attachment', {
+    card_id: cardId,
+    turn_id: requireTurnId(turnId, 'addChatAttachment'),
+    ...(await toAttachmentArg(file)),
   });
 
-export const uploadFileForChat = (boardId, cardId, file, turnId = '') => {
-  const turnQuery = typeof turnId === 'string' && turnId.trim()
-    ? `&turn-id=${encodeURIComponent(turnId.trim())}`
-    : '';
-  return fetch(`${base(boardId)}/cards/${cardId}/files?inChat=true${turnQuery}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'x-file-name': encodeURIComponent(file.name),
-    },
-    body: file,
+export const uploadFileForChat = (boardId, cardId, file, turnId) =>
+  addChatAttachment(boardId, cardId, file, turnId);
+
+export const addChatEntryAndAnyAttachments = async (
+  boardId,
+  cardId,
+  { role = 'user', text = '', turnId, files = [] } = {},
+) => {
+  const normalizedFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+  const attachmentArgs = normalizedFiles.length > 0
+    ? await Promise.all(normalizedFiles.map((file) => toAttachmentArg(file)))
+    : [];
+  const normalizedTurnId = requireTurnId(turnId, 'addChatEntryAndAnyAttachments');
+
+  return callBoardControlplaneMcp(boardId, 'manage.add-chat-entry-and-any-attachments', {
+    card_id: cardId,
+    role,
+    text: typeof text === 'string' ? text : String(text ?? ''),
+    turn_id: normalizedTurnId,
+    ...(attachmentArgs.length > 0 ? { files: attachmentArgs } : {}),
   });
 };
 
 export const subscribeCardChats = (boardId, cardId, clientId) =>
-  fetch(`${base(boardId)}/cards/${cardId}/chats/subscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  });
+  boardTransport.subscribeCardChats(boardId, cardId, clientId);
 
 export const unsubscribeCardChats = (boardId, cardId, clientId) =>
-  fetch(`${base(boardId)}/cards/${cardId}/chats/unsubscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  });
+  boardTransport.unsubscribeCardChats(boardId, cardId, clientId);
 
 export const subscribeWatchparty = (boardId, cardId, channelName, clientId) =>
-  fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/subscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  });
+  boardTransport.subscribeWatchparty(boardId, cardId, channelName, clientId);
 
 export const unsubscribeWatchparty = (boardId, cardId, channelName, clientId) =>
-  fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/unsubscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  });
+  boardTransport.unsubscribeWatchparty(boardId, cardId, channelName, clientId);

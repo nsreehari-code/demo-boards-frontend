@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SERVER } from '../lib/client.js';
+import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
 import { useCardState } from '../hooks/useCardState.js';
 import { CardCoreView } from './CardCoreView.jsx';
 
@@ -132,7 +132,7 @@ function normalizeLayoutElement(namespaces, element, index) {
 
 function buildFileUrl(boardId, cardId, index, file) {
   if (!file?.stored_name) return null;
-  return `${SERVER}/api/boards/${boardId}/cards/${cardId}/files/${index}?sn=${encodeURIComponent(file.stored_name)}`;
+  return getCardFileUrl(boardId, cardId, index, file.stored_name);
 }
 
 async function patchCardDataValue(cardActions, cardData, writeTo, value) {
@@ -158,6 +158,7 @@ async function patchCardDataValue(cardActions, cardData, writeTo, value) {
 function CardCoreComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const [saving, setSaving] = useState(false);
+  const [fileUrlVersion, setFileUrlVersion] = useState(0);
   const pendingUpstreamSignatureRef = useRef(null);
 
   if (!cardState?.cardContent) return null;
@@ -190,7 +191,17 @@ function CardCoreComponent({ boardId, cardId }) {
     })
     .map((element, index) => normalizeLayoutElement(namespaces, element, index)), [namespaces, view.elements]);
 
-  const fileUrlForIndex = useCallback((index, file) => buildFileUrl(boardId, cardId, index, file), [boardId, cardId]);
+  const fileUrlForIndex = useCallback((index, file) => {
+    const href = buildFileUrl(boardId, cardId, index, file);
+    if (!href && file?.stored_name) {
+      void ensureCardFileUrl(boardId, cardId, index, file.stored_name)
+        .then((resolved) => {
+          if (resolved) setFileUrlVersion((value) => value + 1);
+        })
+        .catch(() => {});
+    }
+    return href;
+  }, [boardId, cardId, fileUrlVersion]);
 
   useEffect(() => {
     if (!saving) return;

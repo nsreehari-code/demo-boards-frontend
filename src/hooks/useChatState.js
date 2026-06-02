@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import {
-  dispatchAction,
+  addChatEntryAndAnyAttachments,
   subscribeCardChats,
   subscribeWatchparty,
   unsubscribeCardChats,
@@ -21,12 +21,12 @@ export function useChatState(boardId, cardId) {
     (text, payload = {}) => {
       const { turnId, ...rest } = payload ?? {};
       const normalizedTurnId = typeof turnId === 'string' && turnId.trim() ? turnId.trim() : '';
-      const finalPayload = {
+      return addChatEntryAndAnyAttachments(boardId, cardId, {
+        role: typeof rest.role === 'string' && rest.role.trim() ? rest.role.trim() : 'user',
         text,
-        ...rest,
-        ...(normalizedTurnId ? { 'turn-id': normalizedTurnId } : {}),
-      };
-      return dispatchAction(boardId, cardId, 'chat-send', finalPayload);
+        turnId: normalizedTurnId,
+        files: Array.isArray(rest.files) ? rest.files : [],
+      });
     },
     [boardId, cardId],
   );
