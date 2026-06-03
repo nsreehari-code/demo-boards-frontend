@@ -425,7 +425,7 @@ export function createInBrowserBoardTransport({
                 await session.runtime.cardStore.set({ body: seedCards });
               }
             }
-            await session.runtimeFetchDirect('GET', `${apiBasePathForBoard(boardId)}/init-board`);
+            await session.runtimeFetchDirect('GET', `${apiBasePathForBoard(boardId)}/sse?one-shot`);
           })();
         }
         return session.initializedPromise;
@@ -507,7 +507,6 @@ export function createInBrowserBoardTransport({
           archiveStoreRef: refs.archiveStoreRef,
           chatStoreRef: refs.chatStoreRef,
         }],
-        chatStorage,
         invocationAdapter: createInvocationAdapter(inProcessHandlers),
         logger: {
           info: (...args) => console.log('[client-board-runtime]', ...args),

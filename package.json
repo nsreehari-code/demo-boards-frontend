@@ -2,14 +2,10 @@
   "name": "demo-boards-frontend",
   "private": true,
   "version": "0.1.0",
-  "yamlFlowCdnVersion": "8.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "postinstall": "node scripts/build.mjs --refresh-yaml-flow-cdn-version --refresh-only",
     "build": "node scripts/build.mjs",
-    "build:refresh-yaml-flow": "node scripts/build.mjs --refresh-yaml-flow-cdn-version",
-    "refresh:yaml-flow": "node scripts/build.mjs --refresh-yaml-flow-cdn-version --refresh-only",
     "test:smoke": "playwright test tests/board-smoke.spec.js",
     "test:smoke:headed": "playwright test tests/board-smoke.spec.js --headed",
     "preview": "vite preview",
@@ -23,7 +19,8 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "yaml-flow": "^8.7.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",

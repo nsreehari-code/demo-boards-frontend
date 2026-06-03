@@ -66,7 +66,7 @@ function startBoardStore(boardId, store) {
     })
     .catch((err) => {
       publishBoardRuntimeInitStatus(boardId, 'error', err);
-      console.error('[useBoardSSE] init-board failed', err);
+      console.error('[useBoardSSE] one-shot SSE bootstrap failed', err);
     });
 }
 

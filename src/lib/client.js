@@ -24,68 +24,66 @@ function pickStorageAdapterFactory() {
 
 const base = (boardId) => `${SERVER}/api/boards/${boardId}`;
 
-const createHttpBoardTransport = () => ({
-  healthz: () => fetch(`${SERVER}/healthz`),
-  initBoard: (boardId) => fetch(`${base(boardId)}/init-board`),
-  refreshCard: (boardId, cardId) => fetch(`${base(boardId)}/cards/${cardId}/retrigger`, {
-    method: 'POST',
-  }),
-  resetRuntimeFromSeedCards: (boardId) => fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
-    method: 'POST',
-  }),
-  reverseSaveRuntimeToSeedCards: (boardId) => fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
-    method: 'POST',
-  }),
-  dispatchAction: (boardId, cardId, type, payload = {}) => fetch(`${base(boardId)}/cards/${cardId}/actions`, {
+const createHttpBoardTransport = () => {
+  const postJson = (url, body) => fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actionType: type, payload }),
-  }),
-  callBoardMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, args }),
-  }),
-  callBoardWebhooksMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp-webhooks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, args }),
-  }),
-  callBoardControlplaneMcp: (boardId, tool, args = {}) => fetch(`${base(boardId)}/mcp-controlplane`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, args: { board_id: boardId, ...args } }),
-  }),
-  openBoardSse: (boardId, clientId) => new EventSource(
-    `${base(boardId)}/sse?clientId=${encodeURIComponent(clientId)}`,
-  ),
-  getCardFileUrl: (boardId, cardId, index, storedName = '') => {
-    const query = typeof storedName === 'string' && storedName.trim()
-      ? `?sn=${encodeURIComponent(storedName)}`
-      : '';
-    return `${base(boardId)}/cards/${cardId}/files/${index}${query}`;
-  },
-  subscribeCardChats: (boardId, cardId, clientId) => fetch(`${base(boardId)}/cards/${cardId}/chats/subscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  }),
-  unsubscribeCardChats: (boardId, cardId, clientId) => fetch(`${base(boardId)}/cards/${cardId}/chats/unsubscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  }),
-  subscribeWatchparty: (boardId, cardId, channelName, clientId) => fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/subscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  }),
-  unsubscribeWatchparty: (boardId, cardId, channelName, clientId) => fetch(`${base(boardId)}/cards/${encodeURIComponent(cardId)}/watch-channel/${encodeURIComponent(channelName)}/unsubscribe-sse`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  }),
-});
+    body: JSON.stringify(body),
+  });
+
+  const postControlplane = (boardId, tool, args = {}) => postJson(
+    `${base(boardId)}/mcp-controlplane`,
+    { tool, args: { board_id: boardId, ...args } },
+  );
+
+  return {
+    healthz: () => fetch(`${SERVER}/healthz`),
+    initBoard: (boardId) => fetch(`${base(boardId)}/sse?one-shot`),
+    refreshCard: (boardId, cardId) => fetch(`${base(boardId)}/cards/${cardId}/retrigger`, {
+      method: 'POST',
+    }),
+    resetRuntimeFromSeedCards: (boardId) => fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
+      method: 'POST',
+    }),
+    reverseSaveRuntimeToSeedCards: (boardId) => fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
+      method: 'POST',
+    }),
+    dispatchAction: (boardId, cardId, type, payload = {}) => postJson(`${base(boardId)}/cards/${cardId}/actions`, {
+      actionType: type,
+      payload,
+    }),
+    callBoardMcp: (boardId, tool, args = {}) => postJson(`${base(boardId)}/mcp`, { tool, args }),
+    callBoardWebhooksMcp: (boardId, tool, args = {}) => postJson(`${base(boardId)}/mcp-webhooks`, { tool, args }),
+    callBoardControlplaneMcp: (boardId, tool, args = {}) => postControlplane(boardId, tool, args),
+    openBoardSse: (boardId, clientId) => new EventSource(
+      `${base(boardId)}/sse?clientId=${encodeURIComponent(clientId)}`,
+    ),
+    getCardFileUrl: (boardId, cardId, index, storedName = '') => {
+      const query = typeof storedName === 'string' && storedName.trim()
+        ? `?sn=${encodeURIComponent(storedName)}`
+        : '';
+      return `${base(boardId)}/cards/${cardId}/files/${index}${query}`;
+    },
+    subscribeCardChats: (boardId, cardId, clientId) => postControlplane(boardId, 'sse.subscribe-chat', {
+      client_id: clientId,
+      card_id: cardId,
+    }),
+    unsubscribeCardChats: (boardId, cardId, clientId) => postControlplane(boardId, 'sse.unsubscribe-chat', {
+      client_id: clientId,
+      card_id: cardId,
+    }),
+    subscribeWatchparty: (boardId, cardId, channelName, clientId) => postControlplane(boardId, 'sse.watch-channel', {
+      client_id: clientId,
+      channel_name: channelName,
+      ...(cardId ? { card_id: cardId } : {}),
+    }),
+    unsubscribeWatchparty: (boardId, cardId, channelName, clientId) => postControlplane(boardId, 'sse.unwatch-channel', {
+      client_id: clientId,
+      channel_name: channelName,
+      ...(cardId ? { card_id: cardId } : {}),
+    }),
+  };
+};
 
 const boardTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_INBROWSER
   ? createInBrowserBoardTransport({
@@ -136,7 +134,7 @@ export const healthz = () =>
   boardTransport.healthz();
 
 export const initBoard = (boardId) =>
-  boardTransport.initBoard(boardId).then((response) => ensureOkResponse(response, 'init-board'));
+  boardTransport.initBoard(boardId).then((response) => ensureOkResponse(response, 'sse one-shot bootstrap'));
 
 export const refreshCard = (boardId, cardId) =>
   boardTransport.refreshCard(boardId, cardId);
