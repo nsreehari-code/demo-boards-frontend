@@ -537,13 +537,14 @@ export function createInBrowserBoardTransport({
     },
     refreshCard: (boardId, cardId) =>
       getSession(boardId).runtimeFetch('POST',
-        `${apiBasePathForBoard(boardId)}/cards/${encodeURIComponent(cardId)}/retrigger`),
+        `${apiBasePathForBoard(boardId)}/mcp-actions`,
+        { tool: 'retrigger-card', args: { card_id: cardId } }),
     resetRuntimeFromSeedCards: async () => okJson({ ok: true, skipped: true, transportMode: transportName }),
     reverseSaveRuntimeToSeedCards: async () => okJson({ ok: true, skipped: true, transportMode: transportName }),
     dispatchAction: (boardId, cardId, type, payload = {}) =>
       getSession(boardId).runtimeFetch('POST',
-        `${apiBasePathForBoard(boardId)}/cards/${encodeURIComponent(cardId)}/actions`,
-        { actionType: type, payload }),
+        `${apiBasePathForBoard(boardId)}/mcp-actions`,
+        { tool: type, args: { card_id: cardId, payload } }),
     callBoardMcp: (boardId, tool, args = {}) =>
       getSession(boardId).runtimeFetch('POST',
         `${apiBasePathForBoard(boardId)}/mcp`, { tool, args }),

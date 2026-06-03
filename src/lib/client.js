@@ -36,11 +36,16 @@ const createHttpBoardTransport = () => {
     { tool, args: { board_id: boardId, ...args } },
   );
 
+  const postAction = (boardId, tool, args = {}) => postJson(
+    `${base(boardId)}/mcp-actions`,
+    { tool, args },
+  );
+
   return {
     healthz: () => fetch(`${SERVER}/healthz`),
     initBoard: (boardId) => fetch(`${base(boardId)}/sse?one-shot`),
-    refreshCard: (boardId, cardId) => fetch(`${base(boardId)}/cards/${cardId}/retrigger`, {
-      method: 'POST',
+    refreshCard: (boardId, cardId) => postAction(boardId, 'retrigger-card', {
+      card_id: cardId,
     }),
     resetRuntimeFromSeedCards: (boardId) => fetch(`${base(boardId)}/reset-runtime-from-seed-cards`, {
       method: 'POST',
@@ -48,8 +53,8 @@ const createHttpBoardTransport = () => {
     reverseSaveRuntimeToSeedCards: (boardId) => fetch(`${base(boardId)}/reverse-save-runtime-to-seed-cards`, {
       method: 'POST',
     }),
-    dispatchAction: (boardId, cardId, type, payload = {}) => postJson(`${base(boardId)}/cards/${cardId}/actions`, {
-      actionType: type,
+    dispatchAction: (boardId, cardId, type, payload = {}) => postAction(boardId, type, {
+      card_id: cardId,
       payload,
     }),
     callBoardMcp: (boardId, tool, args = {}) => postJson(`${base(boardId)}/mcp`, { tool, args }),
