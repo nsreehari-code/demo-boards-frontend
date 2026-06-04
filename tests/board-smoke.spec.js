@@ -11,9 +11,9 @@ const TEST_APP_CONFIG = {
   },
   pageTitle: 'Live',
   pageSubtitle: 'Live operational intelligence for agent workflows',
-  refreshAllIntervalSeconds: 300,
+  refreshAllIntervalSeconds: 1800,
   transportMode: 'inbrowser',
-  serverOrigin: 'http://127.0.0.1:7810',
+  serverOrigin: 'http://127.0.0.1:7799',
   storage: {
     adapter: 'localstorage',
     seedCardsUrl: '/seed-cards/{boardId}.json',
@@ -27,8 +27,8 @@ const TEST_APP_CONFIG = {
     },
   },
   boardServerConstants: {
-    copilotOutputChannel: 'copilot-output',
-    copilotToolsChannel: 'copilot-tools',
+    copilotOutputChannel: 'agent-output',
+    copilotToolsChannel: 'agent-tools',
   },
 };
 const TEST_SEED_CARDS = [

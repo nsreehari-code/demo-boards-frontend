@@ -7,9 +7,9 @@
   },
   "pageTitle": "Live",
   "pageSubtitle": "Live operational intelligence for agent workflows",
-  "refreshAllIntervalSeconds": 300,
+  "refreshAllIntervalSeconds": 1800,
   "transportMode": "server-url",
-  "serverOrigin": "http://127.0.0.1:7810",
+  "serverOrigin": "http://127.0.0.1:7799",
   "storage": {
     "adapter": "localstorage",
     "seedCardsUrl": "/seed-cards/{boardId}.json",
@@ -27,6 +27,6 @@
     "localstorage": {}
   },
   "boardServerConstants": {
-    "copilotOutputChannel": "copilot-output"
+    "copilotOutputChannel": "agent-output"
   }
 }

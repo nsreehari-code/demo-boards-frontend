@@ -16,7 +16,6 @@ const FIREBASE_CDN_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_CDN_VER
 const FIREBASE_COMPAT_SCRIPTS = [
   'firebase-app-compat.js',
   'firebase-firestore-compat.js',
-  'firebase-storage-compat.js',
 ];
 
 let firebaseSdkPromise = null;
@@ -85,6 +84,5 @@ export async function getFirebaseServices(config = {}) {
   return {
     app,
     firestore: app.firestore(),
-    storage: app.storage(),
   };
 }

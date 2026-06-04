@@ -1,5 +1,5 @@
 /**
- * client-board-runtime.js
+ * client-board-host.js
  *
  * Backend-AGNOSTIC in-browser board runtime/transport.
  *
@@ -258,27 +258,8 @@ function createInvocationAdapter(inProcessHandlers = new Map()) {
   };
 }
 
-function resolveSeedCardsUrl(template, boardId) {
-  const trimmed = typeof template === 'string' ? template.trim() : '';
-  if (!trimmed) return '';
-  return trimmed.replace(/\{boardId\}/g, encodeURIComponent(boardId));
-}
-
 function apiBasePathForBoard(boardId) {
   return `/api/boards/${encodeURIComponent(boardId)}`;
-}
-
-async function loadSeedCards(template, boardId) {
-  const url = resolveSeedCardsUrl(template, boardId);
-  if (!url) return [];
-  const response = await fetch(url, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Failed to load seed cards for ${boardId}: ${response.status}`);
-  }
-  const payload = await response.json();
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.cards)) return payload.cards;
-  throw new Error(`Seed cards payload for ${boardId} must be an array or { cards: [...] }`);
 }
 
 function makeEventSource(session, clientId) {
@@ -417,14 +398,6 @@ export function createInBrowserBoardTransport({
         if (!session.initializedPromise) {
           session.initializedPromise = (async () => {
             await session.runtimeReadyPromise;
-            const existingCards = await session.runtime.cardStore.get({});
-            const cards = Array.isArray(existingCards?.data?.cards) ? existingCards.data.cards : [];
-            if (cards.length === 0) {
-              const seedCards = await loadSeedCards(seedCardsUrl, boardId);
-              if (seedCards.length > 0) {
-                await session.runtime.cardStore.set({ body: seedCards });
-              }
-            }
             await session.runtimeFetchDirect('GET', `${apiBasePathForBoard(boardId)}/sse?one-shot`);
           })();
         }

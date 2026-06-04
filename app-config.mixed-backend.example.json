@@ -7,7 +7,7 @@
   },
   "pageTitle": "Live",
   "pageSubtitle": "Mixed-backend runtime example",
-  "refreshAllIntervalSeconds": 300,
+  "refreshAllIntervalSeconds": 1800,
   "transportMode": "inbrowser",
   "serverOrigin": "http://localhost:7799",
   "storage": {
@@ -88,6 +88,6 @@
     }
   },
   "boardServerConstants": {
-    "copilotOutputChannel": "copilot-output"
+    "copilotOutputChannel": "agent-output"
   }
 }

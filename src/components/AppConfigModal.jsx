@@ -13,11 +13,38 @@ import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/c
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
+const SEED_BOARDS_MANIFEST_URL = '/assets/seed-boards/index.json';
 
-function normalizeRuntimeDumpCards(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === 'object' && Array.isArray(payload.cards)) return payload.cards;
+function normalizeRuntimeDumpEnvelope(payload) {
+  if (Array.isArray(payload)) {
+    return { label: '', subtitle: '', cards: payload };
+  }
+  if (payload && typeof payload === 'object' && Array.isArray(payload.cards)) {
+    return {
+      label: typeof payload.boardLabel === 'string' ? payload.boardLabel.trim() : '',
+      subtitle: typeof payload.boardSubtitle === 'string' ? payload.boardSubtitle.trim() : '',
+      cards: payload.cards,
+    };
+  }
   return null;
+}
+
+function normalizeSeedManifestEntries(payload) {
+  const entries = Array.isArray(payload)
+    ? payload
+    : (payload && typeof payload === 'object' && Array.isArray(payload.entries) ? payload.entries : []);
+  return entries
+    .map((entry) => {
+      const fileName = typeof entry?.fileName === 'string' ? entry.fileName.trim() : '';
+      const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+      if (!fileName || !label) return null;
+      return {
+        fileName,
+        label,
+        description: typeof entry?.description === 'string' ? entry.description.trim() : '',
+      };
+    })
+    .filter(Boolean);
 }
 
 function downloadJsonFile(fileName, payload) {
@@ -37,7 +64,7 @@ function toFormState(config) {
     defaultBoardId: config?.defaultBoardId ?? '',
     defaultBoardLabel: config?.defaultBoard?.label ?? '',
     defaultBoardSubtitle: config?.defaultBoard?.subtitle ?? '',
-    refreshAllIntervalSeconds: String(config?.refreshAllIntervalSeconds ?? ''),
+    refreshAllIntervalMinutes: String(Math.max(1, Math.round(Number(config?.refreshAllIntervalSeconds ?? 0) / 60)) || 30),
     transportMode: config?.transportMode ?? BOARD_TRANSPORT_MODE_SERVER_URL,
     serverOrigin: config?.serverOrigin ?? '',
     storageAdapter: config?.storage?.adapter ?? STORAGE_ADAPTER_FIRESTORE,
@@ -54,7 +81,7 @@ function normalizeFormState(formState, currentConfig) {
       label: formState.defaultBoardLabel,
       subtitle: formState.defaultBoardSubtitle,
     },
-    refreshAllIntervalSeconds: Number(formState.refreshAllIntervalSeconds),
+    refreshAllIntervalSeconds: Number(formState.refreshAllIntervalMinutes) * 60,
     transportMode: formState.transportMode,
     serverOrigin: formState.serverOrigin,
     storage: {
@@ -70,6 +97,10 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
   const [resettingSeeds, setResettingSeeds] = useState(false);
   const [savingSeeds, setSavingSeeds] = useState(false);
+  const [loadingSeedManifest, setLoadingSeedManifest] = useState(false);
+  const [seedManifestError, setSeedManifestError] = useState('');
+  const [seedManifestEntries, setSeedManifestEntries] = useState([]);
+  const [selectedSeedFileName, setSelectedSeedFileName] = useState('');
   const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
@@ -107,6 +138,40 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+
+    const loadSeedManifest = async () => {
+      setLoadingSeedManifest(true);
+      setSeedManifestError('');
+      try {
+        const response = await fetch(SEED_BOARDS_MANIFEST_URL, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to load seed manifest: ${response.status}`);
+        }
+        const payload = await response.json();
+        const entries = normalizeSeedManifestEntries(payload);
+        if (cancelled) return;
+        setSeedManifestEntries(entries);
+        setSelectedSeedFileName((current) => {
+          if (current && entries.some((entry) => entry.fileName === current)) return current;
+          return entries[0]?.fileName ?? '';
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setSeedManifestEntries([]);
+        setSelectedSeedFileName('');
+        setSeedManifestError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!cancelled) setLoadingSeedManifest(false);
+      }
+    };
+
+    void loadSeedManifest();
+    return () => { cancelled = true; };
+  }, [open]);
+
   const updateField = (field) => (event) => {
     const value = event.target.value;
     setFormState((current) => ({
@@ -126,16 +191,15 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     window.location.reload();
   };
 
-  const handleImportRuntimeDump = async (file) => {
-    if (!boardId || resettingSeeds) return;
+  const applyRuntimeDumpEnvelope = async (payload) => {
+    if (!boardId || resettingSeeds) return false;
     setResettingSeeds(true);
     try {
-      const raw = await file.text();
-      const parsed = JSON.parse(raw);
-      const nextCards = normalizeRuntimeDumpCards(parsed);
-      if (!Array.isArray(nextCards)) {
+      const envelope = normalizeRuntimeDumpEnvelope(payload);
+      if (!Array.isArray(envelope?.cards)) {
         throw new Error('Runtime dump file must be a JSON array of cards or an object with a cards array');
       }
+      const nextCards = envelope.cards;
       const currentCards = await listRuntimeCards(boardId);
       const nextIds = new Set(nextCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
       const currentIds = new Set(currentCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
@@ -151,10 +215,41 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
           await removeRuntimeCard(boardId, cardId);
         }
       }
+      if (envelope.label || envelope.subtitle) {
+        setFormState((current) => ({
+          ...current,
+          ...(envelope.label ? { defaultBoardLabel: envelope.label } : {}),
+          ...(envelope.subtitle ? { defaultBoardSubtitle: envelope.subtitle } : {}),
+        }));
+      }
+      return true;
     } catch (error) {
       console.error('[AppConfigModal] Failed to import runtime dump', error);
+      return false;
     } finally {
       setResettingSeeds(false);
+    }
+  };
+
+  const handleImportRuntimeDump = async (file) => {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const imported = await applyRuntimeDumpEnvelope(parsed);
+    if (imported) {
+      window.location.reload();
+    }
+  };
+
+  const handleImportSeedBoard = async () => {
+    if (!selectedSeedFileName || resettingSeeds) return;
+    const response = await fetch(`/assets/seed-boards/${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
+    }
+    const payload = await response.json();
+    const imported = await applyRuntimeDumpEnvelope(payload);
+    if (imported) {
+      window.location.reload();
     }
   };
 
@@ -167,6 +262,8 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         version: RUNTIME_DUMP_VERSION,
         boardId,
         exportedAt: new Date().toISOString(),
+        boardLabel: formState.defaultBoardLabel,
+        boardSubtitle: formState.defaultBoardSubtitle,
         cards,
       });
     } catch (error) {
@@ -255,98 +352,152 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 </div>
               ) : null}
 
-              <label className="board-settings-field">
-                <span>Transport mode</span>
-                <select className="board-input" value={formState.transportMode} onChange={updateField('transportMode')}>
-                  <option value={BOARD_TRANSPORT_MODE_SERVER_URL}>serverUrl</option>
-                  <option value={BOARD_TRANSPORT_MODE_INBROWSER}>inbrowser</option>
-                </select>
-              </label>
+              {false ? (
+                <>
+                  <label className="board-settings-field">
+                    <span>Transport mode</span>
+                    <select className="board-input" value={formState.transportMode} onChange={updateField('transportMode')}>
+                      <option value={BOARD_TRANSPORT_MODE_SERVER_URL}>serverUrl</option>
+                      <option value={BOARD_TRANSPORT_MODE_INBROWSER}>inbrowser</option>
+                    </select>
+                  </label>
+
+                  <label className="board-settings-field">
+                    <span>Storage adapter</span>
+                    <select
+                      className="board-input"
+                      value={formState.storageAdapter}
+                      onChange={updateField('storageAdapter')}
+                      disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER}
+                    >
+                      <option value={STORAGE_ADAPTER_FIRESTORE}>firestore</option>
+                      <option value={STORAGE_ADAPTER_LOCALSTORAGE}>localstorage</option>
+                    </select>
+                    {formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER ? (
+                      <div className="board-settings-form__hint">
+                        Storage adapter is only used in inbrowser transport mode.
+                      </div>
+                    ) : null}
+                  </label>
+                </>
+              ) : null}
+
+              <div className="row g-3 align-items-start">
+                <div className="col">
+                  <label className="board-settings-field mb-3">
+                    <span>Server</span>
+                    <input
+                      className={`board-input${serverOriginHasError ? ' board-input--error' : ''}`}
+                      type="url"
+                      value={formState.serverOrigin}
+                      onChange={updateField('serverOrigin')}
+                      placeholder="http://localhost:7799"
+                      disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL}
+                      aria-invalid={serverOriginHasError ? 'true' : 'false'}
+                    />
+                    {formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL ? (
+                      <div className="board-settings-form__hint">
+                        Server origin is only used in serverUrl mode.
+                      </div>
+                    ) : null}
+                  </label>
+
+                  <label className="board-settings-field mb-0">
+                    <span>Board Id</span>
+                    <input className="board-input" type="text" value={formState.defaultBoardId} onChange={updateField('defaultBoardId')} placeholder="live" />
+                  </label>
+                </div>
+
+                <div className="col-auto d-flex align-items-start pt-4">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm board-button"
+                    onClick={() => setPendingAction('config')}
+                  >
+                    Reset Server / Board
+                  </button>
+                </div>
+              </div>
 
               <label className="board-settings-field">
-                <span>Storage adapter</span>
-                <select
-                  className="board-input"
-                  value={formState.storageAdapter}
-                  onChange={updateField('storageAdapter')}
-                  disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER}
-                >
-                  <option value={STORAGE_ADAPTER_FIRESTORE}>firestore</option>
-                  <option value={STORAGE_ADAPTER_LOCALSTORAGE}>localstorage</option>
-                </select>
-                {formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER ? (
-                  <div className="board-settings-form__hint">
-                    Storage adapter is only used in inbrowser transport mode.
-                  </div>
-                ) : null}
-              </label>
-
-              <label className="board-settings-field">
-                <span>Server origin</span>
-                <input
-                  className={`board-input${serverOriginHasError ? ' board-input--error' : ''}`}
-                  type="url"
-                  value={formState.serverOrigin}
-                  onChange={updateField('serverOrigin')}
-                  placeholder="http://localhost:7799"
-                  disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL}
-                  aria-invalid={serverOriginHasError ? 'true' : 'false'}
-                />
-                {formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL ? (
-                  <div className="board-settings-form__hint">
-                    Server origin is only used in serverUrl mode.
-                  </div>
-                ) : null}
-              </label>
-
-              <label className="board-settings-field">
-                <span>Default board id</span>
-                <input className="board-input" type="text" value={formState.defaultBoardId} onChange={updateField('defaultBoardId')} placeholder="live" />
-              </label>
-
-              <label className="board-settings-field">
-                <span>Board label</span>
+                <span>Page Title</span>
                 <input className="board-input" type="text" value={formState.defaultBoardLabel} onChange={updateField('defaultBoardLabel')} placeholder="Live" />
               </label>
 
               <label className="board-settings-field">
-                <span>Board subtitle</span>
+                <span>Page Subtitle</span>
                 <input className="board-input" type="text" value={formState.defaultBoardSubtitle} onChange={updateField('defaultBoardSubtitle')} placeholder="Live operational intelligence for agent workflows" />
               </label>
 
               <label className="board-settings-field">
-                <span>Refresh interval (seconds)</span>
-                <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalSeconds} onChange={updateField('refreshAllIntervalSeconds')} placeholder="300" />
+                <span>Refresh Interval (minutes)</span>
+                <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" />
               </label>
 
-              <p className="board-settings-form__hint">
-                Page title and subtitle now always mirror the board label and subtitle. Save writes a versioned local override and reloads the page so the app boots again with the new config.
-                {overrideActive ? ' A stored override is active right now.' : ' No stored override is active right now.'}
-              </p>
+              <div className="board-settings-io-section">
+                <div className="board-settings-io-card d-flex flex-column gap-3">
+                  <div className="board-settings-io-card__title">Board Import / Export</div>
 
-              <div className="board-settings-form__actions">
-                <button
-                  type="button"
-                  className="btn btn-outline-danger board-button"
-                  onClick={() => setPendingAction('reset')}
-                  disabled={resettingSeeds || !boardId}
-                  title="Import runtime cards from a local JSON file"
-                >
-                  {resettingSeeds ? 'Importing…' : 'Import Runtime Dump File'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-warning board-button"
-                  onClick={() => { void handleExportRuntimeDump(); }}
-                  disabled={savingSeeds || !boardId}
-                  title="Download the current runtime cards as a local JSON file"
-                >
-                  {savingSeeds ? 'Saving…' : 'Save Runtime Dump File'}
-                </button>
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary board-button"
+                      onClick={() => setPendingAction('reset')}
+                      disabled={resettingSeeds || !boardId}
+                      title="Import board from a local JSON file"
+                    >
+                      {resettingSeeds ? 'Importing…' : 'Import Board'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary board-button"
+                      onClick={() => { void handleExportRuntimeDump(); }}
+                      disabled={savingSeeds || !boardId}
+                      title="Export the current board as a local JSON file"
+                    >
+                      {savingSeeds ? 'Saving…' : 'Export Board'}
+                    </button>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <select
+                      className="board-input board-settings-sample-select"
+                      value={selectedSeedFileName}
+                      onChange={(event) => setSelectedSeedFileName(event.target.value)}
+                      disabled={loadingSeedManifest || resettingSeeds || seedManifestEntries.length === 0}
+                      title={seedManifestError || 'Select a bundled sample board file'}
+                    >
+                      {seedManifestEntries.length === 0 ? (
+                        <option value="">{loadingSeedManifest ? 'Loading seed boards…' : 'No seed boards available'}</option>
+                      ) : null}
+                      {seedManifestEntries.map((entry) => (
+                        <option key={entry.fileName} value={entry.fileName}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary board-button"
+                      onClick={() => setPendingAction('seed-import')}
+                      disabled={resettingSeeds || !boardId || !selectedSeedFileName || loadingSeedManifest || seedManifestEntries.length === 0}
+                      title="Import the selected sample board"
+                    >
+                      {resettingSeeds ? 'Importing…' : 'Import Sample'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="board-settings-form__actions justify-content-end">
                 <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setPendingAction('config')}>Reset to shipped config</button>
                 <button type="submit" className="btn btn-primary board-button">Save and reload</button>
               </div>
+              {seedManifestError ? (
+                <div className="board-settings-form__hint text-danger">
+                  Seed board manifest error: {seedManifestError}
+                </div>
+              ) : null}
             </form>
           </section>
 
@@ -364,6 +515,18 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             <ChallengeConfirmModal
               message="This will clear all stored config overrides and reload with the shipped defaults."
               onConfirm={() => { setPendingAction(null); handleReset(); }}
+              onCancel={() => setPendingAction(null)}
+            />
+          ) : null}
+          {pendingAction === 'seed-import' ? (
+            <ChallengeConfirmModal
+              message="This will overwrite the current runtime card state from the selected bundled seed board file. Cards not present in that file will be removed."
+              onConfirm={() => {
+                setPendingAction(null);
+                void handleImportSeedBoard().catch((error) => {
+                  console.error('[AppConfigModal] Failed to import seed board', error);
+                });
+              }}
               onCancel={() => setPendingAction(null)}
             />
           ) : null}

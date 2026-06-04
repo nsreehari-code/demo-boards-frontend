@@ -15,10 +15,8 @@ function collectRefKinds(refs) {
 function needsFirestore(refKinds, primaryKind) {
   return primaryKind === 'firestore'
     || primaryKind === 'firestore-board'
-    || primaryKind === 'firebase-storage'
     || refKinds.has('firestore')
-    || refKinds.has('firestore-board')
-    || refKinds.has('firebase-storage');
+    || refKinds.has('firestore-board');
 }
 
 function needsLocalStorage(refKinds, primaryKind) {
@@ -34,7 +32,7 @@ function makeHybridAdapter(primaryAdapter, localBundle, firestoreBundle) {
   function pickAdapterForRef(ref) {
     const kind = getRefKind(ref) || ref?.kind || '';
     if (kind === 'local-storage' && localBundle) return localBundle.boardAdapter;
-    if ((kind === 'firestore' || kind === 'firestore-board' || kind === 'firebase-storage') && firestoreBundle) {
+    if ((kind === 'firestore' || kind === 'firestore-board') && firestoreBundle) {
       return firestoreBundle.boardAdapter;
     }
     return primaryAdapter;

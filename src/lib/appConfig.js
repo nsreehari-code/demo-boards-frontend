@@ -1,4 +1,4 @@
-const DEFAULT_REFRESH_ALL_INTERVAL_SECONDS = 5 * 60;
+const DEFAULT_REFRESH_ALL_INTERVAL_SECONDS = 30 * 60;
 const DEFAULT_PAGE_SUBTITLE = 'Live operational intelligence for agent workflows';
 const APP_CONFIG_OVERRIDE_STORAGE_KEY = 'demo-boards.app-config.override';
 const APP_CONFIG_OVERRIDE_VERSION = 1;
@@ -91,8 +91,8 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
     localstorage: { refs: {} },
   },
   boardServerConstants: {
-    copilotOutputChannel: 'copilot-output',
-    copilotToolsChannel: 'copilot-tools',
+    copilotOutputChannel: 'agent-output',
+    copilotToolsChannel: 'agent-tools',
   },
 });
 

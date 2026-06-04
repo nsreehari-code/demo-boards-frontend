@@ -9,7 +9,7 @@ import {
   BOARD_TRANSPORT_MODE_INBROWSER,
   STORAGE_CONFIG,
 } from './appConfig.js';
-import { createInBrowserBoardTransport } from './client-board-runtime.js';
+import { createInBrowserBoardTransport } from './client-board-host.js';
 
 /**
  * Build the in-browser storage adapter from the full storage config so the

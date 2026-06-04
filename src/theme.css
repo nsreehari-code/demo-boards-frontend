@@ -1573,8 +1573,40 @@ a {
   border-top: 1px solid rgba(110, 154, 215, 0.12);
 }
 
+.board-settings-sample-select {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 14rem;
+  min-height: calc(1.5em + 0.75rem + 2px);
+  border-radius: 6px;
+}
+
+.board-settings-io-section {
+  margin: 0.55rem 0 0.75rem;
+}
+
+.board-settings-io-card {
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(110, 154, 215, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(108, 148, 208, 0.08), rgba(108, 148, 208, 0.03));
+}
+
+.board-settings-io-card__title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-soft);
+}
+
 .board-app-shell[data-theme='mist-ops'] .board-settings-form__actions {
   border-top: 1px solid rgba(78, 106, 138, 0.1);
+}
+
+.board-app-shell[data-theme='mist-ops'] .board-settings-io-card {
+  border-color: rgba(78, 106, 138, 0.16);
+  background: linear-gradient(180deg, rgba(78, 106, 138, 0.08), rgba(78, 106, 138, 0.03));
 }
 
 .board-ingest-pane {
