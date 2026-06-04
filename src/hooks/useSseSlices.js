@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { initBoard, openBoardSse, refreshCard } from '../lib/client.js';
-import { COPILOT_OUTPUT_CHANNEL, COPILOT_TOOLS_CHANNEL } from '../lib/appConfig.js';
+import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import {
   applyBoardSseFrame,
   createEmptyBoardSnapshot,
@@ -93,7 +93,7 @@ function getOrCreateBoardUiStore(boardId) {
   if (!boardUiStores.has(boardId)) {
     boardUiStores.set(boardId, {
       snapshot: {
-        flippedCardId: null,
+        inspectedCardId: null,
       },
       listeners: new Set(),
     });
@@ -125,23 +125,23 @@ function subscribeBoardUiStore(boardId, listener) {
   };
 }
 
-function setBoardFlippedCardId(boardId, nextValue) {
+function setBoardInspectedCardId(boardId, nextValue) {
   if (!boardId) return;
 
   const store = getOrCreateBoardUiStore(boardId);
-  const currentValue = store.snapshot?.flippedCardId ?? null;
+  const currentValue = store.snapshot?.inspectedCardId ?? null;
   const resolvedValue = typeof nextValue === 'function'
     ? nextValue(currentValue)
     : nextValue;
-  const flippedCardId = resolvedValue ? String(resolvedValue) : null;
+  const inspectedCardId = resolvedValue ? String(resolvedValue) : null;
 
-  if (currentValue === flippedCardId) {
+  if (currentValue === inspectedCardId) {
     return;
   }
 
   store.snapshot = {
     ...store.snapshot,
-    flippedCardId,
+    inspectedCardId,
   };
   emitBoardUiStore(store);
 }
@@ -281,32 +281,32 @@ function getCardChatWatchPartySnapshot(boardId, cardId) {
 
   const previousValue = store.cardChatWatchPartyCache.get(cardId) ?? null;
   const watchpartyState = raw.cardChatWatchParties?.[cardId] ?? EMPTY_OBJECT;
-  const copilotOutputEvents = Array.isArray(watchpartyState[COPILOT_OUTPUT_CHANNEL])
-    ? watchpartyState[COPILOT_OUTPUT_CHANNEL]
+  const agentOutputEvents = Array.isArray(watchpartyState[AGENT_OUTPUT_CHANNEL])
+    ? watchpartyState[AGENT_OUTPUT_CHANNEL]
     : EMPTY_ARRAY;
-  const copilotToolsEvents = Array.isArray(watchpartyState[COPILOT_TOOLS_CHANNEL])
-    ? watchpartyState[COPILOT_TOOLS_CHANNEL]
+  const agentToolsEvents = Array.isArray(watchpartyState[AGENT_TOOLS_CHANNEL])
+    ? watchpartyState[AGENT_TOOLS_CHANNEL]
     : EMPTY_ARRAY;
-  const copilotOutputEvent = copilotOutputEvents.at(-1) ?? null;
-  const copilotToolsEvent = copilotToolsEvents.at(-1) ?? null;
-  const copilotOutput = String(copilotOutputEvent?.payload?.text ?? '');
-  const copilotTools = String(copilotToolsEvent?.payload?.text ?? '');
+  const agentOutputEvent = agentOutputEvents.at(-1) ?? null;
+  const agentToolsEvent = agentToolsEvents.at(-1) ?? null;
+  const agentOutput = String(agentOutputEvent?.payload?.text ?? '');
+  const agentTools = String(agentToolsEvent?.payload?.text ?? '');
 
   if (
     previousValue
-    && previousValue.copilotOutputEvent === copilotOutputEvent
-    && previousValue.copilotToolsEvent === copilotToolsEvent
-    && previousValue.copilotOutput === copilotOutput
-    && previousValue.copilotTools === copilotTools
+    && previousValue.agentOutputEvent === agentOutputEvent
+    && previousValue.agentToolsEvent === agentToolsEvent
+    && previousValue.agentOutput === agentOutput
+    && previousValue.agentTools === agentTools
   ) {
     return previousValue;
   }
 
   const nextValue = {
-    copilotOutput,
-    copilotOutputEvent,
-    copilotTools,
-    copilotToolsEvent,
+    agentOutput,
+    agentOutputEvent,
+    agentTools,
+    agentToolsEvent,
   };
   store.cardChatWatchPartyCache.set(cardId, nextValue);
   return nextValue;
@@ -473,26 +473,35 @@ export function useCardChatWatchParty(boardId, cardId) {
   );
 }
 
-export function useBoardFlipState(boardId) {
+export function useBoardInspectState(boardId) {
   const subscribe = useCallback((listener) => subscribeBoardUiStore(boardId, listener), [boardId]);
   const getSnapshot = useCallback(
-    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { flippedCardId: null }),
+    () => (boardId ? getOrCreateBoardUiStore(boardId).snapshot : { inspectedCardId: null }),
     [boardId],
   );
 
   const snapshot = useSyncExternalStore(
     subscribe,
     getSnapshot,
-    () => ({ flippedCardId: null }),
+    () => ({ inspectedCardId: null }),
   );
 
-  const setFlippedCardId = useCallback((nextValue) => {
-    setBoardFlippedCardId(boardId, nextValue);
+  const setInspectedCardId = useCallback((nextValue) => {
+    setBoardInspectedCardId(boardId, nextValue);
   }, [boardId]);
 
   return {
-    flippedCardId: snapshot?.flippedCardId ?? null,
-    setFlippedCardId,
+    inspectedCardId: snapshot?.inspectedCardId ?? null,
+    setInspectedCardId,
+  };
+}
+
+export function useBoardFlipState(boardId) {
+  const { inspectedCardId, setInspectedCardId } = useBoardInspectState(boardId);
+
+  return {
+    flippedCardId: inspectedCardId,
+    setFlippedCardId: setInspectedCardId,
   };
 }
 

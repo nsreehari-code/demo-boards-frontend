@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import BoardMarkdown from './BoardMarkdown.jsx';
 import { useChatState, useChatWatchParty } from '../hooks/useChatState.js';
 import { useCardStateFilesData } from '../hooks/useCardState.js';
 import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
@@ -80,7 +79,7 @@ function ChatIconShell({ children }) {
   );
 }
 
-function ChatMessageText({ text, onOverflowChange }) {
+function ChatMessageText({ text, expanded, onOverflowChange }) {
   const messageRef = useRef(null);
   const normalizedText = typeof text === 'string' ? text.trim() : '';
 
@@ -104,7 +103,7 @@ function ChatMessageText({ text, onOverflowChange }) {
     checkOverflow();
     window.addEventListener('resize', checkOverflow);
     return () => window.removeEventListener('resize', checkOverflow);
-  }, [normalizedText, onOverflowChange]);
+  }, [normalizedText, onOverflowChange, expanded]);
 
   if (!normalizedText) {
     return null;
@@ -113,89 +112,14 @@ function ChatMessageText({ text, onOverflowChange }) {
   return (
     <div
       ref={messageRef}
-      className="small mb-0 markdown-body lh-sm board-markdown board-chat__message"
+      className="board-chat__message"
       style={{
         color: 'inherit',
-        maxHeight: '7em',
-        overflow: 'hidden',
+        maxHeight: expanded ? 'none' : '7em',
+        overflow: expanded ? 'visible' : 'hidden',
       }}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          p: ({ node, ...props }) => <p className="mb-1" {...props} />,
-          ul: ({ node, ...props }) => <ul className="mb-1 ps-3" {...props} />,
-          ol: ({ node, ...props }) => <ol className="mb-1 ps-3" {...props} />,
-          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-          a: ({ node, ...props }) => <a className="link-primary text-decoration-none" target="_blank" rel="noreferrer" {...props} />,
-          blockquote: ({ node, ...props }) => <blockquote className="border-start border-3 ps-2 fst-italic my-2" style={{ borderColor: 'var(--color-border-strong)' }} {...props} />,
-          hr: ({ node, ...props }) => <hr className="my-2 opacity-25" {...props} />,
-          strong: ({ node, ...props }) => <strong className="fw-semibold" {...props} />,
-          code: ({ inline, className, children, ...props }) => (
-            inline ? (
-              <code className="board-code rounded px-1 py-0" style={{ background: 'rgba(255, 255, 255, 0.06)' }} {...props}>{children}</code>
-            ) : (
-              <code className={`${className ?? ''} board-code small`.trim()} {...props}>{children}</code>
-            )
-          ),
-          pre: ({ node, ...props }) => <pre className="board-code-block p-2 mb-2 overflow-auto" style={{ lineHeight: 1.4 }} {...props} />,
-          table: ({ node, ...props }) => (
-            <div className="table-responsive my-2">
-              <table className="table table-sm table-striped align-middle mb-0 board-data-table" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead {...props} />,
-          img: ({ node, ...props }) => <img className="img-fluid rounded my-2" style={{ border: '1px solid var(--color-border)' }} loading="lazy" {...props} />,
-        }}
-      >
-        {normalizedText}
-      </ReactMarkdown>
-    </div>
-  );
-}
-
-function MessageModal({ title, text, onClose }) {
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div
-      className="board-modal position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-      style={{ zIndex: 1250, padding: '1rem' }}
-      onClick={onClose}
-    >
-      <div
-        className="board-modal__dialog w-100"
-        style={{
-          width: 'calc(100vw - 2rem)',
-          height: 'calc(100vh - 2rem)',
-          maxWidth: 'none',
-          maxHeight: 'none',
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="board-modal__header d-flex align-items-center justify-content-between gap-2 px-3 py-3">
-          <div className="board-modal__title text-truncate">{title}</div>
-          <button type="button" className="board-icon-button" onClick={onClose} title="Close message">
-            <i className="bi bi-x-lg" />
-          </button>
-        </div>
-        <div className="board-modal__body p-3 overflow-auto" style={{ height: 'calc(100% - 65px)' }}>
-          <div className="small mb-0 markdown-body lh-sm board-markdown" style={{ color: 'var(--color-text)' }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {typeof text === 'string' ? text : ''}
-            </ReactMarkdown>
-          </div>
-        </div>
-      </div>
+      <BoardMarkdown text={normalizedText} />
     </div>
   );
 }
@@ -307,87 +231,115 @@ function SystemMessage({ msg, boardId, cardId }) {
   );
 }
 
-function ChatBubbleImpl({ msg, compact = false, boardId, cardId }) {
+function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false, boardId, cardId }) {
   const { role, text, files } = msg;
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   if (role === 'system') {
     return <SystemMessage msg={msg} boardId={boardId} cardId={cardId} />;
   }
   const isUser = role === 'user';
+  const showFooter = isOverflowing || expanded;
   return (
-    <>
-      <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
-        <div
-          className={`px-2 py-2 rounded-3 small d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`}
-          style={{
-            maxWidth: '82%',
-            background: isUser
-              ? 'var(--bs-secondary-bg, #e9ecef)'
-              : 'var(--bs-primary-bg-subtle, #cfe2ff)',
-            border: isUser ? 'none' : '1px solid var(--bs-border-color, #dee2e6)',
-            whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word',
-            overflowX: 'hidden',
-            lineHeight: 1.4,
-            gap: '0.45rem',
-          }}
-        >
+    <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
+      <div
+        className="px-2 py-2 rounded-3 small d-flex flex-column"
+        style={{
+          maxWidth: '82%',
+          background: isUser
+            ? 'var(--bs-secondary-bg, #e9ecef)'
+            : 'var(--bs-primary-bg-subtle, #cfe2ff)',
+          border: isUser ? 'none' : '1px solid var(--bs-border-color, #dee2e6)',
+          overflowWrap: 'anywhere',
+          wordBreak: 'break-word',
+          overflowX: 'hidden',
+        }}
+      >
+        <div className={`d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`} style={{ gap: '0.45rem' }}>
           <ChatIconShell>
             {isUser ? <UserBubbleIcon /> : <AssistantBubbleIcon />}
           </ChatIconShell>
           <div className="flex-grow-1 min-w-0">
-            <ChatMessageText text={text} onOverflowChange={setIsOverflowing} />
-            {isOverflowing ? (
-              <div className={`d-flex mt-1 ${isUser ? 'justify-content-start' : 'justify-content-end'}`}>
-                <button
-                  type="button"
-                  className="btn btn-link btn-sm p-0 lh-1 text-decoration-none"
-                  onClick={() => setIsModalOpen(true)}
-                  title="View full message"
-                  aria-label="View full message"
-                >
-                  ...
-                </button>
-              </div>
-            ) : null}
+            <ChatMessageText text={text} expanded={expanded} onOverflowChange={setIsOverflowing} />
             {(files ?? []).map((f, i) => (
               <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
             ))}
           </div>
         </div>
+        {showFooter ? (
+          <button
+            type="button"
+            className="d-flex justify-content-center align-items-center btn btn-link p-0 border-0"
+            onClick={() => onToggleExpand?.(msgId)}
+            title={expanded ? 'Collapse message' : 'Expand message'}
+            aria-label={expanded ? 'Collapse message' : 'Expand message'}
+            aria-expanded={expanded}
+            style={{
+              marginLeft: '-0.5rem',
+              marginRight: '-0.5rem',
+              marginBottom: '-0.5rem',
+              marginTop: '0.4rem',
+              paddingTop: '0.2rem',
+              paddingBottom: '0.2rem',
+              borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+              background: 'rgba(0, 0, 0, 0.05)',
+              borderBottomLeftRadius: 'inherit',
+              borderBottomRightRadius: 'inherit',
+              color: 'rgba(0, 0, 0, 0.55)',
+              textDecoration: 'none',
+            }}
+          >
+            <svg
+              width="18"
+              height="10"
+              viewBox="0 0 24 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              style={{
+                transform: expanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 120ms ease',
+              }}
+            >
+              <polyline points="3 3 12 10 21 3" />
+            </svg>
+          </button>
+        ) : null}
       </div>
-      {isModalOpen ? (
-        <MessageModal
-          title={isUser ? 'User Message' : 'Assistant Message'}
-          text={typeof text === 'string' ? text : ''}
-          onClose={() => setIsModalOpen(false)}
-        />
-      ) : null}
-    </>
+    </div>
   );
 }
 
 const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
   prev.msg === next.msg
+  && prev.msgId === next.msgId
+  && prev.expanded === next.expanded
+  && prev.onToggleExpand === next.onToggleExpand
   && prev.compact === next.compact
   && prev.boardId === next.boardId
   && prev.cardId === next.cardId
 ));
 
-const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId }) {
+const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId, openMsgId, onToggleExpand }) {
   return (
     <>
-      {messages.map((msg, i) => (
-        <ChatBubble
-          key={i}
-          msg={msg}
-          compact={compact}
-          boardId={boardId}
-          cardId={cardId}
-        />
-      ))}
+      {messages.map((msg, i) => {
+        const msgId = String(i);
+        return (
+          <ChatBubble
+            key={msgId}
+            msg={msg}
+            msgId={msgId}
+            expanded={openMsgId === msgId}
+            onToggleExpand={onToggleExpand}
+            compact={compact}
+            boardId={boardId}
+            cardId={cardId}
+          />
+        );
+      })}
     </>
   );
 });
@@ -400,14 +352,14 @@ function toChipPreview(text) {
 }
 
 function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
-  const { copilotOutput = '', copilotTools = '' } = useChatWatchParty(boardId, cardId) ?? {};
+  const { agentOutput = '', agentTools = '' } = useChatWatchParty(boardId, cardId) ?? {};
   const [activeChipKey, setActiveChipKey] = useState('');
   const [chipLabels] = useState(() => ({
     output: pickRandom(processingStates),
     tools: pickRandom(toolStates),
   }));
-  const liveOutput = typeof copilotOutput === 'string' ? copilotOutput : '';
-  const liveTools = typeof copilotTools === 'string' ? copilotTools : '';
+  const liveOutput = typeof agentOutput === 'string' ? agentOutput : '';
+  const liveTools = typeof agentTools === 'string' ? agentTools : '';
   const chips = [
     liveOutput ? { key: 'output', label: chipLabels.output, value: toChipPreview(liveOutput), fullText: liveOutput } : null,
     liveTools ? { key: 'tools', label: chipLabels.tools, value: toChipPreview(liveTools), fullText: liveTools } : null,
@@ -487,22 +439,20 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
           </div>
         ) : null}
         {activeChip ? (
-          <pre
-            className="mb-0 rounded-2 p-2 small"
+          <div
+            className="mb-0 rounded-2 p-2"
             style={{
-              maxHeight: '12rem',
-              overflow: 'auto',
               background: 'rgba(255,255,255,0.7)',
               border: '1px solid rgba(0,0,0,0.08)',
               color: 'var(--bs-body-color, #212529)',
-              fontFamily: 'Consolas, "SFMono-Regular", Menlo, Monaco, monospace',
-              fontStyle: 'normal',
+              fontStyle: 'italic',
+              fontSize: '0.8rem',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
             }}
           >
-            {activeChip.fullText}
-          </pre>
+            {activeChip.value}
+          </div>
         ) : null}
       </div>
     </div>
@@ -613,6 +563,10 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   const initialScrollDoneRef = useRef(false);
   const scrollFrameRef = useRef(null);
   const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
+  const [openMsgId, setOpenMsgId] = useState(null);
+  const handleToggleExpand = useCallback((msgId) => {
+    setOpenMsgId((prev) => (prev === msgId ? null : msgId));
+  }, []);
 
   const scrollToBottom = (behavior = 'auto') => {
     const element = messagesRef.current;
@@ -748,6 +702,8 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
           compact={compact}
           boardId={boardId}
           cardId={cardId}
+          openMsgId={openMsgId}
+          onToggleExpand={handleToggleExpand}
         />
         {processing && (
           <WorkingBubble

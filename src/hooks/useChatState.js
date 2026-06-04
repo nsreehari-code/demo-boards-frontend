@@ -7,7 +7,7 @@ import {
   unsubscribeWatchparty,
   uploadFileForChat,
 } from '../lib/client.js';
-import { COPILOT_OUTPUT_CHANNEL, COPILOT_TOOLS_CHANNEL } from '../lib/appConfig.js';
+import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import { useBoardInfo, useCardChatProcessing, useCardChatViews, useCardChatWatchParty } from './useSseSlices.js';
 
 export function useChatState(boardId, cardId) {
@@ -75,17 +75,17 @@ export function useChatWatchParty(boardId, cardId) {
   useEffect(() => {
     if (!boardId || !cardId || !boardSseClientId) return undefined;
 
-    subscribeWatchparty(boardId, cardId, COPILOT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
-    subscribeWatchparty(boardId, cardId, COPILOT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
+    subscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
+    subscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
 
     return () => {
-      unsubscribeWatchparty(boardId, cardId, COPILOT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
-      unsubscribeWatchparty(boardId, cardId, COPILOT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
+      unsubscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
+      unsubscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
     };
   }, [boardId, cardId, boardSseClientId]);
 
   return {
-    copilotOutput: watchParty?.copilotOutput ?? '',
-    copilotTools: watchParty?.copilotTools ?? '',
+    agentOutput: watchParty?.agentOutput ?? '',
+    agentTools: watchParty?.agentTools ?? '',
   };
 }

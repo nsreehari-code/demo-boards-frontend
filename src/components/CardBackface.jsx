@@ -116,7 +116,7 @@ function buildSourceSummary(sourceDef, index) {
   };
 }
 
-function SourceBlock({ summary, onRunFlight, isLoading }) {
+function SourceBlock({ summary, onRunFlight, isLoading, disabled }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -137,7 +137,7 @@ function SourceBlock({ summary, onRunFlight, isLoading }) {
             className="board-icon-button board-icon-button--sm board-icon-button--flight-source"
             title={`Run source flight: ${summary.bindTo || 'source'}`}
             onClick={() => onRunFlight({ sourceIndex: summary.index, bindTo: summary.bindTo })}
-            disabled={isLoading}
+            disabled={disabled || isLoading}
           >
             {isLoading
               ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
@@ -165,6 +165,7 @@ export function CardBackface({
   cardContent,
   loadingBySource,
   cardFlightLoading,
+  flightDisabled,
   onRunCardFlight,
   onRunFlight,
 }) {
@@ -201,7 +202,7 @@ export function CardBackface({
             className="board-icon-button board-icon-button--sm board-icon-button--flight-card"
             title="Run card preflight"
             onClick={() => onRunCardFlight()}
-            disabled={cardFlightLoading}
+            disabled={flightDisabled || cardFlightLoading}
           >
             {cardFlightLoading
               ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
@@ -247,6 +248,7 @@ export function CardBackface({
                 summary={summary}
                 onRunFlight={onRunFlight}
                 isLoading={loadingBySource?.[summary.index] === true}
+                disabled={flightDisabled}
               />
             ))}
           </div>

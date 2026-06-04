@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "label": "Sample Demo Board (16 cards)",
+      "description": "Portfolio/risk starter board",
+      "fileName": "sample.json"
+    },
+    {
+      "label": "M365 Demo Board (3 cards)",
+      "description": "WorkIQ and Foundry starter board",
+      "fileName": "m365.json"
+    }
+  ]
+}

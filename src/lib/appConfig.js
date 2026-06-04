@@ -91,8 +91,8 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
     localstorage: { refs: {} },
   },
   boardServerConstants: {
-    copilotOutputChannel: 'agent-output',
-    copilotToolsChannel: 'agent-tools',
+    agentOutputChannel: 'agent-output',
+    agentToolsChannel: 'agent-tools',
   },
 });
 
@@ -118,12 +118,12 @@ function normalizeBoardServerConstants(constants) {
   const source = constants && typeof constants === 'object' ? constants : {};
 
   return {
-    copilotOutputChannel: typeof source.copilotOutputChannel === 'string' && source.copilotOutputChannel.trim()
-      ? source.copilotOutputChannel.trim()
-      : fallback.copilotOutputChannel,
-    copilotToolsChannel: typeof source.copilotToolsChannel === 'string' && source.copilotToolsChannel.trim()
-      ? source.copilotToolsChannel.trim()
-      : fallback.copilotToolsChannel,
+    agentOutputChannel: typeof source.agentOutputChannel === 'string' && source.agentOutputChannel.trim()
+      ? source.agentOutputChannel.trim()
+      : fallback.agentOutputChannel,
+    agentToolsChannel: typeof source.agentToolsChannel === 'string' && source.agentToolsChannel.trim()
+      ? source.agentToolsChannel.trim()
+      : fallback.agentToolsChannel,
   };
 }
 
@@ -258,8 +258,8 @@ export let BOARD_TRANSPORT_MODE = currentAppConfig.transportMode;
 export let SERVER = currentAppConfig.serverOrigin;
 export let STORAGE_CONFIG = currentAppConfig.storage;
 export let BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
-export let COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
-export let COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
+export let AGENT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.agentOutputChannel;
+export let AGENT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.agentToolsChannel;
 
 function applyAppConfig(config) {
   currentAppConfig = normalizeAppConfig(config);
@@ -273,8 +273,8 @@ function applyAppConfig(config) {
   SERVER = currentAppConfig.serverOrigin;
   STORAGE_CONFIG = currentAppConfig.storage;
   BOARD_SERVER_CONSTANTS = currentAppConfig.boardServerConstants;
-  COPILOT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.copilotOutputChannel;
-  COPILOT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.copilotToolsChannel;
+  AGENT_OUTPUT_CHANNEL = currentAppConfig.boardServerConstants.agentOutputChannel;
+  AGENT_TOOLS_CHANNEL = currentAppConfig.boardServerConstants.agentToolsChannel;
   return currentAppConfig;
 }
 
