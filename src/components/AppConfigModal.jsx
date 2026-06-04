@@ -13,7 +13,8 @@ import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/c
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
-const SEED_BOARDS_MANIFEST_URL = '/assets/seed-boards/index.json';
+const SEED_BOARDS_BASE_URL = `${import.meta.env.BASE_URL}assets/seed-boards/`;
+const SEED_BOARDS_MANIFEST_URL = `${SEED_BOARDS_BASE_URL}index.json`;
 
 function normalizeRuntimeDumpEnvelope(payload) {
   if (Array.isArray(payload)) {
@@ -242,7 +243,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   const handleImportSeedBoard = async () => {
     if (!selectedSeedFileName || resettingSeeds) return;
-    const response = await fetch(`/assets/seed-boards/${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
+    const response = await fetch(`${SEED_BOARDS_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
     }
