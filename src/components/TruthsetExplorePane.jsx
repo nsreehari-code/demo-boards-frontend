@@ -105,7 +105,7 @@ export function TruthsetExplorePane({ boardId, includeFilters = [], layoutStrate
     });
   }, [board, truthsetCardIds]);
 
-  if (!board) return null;
+  if (!board || truthsetCardIds.length === 0) return null;
 
   return (
     <aside
