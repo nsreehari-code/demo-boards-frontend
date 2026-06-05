@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import { initBoard, openBoardSse, refreshCard } from '../lib/client.js';
+import { openBoardSse, refreshCard } from '../lib/client.js';
 import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import {
   applyBoardSseFrame,
@@ -38,36 +38,35 @@ function startBoardStore(boardId, store) {
   if (store.started) return;
   store.started = true;
 
-  initBoard(boardId)
-    .then(() => {
+  try {
+    const clientId = crypto.randomUUID();
+    store.clientId = clientId;
+    const es = openBoardSse(boardId, clientId);
+    store.es = es;
+
+    es.onopen = () => {
       if (!store.started) return;
-
       publishBoardRuntimeInitStatus(boardId, 'success');
+    };
 
-      const clientId = crypto.randomUUID();
-      store.clientId = clientId;
-      const es = openBoardSse(boardId, clientId);
-      store.es = es;
+    es.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        store.snapshot = applyBoardSseFrame(store.snapshot ?? createEmptyBoardSnapshot(boardId), payload);
+        emitBoardStore(store);
+      } catch {
+        // ignore malformed frames
+      }
+    };
 
-      es.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          store.snapshot = applyBoardSseFrame(store.snapshot ?? createEmptyBoardSnapshot(boardId), payload);
-          emitBoardStore(store);
-        } catch {
-          // ignore malformed frames
-        }
-      };
-
-      es.onerror = () => {
-        // EventSource reconnects automatically.
-        console.debug('[useBoardSSE] SSE error — will retry');
-      };
-    })
-    .catch((err) => {
-      publishBoardRuntimeInitStatus(boardId, 'error', err);
-      console.error('[useBoardSSE] one-shot SSE bootstrap failed', err);
-    });
+    es.onerror = () => {
+      // EventSource reconnects automatically.
+      console.debug('[useBoardSSE] SSE error — will retry');
+    };
+  } catch (err) {
+    publishBoardRuntimeInitStatus(boardId, 'error', err);
+    console.error('[useBoardSSE] SSE bootstrap failed', err);
+  }
 }
 
 function getOrCreateBoardStore(boardId) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BOARD_TRANSPORT_MODE_INBROWSER,
   BOARD_TRANSPORT_MODE_SERVER_URL,
@@ -11,10 +11,50 @@ import {
 } from '../lib/appConfig.js';
 import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/client.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
+import { GlobalModal } from './GlobalModal.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
 const SEED_BOARDS_BASE_URL = `${import.meta.env.BASE_URL}assets/seed-boards/`;
 const SEED_BOARDS_MANIFEST_URL = `${SEED_BOARDS_BASE_URL}index.json`;
+const FORWARD_ICON_SVG = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5 12h12"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+    />
+    <path
+      d="M13 6l6 6-6 6"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const PLUS_ICON_SVG = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M12 5v14M5 12h14"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+function createEmptyAddBoardForm() {
+  return {
+    boardId: '',
+    label: '',
+    ai: 'copilot',
+    aiWorkspaceTemplate: 'default',
+    refsTemplate: 'localfs-default',
+  };
+}
 
 function normalizeRuntimeDumpEnvelope(payload) {
   if (Array.isArray(payload)) {
@@ -48,6 +88,222 @@ function normalizeSeedManifestEntries(payload) {
     .filter(Boolean);
 }
 
+function normalizeManagedBoardEntries(payload) {
+  const boards = Array.isArray(payload?.boards) ? payload.boards : [];
+  return boards
+    .map((board) => {
+      const id = typeof board?.id === 'string' ? board.id.trim() : '';
+      const label = typeof board?.label === 'string' ? board.label.trim() : '';
+      if (!id) return null;
+      return {
+        id,
+        label: label || id,
+        metadata: board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
+          ? board.metadata
+          : {},
+      };
+    })
+    .filter(Boolean);
+}
+
+async function fetchManagedBoards(serverOrigin) {
+  const normalizedOrigin = typeof serverOrigin === 'string'
+    ? serverOrigin.trim().replace(/\/+$/, '')
+    : '';
+  if (!normalizedOrigin) {
+    return [];
+  }
+
+  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subcommand: 'list-boards' }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load boards: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (payload?.status !== 'success') {
+    const message = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : 'Board listing failed';
+    throw new Error(message);
+  }
+
+  return normalizeManagedBoardEntries(payload.data);
+}
+
+async function addManagedBoard(serverOrigin, candidate) {
+  const normalizedOrigin = typeof serverOrigin === 'string'
+    ? serverOrigin.trim().replace(/\/+$/, '')
+    : '';
+  if (!normalizedOrigin) {
+    throw new Error('Server origin is required');
+  }
+
+  const normalized = {
+    boardId: typeof candidate?.boardId === 'string' ? candidate.boardId.trim() : '',
+    label: typeof candidate?.label === 'string' ? candidate.label.trim() : '',
+    ai: typeof candidate?.ai === 'string' ? candidate.ai.trim() : '',
+    aiWorkspaceTemplate: typeof candidate?.aiWorkspaceTemplate === 'string' ? candidate.aiWorkspaceTemplate.trim() : '',
+    refsTemplate: typeof candidate?.refsTemplate === 'string' ? candidate.refsTemplate.trim() : '',
+  };
+
+  if (!normalized.boardId) {
+    throw new Error('Board id is required');
+  }
+  if (!normalized.label) {
+    throw new Error('Label is required');
+  }
+  if (!normalized.ai) {
+    throw new Error('AI is required');
+  }
+  if (!normalized.aiWorkspaceTemplate) {
+    throw new Error('AI workspace template is required');
+  }
+  if (!normalized.refsTemplate) {
+    throw new Error('Refs template is required');
+  }
+
+  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subcommand: 'add-board',
+      args: {
+        boardId: normalized.boardId,
+        record: {
+          label: normalized.label,
+          ai: normalized.ai,
+          aiWorkspaceTemplate: normalized.aiWorkspaceTemplate,
+          refsTemplate: normalized.refsTemplate,
+        },
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.status !== 'success') {
+    const message = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : `Failed to add board: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload?.data?.board ?? null;
+}
+
+async function saveBoardMeta(serverOrigin, boardId, metadata) {
+  const normalizedOrigin = typeof serverOrigin === 'string'
+    ? serverOrigin.trim().replace(/\/+$/, '')
+    : '';
+  if (!normalizedOrigin) {
+    throw new Error('Server origin is required');
+  }
+  const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+  if (!normalizedBoardId) {
+    throw new Error('Board id is required');
+  }
+
+  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subcommand: 'save-meta',
+      args: {
+        boardId: normalizedBoardId,
+        metadata,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.status !== 'success') {
+    const message = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : `Failed to save board metadata: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload?.data?.board ?? null;
+}
+
+function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '' }) {
+  const [formState, setFormState] = useState(() => createEmptyAddBoardForm());
+  const [localError, setLocalError] = useState('');
+
+  const updateField = (field) => (event) => {
+    const value = event.target.value;
+    setFormState((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    if (localError) {
+      setLocalError('');
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const normalized = {
+      boardId: formState.boardId.trim(),
+      label: formState.label.trim(),
+      ai: formState.ai.trim(),
+      aiWorkspaceTemplate: formState.aiWorkspaceTemplate.trim(),
+      refsTemplate: formState.refsTemplate.trim(),
+    };
+
+    if (!normalized.boardId || !normalized.label || !normalized.ai || !normalized.aiWorkspaceTemplate || !normalized.refsTemplate) {
+      setLocalError('All fields are required.');
+      return;
+    }
+
+    setLocalError('');
+    try {
+      await onSubmit(normalized);
+    } catch {
+      // Parent surfaces request failures through errorMessage.
+    }
+  };
+
+  return (
+    <GlobalModal title="Add board" onClose={onClose} className="board-modal__dialog" bodyClassName="p-3">
+      <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
+        <label className="board-settings-field mb-0">
+          <span>Board Id</span>
+          <input className="board-input" type="text" value={formState.boardId} onChange={updateField('boardId')} placeholder="live-test" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>Label</span>
+          <input className="board-input" type="text" value={formState.label} onChange={updateField('label')} placeholder="Live Test" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>AI</span>
+          <input className="board-input" type="text" value={formState.ai} onChange={updateField('ai')} placeholder="copilot" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>AI Workspace Template</span>
+          <input className="board-input" type="text" value={formState.aiWorkspaceTemplate} onChange={updateField('aiWorkspaceTemplate')} placeholder="default" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>Refs Template</span>
+          <input className="board-input" type="text" value={formState.refsTemplate} onChange={updateField('refsTemplate')} placeholder="localfs-default" />
+        </label>
+        {localError || errorMessage ? (
+          <div className="board-settings-form__hint text-danger">
+            {localError || errorMessage}
+          </div>
+        ) : null}
+        <div className="d-flex justify-content-end gap-2">
+          <button type="button" className="btn btn-outline-secondary board-button" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="submit" className="btn btn-primary board-button" disabled={submitting}>
+            {submitting ? 'Adding…' : 'Add board'}
+          </button>
+        </div>
+      </form>
+    </GlobalModal>
+  );
+}
+
 function downloadJsonFile(fileName, payload) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -69,6 +325,14 @@ function toFormState(config) {
     transportMode: config?.transportMode ?? BOARD_TRANSPORT_MODE_SERVER_URL,
     serverOrigin: config?.serverOrigin ?? '',
     storageAdapter: config?.storage?.adapter ?? STORAGE_ADAPTER_FIRESTORE,
+  };
+}
+
+function metadataFromFormState(formState) {
+  return {
+    pageTitle: formState.defaultBoardLabel,
+    pageSubtitle: formState.defaultBoardSubtitle,
+    refreshAllIntervalSeconds: Number(formState.refreshAllIntervalMinutes) * 60,
   };
 }
 
@@ -102,6 +366,13 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [seedManifestError, setSeedManifestError] = useState('');
   const [seedManifestEntries, setSeedManifestEntries] = useState([]);
   const [selectedSeedFileName, setSelectedSeedFileName] = useState('');
+  const [loadingBoardOptions, setLoadingBoardOptions] = useState(false);
+  const [boardOptionsError, setBoardOptionsError] = useState('');
+  const [boardOptions, setBoardOptions] = useState([]);
+  const [addBoardOpen, setAddBoardOpen] = useState(false);
+  const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
+  const [addBoardError, setAddBoardError] = useState('');
+  const [saveMetaError, setSaveMetaError] = useState('');
   const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
@@ -109,6 +380,40 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const runtimeAlertBadge = formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
     ? 'Runtime storage init failed'
     : 'Server unreachable';
+
+  const reloadBoardOptions = useCallback(async (serverOrigin) => {
+    setLoadingBoardOptions(true);
+    setBoardOptionsError('');
+    try {
+      const entries = await fetchManagedBoards(serverOrigin);
+      setBoardOptions(entries);
+    } catch (error) {
+      setBoardOptions([]);
+      setBoardOptionsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingBoardOptions(false);
+    }
+  }, []);
+
+  const handleAddBoard = useCallback(async (candidate) => {
+    setAddBoardSubmitting(true);
+    setAddBoardError('');
+    try {
+      const createdBoard = await addManagedBoard(formState.serverOrigin, candidate);
+      await reloadBoardOptions(formState.serverOrigin);
+      setFormState((current) => ({
+        ...current,
+        defaultBoardId: candidate.boardId,
+      }));
+      setAddBoardOpen(false);
+      return createdBoard;
+    } catch (error) {
+      setAddBoardError(error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      setAddBoardSubmitting(false);
+    }
+  }, [formState.serverOrigin, reloadBoardOptions]);
 
   useEffect(() => {
     if (autoOpen) {
@@ -173,6 +478,25 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     return () => { cancelled = true; };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    if (formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      setBoardOptions([]);
+      setBoardOptionsError('');
+      setLoadingBoardOptions(false);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void reloadBoardOptions(formState.serverOrigin).catch(() => {});
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [formState.serverOrigin, formState.transportMode, open, reloadBoardOptions]);
+
   const updateField = (field) => (event) => {
     const value = event.target.value;
     setFormState((current) => ({
@@ -181,10 +505,48 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     }));
   };
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  const handleBoardSelectionChange = (event) => {
+    const nextBoardId = event.target.value;
+    const selected = boardOptions.find((entry) => entry.id === nextBoardId);
+    setFormState((current) => {
+      const base = { ...current, defaultBoardId: nextBoardId };
+      if (!selected) return base;
+      const metadata = selected.metadata && typeof selected.metadata === 'object' && !Array.isArray(selected.metadata)
+        ? selected.metadata
+        : {};
+      const refreshSeconds = Number(metadata.refreshAllIntervalSeconds);
+      return {
+        ...base,
+        defaultBoardLabel: typeof metadata.pageTitle === 'string' && metadata.pageTitle
+          ? metadata.pageTitle
+          : selected.label,
+        defaultBoardSubtitle: typeof metadata.pageSubtitle === 'string'
+          ? metadata.pageSubtitle
+          : '',
+        refreshAllIntervalMinutes: Number.isFinite(refreshSeconds) && refreshSeconds > 0
+          ? String(Math.max(1, Math.round(refreshSeconds / 60)))
+          : '60',
+      };
+    });
+  };
+
+  const submitAndReload = useCallback(() => {
     saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));
     window.location.reload();
+  }, [formState]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL && formState.defaultBoardId) {
+      try {
+        await saveBoardMeta(formState.serverOrigin, formState.defaultBoardId, metadataFromFormState(formState));
+        setSaveMetaError('');
+      } catch (error) {
+        setSaveMetaError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
+    submitAndReload();
   };
 
   const handleReset = () => {
@@ -274,6 +636,17 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     }
   };
 
+  const boardSelectOptions = [...boardOptions];
+  if (
+    formState.defaultBoardId
+    && !boardSelectOptions.some((entry) => entry.id === formState.defaultBoardId)
+  ) {
+    boardSelectOptions.unshift({
+      id: formState.defaultBoardId,
+      label: formState.defaultBoardId,
+    });
+  }
+
   return (
     <>
       <button
@@ -318,16 +691,57 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             className="board-settings-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="board-settings-title"
+            aria-label="Board settings"
           >
             <div className="board-settings-modal__header">
               <div>
-                <div className="board-settings-modal__eyebrow">Runtime config</div>
-                <h2 id="board-settings-title" className="board-settings-modal__title">Board settings</h2>
+                <div className="board-settings-modal__eyebrow mb-2">Board</div>
+                <div className="d-flex align-items-center gap-2">
+                  <select
+                    className="board-input board-settings-sample-select"
+                    value={formState.defaultBoardId}
+                    onChange={handleBoardSelectionChange}
+                    disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
+                  >
+                    {boardSelectOptions.length === 0 ? (
+                      <option value="">
+                        {loadingBoardOptions ? 'Loading boards…' : 'No boards available'}
+                      </option>
+                    ) : null}
+                    {boardSelectOptions.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-primary board-button d-inline-flex align-items-center gap-1"
+                    onClick={submitAndReload}
+                    title="Save and reload"
+                    aria-label="Save and reload"
+                  >
+                    {FORWARD_ICON_SVG}
+                    Go
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1 ms-auto"
+                    onClick={() => {
+                      setAddBoardError('');
+                      setAddBoardOpen(true);
+                    }}
+                    disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
+                    title="New board"
+                  >
+                    {PLUS_ICON_SVG}
+                    New
+                  </button>
+                </div>
               </div>
               <button
                 type="button"
-                className="board-settings-modal__close board-ingest-pane__count board-ingest-pane__count-button d-inline-flex align-items-center justify-content-center"
+                className="board-settings-modal__close board-ingest-pane__count board-ingest-pane__count-button d-inline-flex align-items-center justify-content-center align-self-start"
                 aria-label="Close board settings"
                 onClick={() => {
                   setOpenedByAuto(false);
@@ -383,10 +797,50 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 </>
               ) : null}
 
-              <div className="row g-3 align-items-start">
-                <div className="col">
-                  <label className="board-settings-field mb-3">
-                    <span>Server</span>
+              <div className="board-settings-io-section">
+                <div className="board-settings-io-card d-flex flex-column gap-3">
+                  <div className="d-flex align-items-center justify-content-between gap-2">
+                    <div className="board-settings-io-card__title">Page Details</div>
+                    <button type="submit" className="btn btn-outline-secondary board-button">Save</button>
+                  </div>
+
+                  <label className="board-settings-field mb-0">
+                    <span>Page Title</span>
+                    <input className="board-input" type="text" value={formState.defaultBoardLabel} onChange={updateField('defaultBoardLabel')} placeholder="Live" />
+                  </label>
+
+                  <label className="board-settings-field mb-0">
+                    <span>Page Subtitle</span>
+                    <input className="board-input" type="text" value={formState.defaultBoardSubtitle} onChange={updateField('defaultBoardSubtitle')} placeholder="Live operational intelligence for agent workflows" />
+                  </label>
+
+                  <label className="board-settings-field mb-0">
+                    <span>Refresh Interval (minutes)</span>
+                    <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" />
+                  </label>
+
+                  {saveMetaError ? (
+                    <div className="board-settings-form__hint text-danger">
+                      Save failed: {saveMetaError}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="board-settings-io-section">
+                <div className="board-settings-io-card d-flex flex-column gap-3">
+                  <div className="d-flex align-items-center justify-content-between gap-2">
+                    <div className="board-settings-io-card__title">Server</div>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary board-button"
+                      onClick={() => setPendingAction('config')}
+                    >
+                      Reset Server
+                    </button>
+                  </div>
+
+                  <label className="board-settings-field mb-0">
                     <input
                       className={`board-input${serverOriginHasError ? ' board-input--error' : ''}`}
                       type="url"
@@ -403,37 +857,13 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     ) : null}
                   </label>
 
-                  <label className="board-settings-field mb-0">
-                    <span>Board Id</span>
-                    <input className="board-input" type="text" value={formState.defaultBoardId} onChange={updateField('defaultBoardId')} placeholder="live" />
-                  </label>
-                </div>
-
-                <div className="col-auto d-flex align-items-start pt-4">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm board-button"
-                    onClick={() => setPendingAction('config')}
-                  >
-                    Reset Server / Board
-                  </button>
+                  {boardOptionsError ? (
+                    <div className="board-settings-form__hint text-danger">
+                      Board list error: {boardOptionsError}
+                    </div>
+                  ) : null}
                 </div>
               </div>
-
-              <label className="board-settings-field">
-                <span>Page Title</span>
-                <input className="board-input" type="text" value={formState.defaultBoardLabel} onChange={updateField('defaultBoardLabel')} placeholder="Live" />
-              </label>
-
-              <label className="board-settings-field">
-                <span>Page Subtitle</span>
-                <input className="board-input" type="text" value={formState.defaultBoardSubtitle} onChange={updateField('defaultBoardSubtitle')} placeholder="Live operational intelligence for agent workflows" />
-              </label>
-
-              <label className="board-settings-field">
-                <span>Refresh Interval (minutes)</span>
-                <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" />
-              </label>
 
               <div className="board-settings-io-section">
                 <div className="board-settings-io-card d-flex flex-column gap-3">
@@ -491,8 +921,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
               </div>
 
               <div className="board-settings-form__actions justify-content-end">
-                <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary board-button">Save and reload</button>
+                <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Close</button>
               </div>
               {seedManifestError ? (
                 <div className="board-settings-form__hint text-danger">
@@ -529,6 +958,18 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 });
               }}
               onCancel={() => setPendingAction(null)}
+            />
+          ) : null}
+          {addBoardOpen ? (
+            <AddBoardModal
+              onClose={() => {
+                if (addBoardSubmitting) return;
+                setAddBoardOpen(false);
+                setAddBoardError('');
+              }}
+              onSubmit={handleAddBoard}
+              submitting={addBoardSubmitting}
+              errorMessage={addBoardError}
             />
           ) : null}
         </div>

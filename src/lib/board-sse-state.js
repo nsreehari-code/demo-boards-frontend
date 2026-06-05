@@ -41,6 +41,50 @@ function createCardChatView({ chatState = null } = {}) {
   };
 }
 
+function normalizeBootstrapTokens(tokens) {
+  return Array.isArray(tokens)
+    ? tokens.filter(Boolean).map(String)
+    : EMPTY_ARRAY;
+}
+
+function buildFallbackCardDefinitions(statusSnapshot, runtimeById) {
+  const fallbackById = new Map();
+
+  for (const entry of (statusSnapshot?.cards ?? [])) {
+    const cardId = typeof entry?.name === 'string' ? entry.name.trim() : '';
+    if (!cardId || fallbackById.has(cardId)) {
+      continue;
+    }
+
+    fallbackById.set(cardId, {
+      id: cardId,
+      meta: { title: cardId },
+      requires: normalizeBootstrapTokens(entry?.requires),
+      provides: normalizeBootstrapTokens(entry?.provides_declared ?? entry?.provides_runtime),
+      source_defs: EMPTY_ARRAY,
+      card_data: EMPTY_OBJECT,
+    });
+  }
+
+  for (const cardId of Object.keys(runtimeById ?? EMPTY_OBJECT)) {
+    const normalizedId = typeof cardId === 'string' ? cardId.trim() : '';
+    if (!normalizedId || fallbackById.has(normalizedId)) {
+      continue;
+    }
+
+    fallbackById.set(normalizedId, {
+      id: normalizedId,
+      meta: { title: normalizedId },
+      requires: EMPTY_ARRAY,
+      provides: EMPTY_ARRAY,
+      source_defs: EMPTY_ARRAY,
+      card_data: EMPTY_OBJECT,
+    });
+  }
+
+  return [...fallbackById.values()];
+}
+
 function buildBoardStatusSnapshot(cardDefinitions, statusSnapshot) {
   const statusByName = {};
   for (const entry of (statusSnapshot?.cards ?? [])) {
@@ -95,7 +139,9 @@ function buildCardChatViewsSnapshot(cardChatsByCardId, cardDefinitionsAndData) {
 }
 
 function buildState(payload) {
-  const cardDefinitions = payload.cardDefinitions ?? EMPTY_ARRAY;
+  const cardDefinitions = Array.isArray(payload.cardDefinitions) && payload.cardDefinitions.length > 0
+    ? payload.cardDefinitions
+    : buildFallbackCardDefinitions(payload.statusSnapshot, payload.cardRuntimeById);
   const cardDefinitionsAndData = buildCardDefinitionsAndDataSnapshot(cardDefinitions);
 
   return {
