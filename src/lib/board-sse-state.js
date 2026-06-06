@@ -1,3 +1,9 @@
+import {
+  isBoardChangeNotification,
+  isChatScopedRuntimeNotification,
+  runtimeNotificationsFromPayload,
+} from 'yaml-flow/notification-consumer';
+
 export const EMPTY_OBJECT = Object.freeze({});
 export const EMPTY_ARRAY = Object.freeze([]);
 
@@ -163,7 +169,8 @@ export function applyBoardSseFrame(prev, payload) {
     return buildState(payload);
   }
 
-  if (payload?.kind !== 'notification-batch') {
+  const notifications = runtimeNotificationsFromPayload(payload);
+  if (notifications.length === 0) {
     return prev;
   }
 
@@ -193,7 +200,43 @@ export function applyBoardSseFrame(prev, payload) {
     }
   };
 
-  for (const notification of (payload.notifications ?? [])) {
+  for (const notification of notifications) {
+    if (notification.kind === 'card_watchparty' && notification.cardId && notification.channel) {
+      if (cardChatWatchParties === (prev?.cardChatWatchParties ?? EMPTY_OBJECT)) {
+        cardChatWatchParties = { ...cardChatWatchParties };
+      }
+      const previousWatchParty = cardChatWatchParties[notification.cardId] ?? EMPTY_OBJECT;
+      const nextWatchpartyByChannel = { ...previousWatchParty };
+      if (notification.clear) {
+        nextWatchpartyByChannel[notification.channel] = EMPTY_ARRAY;
+      } else if (notification.replace) {
+        nextWatchpartyByChannel[notification.channel] = [{ payload: notification.payload, ts: Date.now() }];
+      } else {
+        nextWatchpartyByChannel[notification.channel] = [
+          ...(nextWatchpartyByChannel[notification.channel] ?? EMPTY_ARRAY),
+          { payload: notification.payload, ts: Date.now() },
+        ];
+      }
+      cardChatWatchParties[notification.cardId] = nextWatchpartyByChannel;
+      continue;
+    }
+
+    if (isChatScopedRuntimeNotification(notification)) {
+      if (notification.kind === 'card_chats' && notification.cardId) {
+        if (cardChatViews === (prev?.cardChatViews ?? EMPTY_OBJECT)) {
+          cardChatViews = { ...cardChatViews };
+        }
+        cardChatViews[notification.cardId] = createCardChatView({
+          chatState: createChatState(notification),
+        });
+      }
+      continue;
+    }
+
+    if (!isBoardChangeNotification(notification)) {
+      continue;
+    }
+
     if (notification.kind === 'status') {
       if (notification.status && 'summary' in notification.status) {
         ensureBoardStatus();
@@ -221,30 +264,6 @@ export function applyBoardSseFrame(prev, payload) {
         boardCardComputedValues = { ...boardCardComputedValues };
       }
       boardCardComputedValues[notification.cardId] = notification.values ?? EMPTY_OBJECT;
-    } else if (notification.kind === 'card_chats' && notification.cardId) {
-      if (cardChatViews === (prev?.cardChatViews ?? EMPTY_OBJECT)) {
-        cardChatViews = { ...cardChatViews };
-      }
-      cardChatViews[notification.cardId] = createCardChatView({
-        chatState: createChatState(notification),
-      });
-    } else if (notification.kind === 'card_watchparty' && notification.cardId && notification.channel) {
-      if (cardChatWatchParties === (prev?.cardChatWatchParties ?? EMPTY_OBJECT)) {
-        cardChatWatchParties = { ...cardChatWatchParties };
-      }
-      const previousWatchParty = cardChatWatchParties[notification.cardId] ?? EMPTY_OBJECT;
-      const nextWatchpartyByChannel = { ...previousWatchParty };
-      if (notification.clear) {
-        nextWatchpartyByChannel[notification.channel] = EMPTY_ARRAY;
-      } else if (notification.replace) {
-        nextWatchpartyByChannel[notification.channel] = [{ payload: notification.payload, ts: Date.now() }];
-      } else {
-        nextWatchpartyByChannel[notification.channel] = [
-          ...(nextWatchpartyByChannel[notification.channel] ?? EMPTY_ARRAY),
-          { payload: notification.payload, ts: Date.now() },
-        ];
-      }
-      cardChatWatchParties[notification.cardId] = nextWatchpartyByChannel;
     } else if (notification.kind === 'card_refreshed' && notification.cardId && notification.card) {
       const { computed_values, runtime, status, ...cardContentPatch } = notification.card;
       if (cardDefinitionsAndData === (prev?.cardDefinitionsAndData ?? EMPTY_OBJECT)) {
