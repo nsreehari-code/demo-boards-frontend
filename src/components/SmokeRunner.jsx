@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalModal } from './GlobalModal.jsx';
 import { EMPTY_ARRAY, EMPTY_OBJECT } from '../lib/board-sse-state.js';
 import { useBoardState } from '../hooks/useBoardState.js';
@@ -760,14 +760,16 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
   const appendLog = useCallback((caseId, message, kind = 'info') => {
     const entry = createLogEntry(caseId, message, kind);
-    setLogs((current) => [...current, entry]);
-    if (caseId) {
-      setCaseStates((current) => current.map((entryState) => (
-        entryState.id === caseId
-          ? { ...entryState, detail: message }
-          : entryState
-      )));
-    }
+    startTransition(() => {
+      setLogs((current) => [...current, entry]);
+      if (caseId) {
+        setCaseStates((current) => current.map((entryState) => (
+          entryState.id === caseId
+            ? { ...entryState, detail: message }
+            : entryState
+        )));
+      }
+    });
   }, []);
 
   const recordAiResponse = useCallback((caseId, responseText) => {
@@ -776,11 +778,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     const normalizedResponseText = String(responseText || '').trim();
     if (!normalizedResponseText) return;
     runtimeRef.current.aiResponsesByCaseId.set(normalizedCaseId, normalizedResponseText);
-    setAiResponses((current) => (
-      current[normalizedCaseId] === normalizedResponseText
-        ? current
-        : { ...current, [normalizedCaseId]: normalizedResponseText }
-    ));
+    startTransition(() => {
+      setAiResponses((current) => (
+        current[normalizedCaseId] === normalizedResponseText
+          ? current
+          : { ...current, [normalizedCaseId]: normalizedResponseText }
+      ));
+    });
   }, []);
 
   const appendAiResponseSummary = useCallback(() => {
@@ -797,7 +801,9 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   }, [appendLog]);
 
   const markCase = useCallback((caseId, patch) => {
-    setCaseStates((current) => current.map((entry) => (entry.id === caseId ? { ...entry, ...patch } : entry)));
+    startTransition(() => {
+      setCaseStates((current) => current.map((entry) => (entry.id === caseId ? { ...entry, ...patch } : entry)));
+    });
   }, []);
 
   const waitUntil = useCallback(async (predicate, timeoutMs, label) => {
@@ -1765,6 +1771,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
     try {
       await warmChatQueue();
+      let computeChatParallelHandled = false;
       let hostedParallelHandled = false;
       for (const entry of SMOKE_CASES) {
         ensureNotCancelled(cancelRef);
@@ -1778,6 +1785,45 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             finishedAt: Date.now(),
           });
           appendLog(entry.id, entry.reason, 'warn');
+          continue;
+        }
+
+        if (['T2', 'T3', 'T4'].includes(entry.id)) {
+          if (computeChatParallelHandled) {
+            continue;
+          }
+          computeChatParallelHandled = true;
+          const parallelEntries = SMOKE_CASES.filter((candidate) => ['T2', 'T3', 'T4'].includes(candidate.id) && candidate.mode === 'run');
+          const startedAtValue = Date.now();
+          for (const parallelEntry of parallelEntries) {
+            markCase(parallelEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
+            appendLog(parallelEntry.id, `Starting ${parallelEntry.id}: ${parallelEntry.title}`);
+          }
+          try {
+            await Promise.all(parallelEntries.map((parallelEntry) => runCase(parallelEntry.id)));
+            const finishedAtValue = Date.now();
+            for (const parallelEntry of parallelEntries) {
+              markCase(parallelEntry.id, { status: 'passed', finishedAt: finishedAtValue, comparison: null });
+              appendLog(parallelEntry.id, `${parallelEntry.id} passed`, 'success');
+            }
+          } catch (error) {
+            if (error?.code === 'CANCELLED') {
+              throw error;
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            const failedCaseId = parallelEntries.find((parallelEntry) => message.includes(parallelEntry.id))?.id || entry.id;
+            const finishedAtValue = Date.now();
+            for (const parallelEntry of parallelEntries) {
+              markCase(parallelEntry.id, {
+                status: parallelEntry.id === failedCaseId ? 'failed' : 'pending',
+                finishedAt: finishedAtValue,
+                detail: parallelEntry.id === failedCaseId ? message : 'Skipped after parallel group failure.',
+                comparison: parallelEntry.id === failedCaseId ? readSmokeComparison(error) : null,
+              });
+            }
+            appendLog(failedCaseId, message, 'error');
+            throw error;
+          }
           continue;
         }
 
@@ -1878,8 +1924,12 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     }
   }, [appendLog, caseStates, logs, suiteStatus]);
 
+  const deferredLogs = useDeferredValue(logs);
+  const deferredCaseStates = useDeferredValue(caseStates);
+  const deferredAiResponses = useDeferredValue(aiResponses);
+
   const summaryChips = useMemo(() => {
-    const counts = caseStates.reduce((acc, entry) => {
+    const counts = deferredCaseStates.reduce((acc, entry) => {
       acc[entry.status] = (acc[entry.status] || 0) + 1;
       return acc;
     }, {});
@@ -1890,13 +1940,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       { label: `Skipped ${counts.skipped || 0}`, variant: '' },
       { label: `Pending ${counts.pending || 0}`, variant: '' },
     ];
-  }, [caseStates]);
+  }, [deferredCaseStates]);
 
   const orderedAiResponses = useMemo(() => {
     return AI_RESPONSE_CASE_ORDER
-      .filter((caseId) => typeof aiResponses[caseId] === 'string' && aiResponses[caseId].trim())
+      .filter((caseId) => typeof deferredAiResponses[caseId] === 'string' && deferredAiResponses[caseId].trim())
       .map((caseId) => {
-        const responseText = aiResponses[caseId].trim();
+        const responseText = deferredAiResponses[caseId].trim();
         const expectation = AI_RESPONSE_EXPECTATIONS[caseId];
         const isMatch = expectation ? expectation.matches(responseText) : true;
         return {
@@ -1906,7 +1956,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           statusMark: isMatch ? '✓' : '✗',
         };
       });
-  }, [aiResponses]);
+  }, [deferredAiResponses]);
+
+  const renderedLogText = useMemo(() => (
+    deferredLogs.length > 0
+      ? deferredLogs.map((entry) => `[${new Date(entry.at).toLocaleTimeString()}]${entry.caseId ? ` [${entry.caseId}]` : ''} ${entry.message}`).join('\n')
+      : 'No smoke run started yet.'
+  ), [deferredLogs]);
 
   const durationText = startedAt
     ? `${Math.max(0, Math.round(((finishedAt || Date.now()) - startedAt) / 1000))}s`
@@ -1983,7 +2039,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           <div className="global-modal__section">
             <div className="global-modal__section-title">Cases</div>
             <div style={{ display: 'grid', gap: '0.65rem' }}>
-              {caseStates.map((entry) => {
+              {deferredCaseStates.map((entry) => {
                 const isActive = activeCaseId === entry.id && suiteStatus === 'running';
                 return (
                   <div key={entry.id} data-testid={`smoke-runner-case-${entry.id}`} style={{
@@ -2052,19 +2108,6 @@ export function SmokeRunner({ serverOrigin, onClose }) {
               })}</pre>
             </div>
             <div className="global-modal__section">
-              <div className="global-modal__section-title">Current</div>
-              <pre
-                className="global-modal__pre"
-                style={{ maxHeight: '14rem' }}
-                data-testid="smoke-runner-current-state"
-              >{jsonText({
-                activeCaseId: activeCaseId || null,
-                suiteStatus,
-                startedAt: startedAt ? new Date(startedAt).toISOString() : null,
-                finishedAt: finishedAt ? new Date(finishedAt).toISOString() : null,
-              })}</pre>
-            </div>
-            <div className="global-modal__section">
               <div className="global-modal__section-title">AI Responses</div>
               <div
                 className="global-modal__pre"
@@ -2092,9 +2135,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
               className="global-modal__pre"
               style={{ height: '100%', maxHeight: 'none', minHeight: '12rem' }}
               data-testid="smoke-runner-log"
-            >{logs.length > 0
-              ? logs.map((entry) => `[${new Date(entry.at).toLocaleTimeString()}]${entry.caseId ? ` [${entry.caseId}]` : ''} ${entry.message}`).join('\n')
-              : 'No smoke run started yet.'}</pre>
+            >{renderedLogText}</pre>
           </div>
         </div>
       </div>
