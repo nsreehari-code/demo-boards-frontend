@@ -75,14 +75,7 @@ export function createBoardTestHarness({ boardId, clientId = createClientId() } 
   let disposed = false;
 
   const frames = [];
-  const chatEvents = [];
   const boardEvents = [];
-
-  const getChatEvents = (cardId = '') => {
-    const normalizedCardId = typeof cardId === 'string' ? cardId.trim() : '';
-    if (!normalizedCardId) return [...chatEvents];
-    return chatEvents.filter((event) => event.cardId === normalizedCardId);
-  };
 
   const getBoardEvents = () => [...boardEvents];
 
@@ -93,16 +86,6 @@ export function createBoardTestHarness({ boardId, clientId = createClientId() } 
     }
     if (payload?.kind === 'notification-batch' && Array.isArray(payload.notifications)) {
       for (const notification of payload.notifications) {
-        if (notification?.kind === 'card_chats' && notification.cardId) {
-          chatEvents.push({
-            at: Date.now(),
-            cardId: notification.cardId,
-            processing: !!notification.processing,
-            receiving: !!notification.receiving,
-            messageCount: Array.isArray(notification.messages) ? notification.messages.length : 0,
-            messages: Array.isArray(notification.messages) ? notification.messages : EMPTY_ARRAY,
-          });
-        }
         if ((notification?.kind === 'card_removed' || notification?.kind === 'card_refreshed') && notification.cardId) {
           boardEvents.push({
             at: Date.now(),
@@ -140,7 +123,6 @@ export function createBoardTestHarness({ boardId, clientId = createClientId() } 
     getCardRuntime: (cardId) => snapshot?.boardStatus?.cardRuntimesById?.[cardId] ?? null,
     getComputedValues: (cardId) => snapshot?.boardCardComputedValues?.[cardId] ?? null,
     getChatState: (cardId) => snapshot?.cardChatViews?.[cardId]?.chatState ?? null,
-    getChatEvents,
     getBoardEvents,
     async start({ runInit = true } = {}) {
       if (disposed) {
@@ -184,11 +166,9 @@ export function createBoardTestHarness({ boardId, clientId = createClientId() } 
     waitForChatPredicate(cardId, predicate, timeoutMs = 45_000, label = 'chat predicate') {
       return waitUntil(() => {
         const chatState = snapshot?.cardChatViews?.[cardId]?.chatState ?? null;
-        const events = getChatEvents(cardId);
         return predicate({
           cardId,
           chatState,
-          events,
           messages: Array.isArray(chatState?.messages) ? chatState.messages : EMPTY_ARRAY,
           snapshot,
         });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import {
   addChatEntryAndAnyAttachments,
+  dispatchAction,
   subscribeCardChats,
   subscribeWatchparty,
   unsubscribeCardChats,
@@ -10,11 +11,8 @@ import {
 import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import { useBoardInfo, useCardChatProcessing, useCardChatViews, useCardChatWatchParty } from './useSseSlices.js';
 
-export function useChatState(boardId, cardId) {
+export function useChatActions(boardId, cardId) {
   const boardInfo = useBoardInfo(boardId);
-  const chat = useCardChatViews(boardId, cardId);
-
-  const chatState = chat?.chatState ?? null;
   const boardSseClientId = boardInfo?.sseClientId ?? null;
 
   const sendChat = useCallback(
@@ -36,6 +34,18 @@ export function useChatState(boardId, cardId) {
     [boardId, cardId],
   );
 
+  const sendChatAction = useCallback(
+    (text, payload = {}) => {
+      const { turnId } = payload ?? {};
+      const normalizedTurnId = typeof turnId === 'string' && turnId.trim() ? turnId.trim() : '';
+      return dispatchAction(boardId, cardId, 'chat-send', {
+        text,
+        ...(normalizedTurnId ? { 'turn-id': normalizedTurnId } : null),
+      });
+    },
+    [boardId, cardId],
+  );
+
   const subscribeChat = useCallback(() => {
     if (!boardSseClientId) return Promise.resolve(null);
     return subscribeCardChats(boardId, cardId, boardSseClientId);
@@ -46,21 +56,33 @@ export function useChatState(boardId, cardId) {
     return unsubscribeCardChats(boardId, cardId, boardSseClientId);
   }, [boardId, cardId, boardSseClientId]);
 
-  const chatActions = useMemo(() => ({
+  return useMemo(() => ({
     sendChat,
+    sendChatAction,
     uploadFileForChat: uploadChatFile,
     subscribeChat,
     unsubscribeChat,
-  }), [sendChat, uploadChatFile, subscribeChat, unsubscribeChat]);
+  }), [sendChat, sendChatAction, uploadChatFile, subscribeChat, unsubscribeChat]);
+}
+
+export function useChatState(boardId, cardId) {
+  const chat = useCardChatViews(boardId, cardId);
+  const boardInfo = useBoardInfo(boardId);
+  const chatActions = useChatActions(boardId, cardId);
+
+  const chatState = chat?.chatState ?? null;
+  const boardSseClientId = boardInfo?.sseClientId ?? null;
 
   return useMemo(() => {
-    if (!chat || !cardId) return null;
+    if (!cardId) return null;
     return {
-      ...(chatState ?? {}),
+      messages: Array.isArray(chatState?.messages) ? chatState.messages : [],
+      processing: chatState?.processing === true,
+      receiving: chatState?.receiving === true,
       boardSseClientId,
       chatActions,
     };
-  }, [chat, cardId, chatState, boardSseClientId, chatActions]);
+  }, [cardId, chatState, boardSseClientId, chatActions]);
 }
 
 export function useChatStateAIWorking(boardId, cardId) {

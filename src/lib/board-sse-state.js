@@ -1,8 +1,5 @@
-import {
-  isBoardChangeNotification,
-  isChatScopedRuntimeNotification,
-  runtimeNotificationsFromPayload,
-} from 'yaml-flow/notification-consumer';
+import { runtimeNotificationsFromPayload } from 'yaml-flow/notification-consumer';
+import { applyNotification as applyBoardNotification } from 'yaml-flow/board-state-reducer';
 
 export const EMPTY_OBJECT = Object.freeze({});
 export const EMPTY_ARRAY = Object.freeze([]);
@@ -164,6 +161,94 @@ function buildState(payload) {
   };
 }
 
+function buildReducerModel(snapshot, cardId) {
+  const definitionAndData = snapshot?.cardDefinitionsAndData?.[cardId] ?? null;
+  const statusEntry = snapshot?.boardStatus?.cardRuntimesById?.[cardId] ?? null;
+  const computedValues = snapshot?.boardCardComputedValues?.[cardId] ?? EMPTY_OBJECT;
+  const cardContent = definitionAndData?.cardContent ?? null;
+  const requires = {};
+  for (const token of normalizeBootstrapTokens(cardContent?.requires)) {
+    requires[token] = Object.prototype.hasOwnProperty.call(snapshot?.boardDataObjects ?? EMPTY_OBJECT, token)
+      ? snapshot.boardDataObjects[token]
+      : null;
+  }
+  return {
+    id: cardId,
+    card: cardContent,
+    card_data: definitionAndData?.cardData ?? EMPTY_OBJECT,
+    requires,
+    computed_values: computedValues,
+    runtime_state: {
+      task_status: statusEntry?.status ?? null,
+      runtime: statusEntry?.runtime ?? EMPTY_OBJECT,
+    },
+    card_chats: snapshot?.cardChatViews?.[cardId]?.chatState ?? null,
+  };
+}
+
+function buildReducerState(snapshot) {
+  const cardIds = Object.keys(snapshot?.cardDefinitionsAndData ?? EMPTY_OBJECT);
+  const modelsById = Object.fromEntries(cardIds.map((cardId) => [cardId, buildReducerModel(snapshot, cardId)]));
+  return {
+    payload: snapshot,
+    cardIds,
+    modelsById,
+  };
+}
+
+function projectSnapshotFromReducer(base, reducerState, boardDataObjects, boardStatusSummary, cardChatWatchParties) {
+  const cardDefinitionsAndData = {};
+  const boardCardComputedValues = {};
+  const cardChatViews = {};
+  const cardRuntimesById = {};
+
+  for (const cardId of reducerState.cardIds) {
+    const model = reducerState.modelsById[cardId];
+    if (!model) continue;
+
+    const previousDefinitionAndData = base?.cardDefinitionsAndData?.[cardId] ?? null;
+    const nextCardContent = model.card ?? previousDefinitionAndData?.cardContent ?? null;
+    const nextCardData = model.card_data ?? EMPTY_OBJECT;
+    cardDefinitionsAndData[cardId] = previousDefinitionAndData
+      && previousDefinitionAndData.cardContent === nextCardContent
+      && previousDefinitionAndData.cardData === nextCardData
+      ? previousDefinitionAndData
+      : { cardContent: nextCardContent, cardData: nextCardData };
+
+    const previousComputedValues = base?.boardCardComputedValues?.[cardId] ?? EMPTY_OBJECT;
+    const nextComputedValues = model.computed_values ?? EMPTY_OBJECT;
+    boardCardComputedValues[cardId] = previousComputedValues === nextComputedValues
+      ? previousComputedValues
+      : nextComputedValues;
+
+    const previousChatView = base?.cardChatViews?.[cardId] ?? null;
+    const nextChatState = model.card_chats ?? createChatState();
+    cardChatViews[cardId] = previousChatView && previousChatView.chatState === nextChatState
+      ? previousChatView
+      : createCardChatView({ chatState: nextChatState });
+
+    const previousRuntime = base?.boardStatus?.cardRuntimesById?.[cardId] ?? { status: '', runtime: EMPTY_OBJECT };
+    const nextRuntime = model.runtime_state?.runtime ?? previousRuntime.runtime;
+    const nextStatus = model.runtime_state?.task_status ?? previousRuntime.status;
+    cardRuntimesById[cardId] = previousRuntime.status === nextStatus && previousRuntime.runtime === nextRuntime
+      ? previousRuntime
+      : { status: nextStatus, runtime: nextRuntime };
+  }
+
+  return {
+    ...base,
+    boardStatus: {
+      summary: boardStatusSummary,
+      cardRuntimesById,
+    },
+    boardDataObjects,
+    boardCardComputedValues,
+    cardDefinitionsAndData,
+    cardChatViews,
+    cardChatWatchParties,
+  };
+}
+
 export function applyBoardSseFrame(prev, payload) {
   if (Array.isArray(payload?.cardDefinitions)) {
     return buildState(payload);
@@ -175,30 +260,10 @@ export function applyBoardSseFrame(prev, payload) {
   }
 
   const base = prev ?? createEmptyBoardSnapshot();
-  let boardStatus = base.boardStatus;
-  let cardRuntimesById = boardStatus.cardRuntimesById ?? EMPTY_OBJECT;
   let boardDataObjects = base.boardDataObjects ?? EMPTY_OBJECT;
-  let boardCardComputedValues = base.boardCardComputedValues ?? EMPTY_OBJECT;
-  let cardDefinitionsAndData = base.cardDefinitionsAndData ?? EMPTY_OBJECT;
-  let cardChatViews = base.cardChatViews ?? EMPTY_OBJECT;
   let cardChatWatchParties = base.cardChatWatchParties ?? EMPTY_OBJECT;
-  let boardStatusChanged = false;
-  let cardRuntimesChanged = false;
-
-  const ensureBoardStatus = () => {
-    if (!boardStatusChanged) {
-      boardStatus = { ...boardStatus };
-      boardStatusChanged = true;
-    }
-  };
-
-  const ensureCardRuntimes = () => {
-    if (!cardRuntimesChanged) {
-      cardRuntimesById = { ...cardRuntimesById };
-      cardRuntimesChanged = true;
-      ensureBoardStatus();
-    }
-  };
+  let boardStatusSummary = base.boardStatus?.summary ?? null;
+  const reducerNotifications = [];
 
   for (const notification of notifications) {
     if (notification.kind === 'card_watchparty' && notification.cardId && notification.channel) {
@@ -221,106 +286,46 @@ export function applyBoardSseFrame(prev, payload) {
       continue;
     }
 
-    if (isChatScopedRuntimeNotification(notification)) {
-      if (notification.kind === 'card_chats' && notification.cardId) {
-        if (cardChatViews === (prev?.cardChatViews ?? EMPTY_OBJECT)) {
-          cardChatViews = { ...cardChatViews };
-        }
-        cardChatViews[notification.cardId] = createCardChatView({
-          chatState: createChatState(notification),
-        });
-      }
-      continue;
-    }
-
-    if (!isBoardChangeNotification(notification)) {
-      continue;
-    }
-
-    if (notification.kind === 'status') {
-      if (notification.status && 'summary' in notification.status) {
-        ensureBoardStatus();
-        boardStatus.summary = notification.status.summary ?? null;
-      }
-      const cards = notification.status?.cards ?? [];
-      if (cards.length > 0) {
-        ensureCardRuntimes();
-        for (const entry of cards) {
-          const previousStatus = cardRuntimesById[entry.name] ?? { status: '', runtime: EMPTY_OBJECT };
-          cardRuntimesById[entry.name] = {
-            ...previousStatus,
-            status: entry.status,
-            runtime: entry.runtime ?? previousStatus.runtime,
-          };
-        }
-      }
-    } else if (notification.kind === 'data_object' && notification.key) {
+    if (notification.kind === 'data_object' && notification.key) {
       if (boardDataObjects === (prev?.boardDataObjects ?? EMPTY_OBJECT)) {
         boardDataObjects = { ...boardDataObjects };
       }
       boardDataObjects[notification.key] = notification.payload;
-    } else if (notification.kind === 'computed_values' && notification.cardId) {
-      if (boardCardComputedValues === (prev?.boardCardComputedValues ?? EMPTY_OBJECT)) {
-        boardCardComputedValues = { ...boardCardComputedValues };
-      }
-      boardCardComputedValues[notification.cardId] = notification.values ?? EMPTY_OBJECT;
-    } else if (notification.kind === 'card_refreshed' && notification.cardId && notification.card) {
-      const { computed_values, runtime, status, ...cardContentPatch } = notification.card;
-      if (cardDefinitionsAndData === (prev?.cardDefinitionsAndData ?? EMPTY_OBJECT)) {
-        cardDefinitionsAndData = { ...cardDefinitionsAndData };
-      }
-      const previousDefinitionAndData = cardDefinitionsAndData[notification.cardId] ?? {
-        cardContent: null,
-        cardData: EMPTY_OBJECT,
-      };
-      const nextCardContent = previousDefinitionAndData.cardContent
-        ? { ...previousDefinitionAndData.cardContent, ...cardContentPatch }
-        : cardContentPatch;
-      const nextCardData = nextCardContent?.card_data ?? EMPTY_OBJECT;
-      cardDefinitionsAndData[notification.cardId] = {
-        cardContent: nextCardContent,
-        cardData: nextCardData,
-      };
-
-      if (status !== undefined || runtime !== undefined) {
-        ensureCardRuntimes();
-        const previousStatus = cardRuntimesById[notification.cardId] ?? { status: '', runtime: EMPTY_OBJECT };
-        cardRuntimesById[notification.cardId] = {
-          ...previousStatus,
-          ...(status !== undefined ? { status } : null),
-          ...(runtime !== undefined ? { runtime } : null),
-        };
-      }
-
-      if (computed_values !== undefined) {
-        if (boardCardComputedValues === (prev?.boardCardComputedValues ?? EMPTY_OBJECT)) {
-          boardCardComputedValues = { ...boardCardComputedValues };
-        }
-        boardCardComputedValues[notification.cardId] = computed_values ?? EMPTY_OBJECT;
-      }
+    } else if (notification.kind === 'status' && notification.status && 'summary' in notification.status) {
+      boardStatusSummary = notification.status.summary ?? null;
     }
+
+    reducerNotifications.push(notification);
   }
 
-  if (boardStatusChanged) {
-    boardStatus.cardRuntimesById = cardRuntimesById;
-  }
+  const reducerState = buildReducerState(base);
+  const nextReducerState = reducerNotifications.length > 0
+    ? applyBoardNotification(
+      reducerState,
+      reducerNotifications,
+      (snapshotLikePayload, cardId) => buildReducerModel(snapshotLikePayload, cardId),
+      () => base,
+    )
+    : reducerState;
 
-  const anyChanged = boardStatusChanged
-    || boardDataObjects !== (prev?.boardDataObjects ?? EMPTY_OBJECT)
-    || boardCardComputedValues !== (prev?.boardCardComputedValues ?? EMPTY_OBJECT)
-    || cardDefinitionsAndData !== (prev?.cardDefinitionsAndData ?? EMPTY_OBJECT)
-    || cardChatViews !== (prev?.cardChatViews ?? EMPTY_OBJECT)
-    || cardChatWatchParties !== (prev?.cardChatWatchParties ?? EMPTY_OBJECT);
-
-  if (!anyChanged && prev) return prev;
-
-  return {
-    ...base,
-    boardStatus,
+  const nextSnapshot = projectSnapshotFromReducer(
+    base,
+    nextReducerState,
     boardDataObjects,
-    boardCardComputedValues,
-    cardDefinitionsAndData,
-    cardChatViews,
+    boardStatusSummary,
     cardChatWatchParties,
-  };
+  );
+
+  const anyChanged = nextSnapshot.boardStatus !== base.boardStatus
+    || nextSnapshot.boardDataObjects !== base.boardDataObjects
+    || nextSnapshot.boardCardComputedValues !== base.boardCardComputedValues
+    || nextSnapshot.cardDefinitionsAndData !== base.cardDefinitionsAndData
+    || nextSnapshot.cardChatViews !== base.cardChatViews
+    || nextSnapshot.cardChatWatchParties !== base.cardChatWatchParties;
+
+  if (!anyChanged && prev) {
+    return prev;
+  }
+
+  return nextSnapshot;
 }

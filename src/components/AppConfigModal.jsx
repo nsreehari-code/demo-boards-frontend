@@ -9,9 +9,11 @@ import {
   hasStoredAppConfigOverride,
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
+import { useManageBoards } from '../hooks/useManageBoards.js';
 import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/client.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
+import { SmokeRunner } from './SmokeRunner.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
 const SEED_BOARDS_BASE_URL = `${import.meta.env.BASE_URL}assets/seed-boards/`;
@@ -86,145 +88,6 @@ function normalizeSeedManifestEntries(payload) {
       };
     })
     .filter(Boolean);
-}
-
-function normalizeManagedBoardEntries(payload) {
-  const boards = Array.isArray(payload?.boards) ? payload.boards : [];
-  return boards
-    .map((board) => {
-      const id = typeof board?.id === 'string' ? board.id.trim() : '';
-      const label = typeof board?.label === 'string' ? board.label.trim() : '';
-      if (!id) return null;
-      return {
-        id,
-        label: label || id,
-        metadata: board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
-          ? board.metadata
-          : {},
-      };
-    })
-    .filter(Boolean);
-}
-
-async function fetchManagedBoards(serverOrigin) {
-  const normalizedOrigin = typeof serverOrigin === 'string'
-    ? serverOrigin.trim().replace(/\/+$/, '')
-    : '';
-  if (!normalizedOrigin) {
-    return [];
-  }
-
-  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subcommand: 'list-boards' }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load boards: ${response.status}`);
-  }
-
-  const payload = await response.json();
-  if (payload?.status !== 'success') {
-    const message = typeof payload?.error === 'string' && payload.error.trim()
-      ? payload.error.trim()
-      : 'Board listing failed';
-    throw new Error(message);
-  }
-
-  return normalizeManagedBoardEntries(payload.data);
-}
-
-async function addManagedBoard(serverOrigin, candidate) {
-  const normalizedOrigin = typeof serverOrigin === 'string'
-    ? serverOrigin.trim().replace(/\/+$/, '')
-    : '';
-  if (!normalizedOrigin) {
-    throw new Error('Server origin is required');
-  }
-
-  const normalized = {
-    boardId: typeof candidate?.boardId === 'string' ? candidate.boardId.trim() : '',
-    label: typeof candidate?.label === 'string' ? candidate.label.trim() : '',
-    ai: typeof candidate?.ai === 'string' ? candidate.ai.trim() : '',
-    aiWorkspaceTemplate: typeof candidate?.aiWorkspaceTemplate === 'string' ? candidate.aiWorkspaceTemplate.trim() : '',
-    refsTemplate: typeof candidate?.refsTemplate === 'string' ? candidate.refsTemplate.trim() : '',
-  };
-
-  if (!normalized.boardId) {
-    throw new Error('Board id is required');
-  }
-  if (!normalized.label) {
-    throw new Error('Label is required');
-  }
-  if (!normalized.ai) {
-    throw new Error('AI is required');
-  }
-  if (!normalized.aiWorkspaceTemplate) {
-    throw new Error('AI workspace template is required');
-  }
-  if (!normalized.refsTemplate) {
-    throw new Error('Refs template is required');
-  }
-
-  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      subcommand: 'add-board',
-      args: {
-        boardId: normalized.boardId,
-        record: {
-          label: normalized.label,
-          ai: normalized.ai,
-          aiWorkspaceTemplate: normalized.aiWorkspaceTemplate,
-          refsTemplate: normalized.refsTemplate,
-        },
-      },
-    }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.status !== 'success') {
-    const message = typeof payload?.error === 'string' && payload.error.trim()
-      ? payload.error.trim()
-      : `Failed to add board: ${response.status}`;
-    throw new Error(message);
-  }
-
-  return payload?.data?.board ?? null;
-}
-
-async function saveBoardMeta(serverOrigin, boardId, metadata) {
-  const normalizedOrigin = typeof serverOrigin === 'string'
-    ? serverOrigin.trim().replace(/\/+$/, '')
-    : '';
-  if (!normalizedOrigin) {
-    throw new Error('Server origin is required');
-  }
-  const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
-  if (!normalizedBoardId) {
-    throw new Error('Board id is required');
-  }
-
-  const response = await fetch(`${normalizedOrigin}/manage-boards`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      subcommand: 'save-meta',
-      args: {
-        boardId: normalizedBoardId,
-        metadata,
-      },
-    }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.status !== 'success') {
-    const message = typeof payload?.error === 'string' && payload.error.trim()
-      ? payload.error.trim()
-      : `Failed to save board metadata: ${response.status}`;
-    throw new Error(message);
-  }
-
-  return payload?.data?.board ?? null;
 }
 
 function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '' }) {
@@ -366,12 +229,10 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [seedManifestError, setSeedManifestError] = useState('');
   const [seedManifestEntries, setSeedManifestEntries] = useState([]);
   const [selectedSeedFileName, setSelectedSeedFileName] = useState('');
-  const [loadingBoardOptions, setLoadingBoardOptions] = useState(false);
-  const [boardOptionsError, setBoardOptionsError] = useState('');
-  const [boardOptions, setBoardOptions] = useState([]);
   const [addBoardOpen, setAddBoardOpen] = useState(false);
   const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
   const [addBoardError, setAddBoardError] = useState('');
+  const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
   const [saveMetaError, setSaveMetaError] = useState('');
   const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
   const importFileInputRef = useRef(null);
@@ -380,27 +241,20 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const runtimeAlertBadge = formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
     ? 'Runtime storage init failed'
     : 'Server unreachable';
-
-  const reloadBoardOptions = useCallback(async (serverOrigin) => {
-    setLoadingBoardOptions(true);
-    setBoardOptionsError('');
-    try {
-      const entries = await fetchManagedBoards(serverOrigin);
-      setBoardOptions(entries);
-    } catch (error) {
-      setBoardOptions([]);
-      setBoardOptionsError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setLoadingBoardOptions(false);
-    }
-  }, []);
+  const {
+    managedBoards: boardOptions,
+    loadingManagedBoards: loadingBoardOptions,
+    manageBoardsError: boardOptionsError,
+    manageBoardsActions,
+  } = useManageBoards(formState.serverOrigin, {
+    enabled: open && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL,
+  });
 
   const handleAddBoard = useCallback(async (candidate) => {
     setAddBoardSubmitting(true);
     setAddBoardError('');
     try {
-      const createdBoard = await addManagedBoard(formState.serverOrigin, candidate);
-      await reloadBoardOptions(formState.serverOrigin);
+      const createdBoard = await manageBoardsActions.addBoard(candidate);
       setFormState((current) => ({
         ...current,
         defaultBoardId: candidate.boardId,
@@ -413,7 +267,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     } finally {
       setAddBoardSubmitting(false);
     }
-  }, [formState.serverOrigin, reloadBoardOptions]);
+  }, [manageBoardsActions]);
 
   useEffect(() => {
     if (autoOpen) {
@@ -480,22 +334,8 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   useEffect(() => {
     if (!open) return undefined;
-
-    if (formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
-      setBoardOptions([]);
-      setBoardOptionsError('');
-      setLoadingBoardOptions(false);
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void reloadBoardOptions(formState.serverOrigin).catch(() => {});
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [formState.serverOrigin, formState.transportMode, open, reloadBoardOptions]);
+    return undefined;
+  }, [formState.serverOrigin, formState.transportMode, open]);
 
   const updateField = (field) => (event) => {
     const value = event.target.value;
@@ -535,11 +375,11 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     window.location.reload();
   }, [formState]);
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = useCallback(async (event) => {
     event.preventDefault();
     if (formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL && formState.defaultBoardId) {
       try {
-        await saveBoardMeta(formState.serverOrigin, formState.defaultBoardId, metadataFromFormState(formState));
+        await manageBoardsActions.saveBoardMeta(formState.defaultBoardId, metadataFromFormState(formState));
         setSaveMetaError('');
       } catch (error) {
         setSaveMetaError(error instanceof Error ? error.message : String(error));
@@ -547,7 +387,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       }
     }
     submitAndReload();
-  };
+  }, [formState, manageBoardsActions, submitAndReload]);
 
   const handleReset = () => {
     clearStoredAppConfigOverride();
@@ -647,6 +487,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     });
   }
 
+  const smokeRunnerEnabled = formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
+    && formState.defaultBoardId === 'live-test';
+  const smokeRunnerTitle = smokeRunnerEnabled
+    ? 'Run the in-app smoke suite against the live-test board'
+    : 'Smoke suite is only available when the selected board id is live-test';
+
   return (
     <>
       <button
@@ -658,6 +504,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         }}
         title="Board settings"
         aria-label="Open board settings"
+        data-testid="open-board-settings"
       >
         <i className="bi bi-gear-fill" />
       </button>
@@ -702,6 +549,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     value={formState.defaultBoardId}
                     onChange={handleBoardSelectionChange}
                     disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
+                    data-testid="board-settings-board-select"
                   >
                     {boardSelectOptions.length === 0 ? (
                       <option value="">
@@ -831,13 +679,25 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 <div className="board-settings-io-card d-flex flex-column gap-3">
                   <div className="d-flex align-items-center justify-content-between gap-2">
                     <div className="board-settings-io-card__title">Server</div>
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary board-button"
-                      onClick={() => setPendingAction('config')}
-                    >
-                      Reset Server
-                    </button>
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary board-button"
+                        onClick={() => setSmokeRunnerOpen(true)}
+                        disabled={!smokeRunnerEnabled}
+                        title={smokeRunnerTitle}
+                        data-testid="board-settings-smoke-test-button"
+                      >
+                        Test
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary board-button"
+                        onClick={() => setPendingAction('config')}
+                      >
+                        Reset Server
+                      </button>
+                    </div>
                   </div>
 
                   <label className="board-settings-field mb-0">
@@ -970,6 +830,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
               onSubmit={handleAddBoard}
               submitting={addBoardSubmitting}
               errorMessage={addBoardError}
+            />
+          ) : null}
+          {smokeRunnerOpen ? (
+            <SmokeRunner
+              serverOrigin={formState.serverOrigin}
+              onClose={() => setSmokeRunnerOpen(false)}
             />
           ) : null}
         </div>

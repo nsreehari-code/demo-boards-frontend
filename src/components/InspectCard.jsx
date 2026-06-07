@@ -1,38 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
-import { callBoardMcp } from '../lib/client.js';
 import { CardBackface } from './CardBackface.jsx';
 import { CardShell } from './CardShell.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
-
-function readJsonResponse(response) {
-  return response.json()
-    .catch(() => null)
-    .then((payload) => {
-      if (!response.ok) {
-        const message = typeof payload?.error === 'string'
-          ? payload.error
-          : `Request failed with status ${response.status}`;
-        throw new Error(message);
-      }
-      return payload;
-    });
-}
-
-function unwrapMcpToolPayload(payload) {
-  if (payload && typeof payload === 'object' && payload.status === 'fail') {
-    const message = typeof payload.error === 'string' && payload.error.trim()
-      ? payload.error.trim()
-      : 'MCP tool request failed';
-    throw new Error(message);
-  }
-
-  if (payload && typeof payload === 'object' && payload.status === 'success' && 'data' in payload) {
-    return payload.data;
-  }
-
-  return payload;
-}
 
 function normalizeSourceFlightData(data) {
   if (!data || typeof data !== 'object') {
@@ -238,13 +208,9 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
     });
 
     try {
-      const payload = unwrapMcpToolPayload(await readJsonResponse(
-        await callBoardMcp(boardId, 'preflight.run-single-source-in-live-card', {
-          card_id: cardId,
-          source_idx: sourceIndex,
-          mock_requires: cardState?.requiresDataObjects,
-        }),
-      ));
+      const payload = await cardState.cardActions.runSingleSourceInLiveCard(sourceIndex, {
+        mockRequires: cardState?.requiresDataObjects,
+      });
 
       if (!mountedRef.current) {
         return;
@@ -284,12 +250,9 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
     });
 
     try {
-      const payload = unwrapMcpToolPayload(await readJsonResponse(
-        await callBoardMcp(boardId, 'preflight.run-one-cycle-with-candidate-card', {
-          candidate_card_content: cardState.cardContent,
-          mock_requires: cardState.requiresDataObjects,
-        }),
-      ));
+      const payload = await cardState.cardActions.runOneCycleWithCandidateCard(cardState.cardContent, {
+        mockRequires: cardState.requiresDataObjects,
+      });
 
       if (!mountedRef.current) {
         return;
@@ -313,7 +276,7 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }, [boardId, cardId, cardState, flightDisabled]);
+  }, [cardId, cardState, flightDisabled]);
 
   if (!cardState?.cardContent) {
     return null;

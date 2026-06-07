@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import { openBoardSse, refreshCard } from '../lib/client.js';
+import { fetchBoardOneShotPayload, openBoardSse, refreshCard } from '../lib/client.js';
 import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import {
   applyBoardSseFrame,
@@ -43,6 +43,14 @@ function startBoardStore(boardId, store) {
     store.clientId = clientId;
     const es = openBoardSse(boardId, clientId);
     store.es = es;
+
+    void fetchBoardOneShotPayload(boardId).then((payload) => {
+      if (!store.started) return;
+      store.snapshot = applyBoardSseFrame(store.snapshot ?? createEmptyBoardSnapshot(boardId), payload);
+      emitBoardStore(store);
+    }).catch((err) => {
+      console.debug('[useBoardSSE] one-shot bootstrap failed', err);
+    });
 
     es.onopen = () => {
       if (!store.started) return;

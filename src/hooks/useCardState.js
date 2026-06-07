@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { dispatchAction, refreshCard, patchCard, uploadFileForChat } from '../lib/client.js';
+import { callBoardMcp, dispatchAction, refreshCard, patchCard, uploadFileForChat } from '../lib/client.js';
 import {
   resolveCanRefresh,
   resolveRequireTokens,
@@ -10,6 +10,35 @@ import {
 } from './useSseSlices.js';
 
 const EMPTY_FILES = Object.freeze([]);
+
+function readJsonResponse(response) {
+  return response.json()
+    .catch(() => null)
+    .then((payload) => {
+      if (!response.ok) {
+        const message = typeof payload?.error === 'string'
+          ? payload.error
+          : `Request failed with status ${response.status}`;
+        throw new Error(message);
+      }
+      return payload;
+    });
+}
+
+function unwrapMcpToolPayload(payload) {
+  if (payload && typeof payload === 'object' && payload.status === 'fail') {
+    const message = typeof payload.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : 'MCP tool request failed';
+    throw new Error(message);
+  }
+
+  if (payload && typeof payload === 'object' && payload.status === 'success' && 'data' in payload) {
+    return payload.data;
+  }
+
+  return payload;
+}
 
 export function useCardStateFilesData(boardId, cardId) {
   const definitionAndData = useCardDefinitionAndData(boardId, cardId);
@@ -45,7 +74,56 @@ export function useCardState(boardId, cardId) {
     patch: (patch) => patchCard(boardId, cardId, patch),
     dispatchAction: (type, payload = {}) => dispatchAction(boardId, cardId, type, payload),
     uploadFileForChat: (file) => uploadFileForChat(boardId, cardId, file),
-  }), [boardId, canRefresh, cardId]);
+    discoverSourceKinds: async () => unwrapMcpToolPayload(await readJsonResponse(
+      await callBoardMcp(boardId, 'discover.source-kinds', {}),
+    )),
+    validateCandidateCardDefinition: async (candidateCardContent = cardContent) => unwrapMcpToolPayload(await readJsonResponse(
+      await callBoardMcp(boardId, 'preflight.validate-candidate-card-definition', {
+        candidate_card_content: candidateCardContent,
+      }),
+    )),
+    runSingleSourceInLiveCard: async (sourceIndex, options = {}) => {
+      const { mockRequires = requiresDataObjects } = options ?? {};
+      return unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.run-single-source-in-live-card', {
+          card_id: cardId,
+          source_idx: sourceIndex,
+          mock_requires: mockRequires,
+        }),
+      ));
+    },
+    runSingleSourceInCandidateCard: async (candidateCardContent = cardContent, sourceIndex, options = {}) => {
+      const { mockRequires = requiresDataObjects, mockProjections } = options ?? {};
+      return unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.run-single-source-in-candidate-card', {
+          candidate_card_content: candidateCardContent,
+          source_idx: sourceIndex,
+          ...(mockRequires ? { mock_requires: mockRequires } : {}),
+          ...(mockProjections ? { mock_projections: mockProjections } : {}),
+        }),
+      ));
+    },
+    probeSingleSourceInCandidateCard: async (candidateCardContent = cardContent, sourceIndex, options = {}) => {
+      const { mockRequires = requiresDataObjects, mockProjections } = options ?? {};
+      return unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.probe-single-source-in-candidate-card', {
+          candidate_card_content: candidateCardContent,
+          source_idx: sourceIndex,
+          ...(mockRequires ? { mock_requires: mockRequires } : {}),
+          ...(mockProjections ? { mock_projections: mockProjections } : {}),
+        }),
+      ));
+    },
+    runOneCycleWithCandidateCard: async (candidateCardContent = cardContent, options = {}) => {
+      const { mockRequires = requiresDataObjects } = options ?? {};
+      return unwrapMcpToolPayload(await readJsonResponse(
+        await callBoardMcp(boardId, 'preflight.run-one-cycle-with-candidate-card', {
+          candidate_card_content: candidateCardContent,
+          mock_requires: mockRequires,
+        }),
+      ));
+    },
+  }), [boardId, canRefresh, cardContent, cardId, requiresDataObjects]);
 
   return {
     boardSseClientId: boardInfo?.sseClientId ?? null,

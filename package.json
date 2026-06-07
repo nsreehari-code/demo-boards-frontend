@@ -8,6 +8,8 @@
     "build": "node scripts/build.mjs",
     "test:smoke": "playwright test tests/board-smoke.spec.js",
     "test:smoke:headed": "playwright test tests/board-smoke.spec.js --headed",
+    "test:smokerunner": "playwright test -c playwright.smokerunner.config.js",
+    "test:smokerunner:headed": "playwright test -c playwright.smokerunner.config.js --headed",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.mjs"
   },

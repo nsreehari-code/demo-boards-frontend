@@ -135,11 +135,27 @@ const ensureOkResponse = async (response, operation) => {
   throw new Error(`${operation} failed with status ${response?.status ?? 'unknown'}${suffix}`);
 };
 
+const parseOneShotSsePayload = (rawText) => {
+  const dataLine = String(rawText || '')
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('data: '));
+  if (!dataLine) {
+    throw new Error('sse one-shot bootstrap missing data frame');
+  }
+  return JSON.parse(dataLine.slice(6));
+};
+
 export const healthz = () =>
   boardTransport.healthz();
 
+export const fetchBoardOneShotPayload = async (boardId) => {
+  const response = await boardTransport.initBoard(boardId);
+  await ensureOkResponse(response, 'sse one-shot bootstrap');
+  return parseOneShotSsePayload(await response.text());
+};
+
 export const initBoard = (boardId) =>
-  boardTransport.initBoard(boardId).then((response) => ensureOkResponse(response, 'sse one-shot bootstrap'));
+  fetchBoardOneShotPayload(boardId);
 
 export const refreshCard = (boardId, cardId) =>
   boardTransport.refreshCard(boardId, cardId);
