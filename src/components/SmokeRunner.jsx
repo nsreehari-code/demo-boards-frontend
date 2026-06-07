@@ -415,6 +415,39 @@ function readLatestAssistantText(messages) {
   return latestAssistant ? String(latestAssistant.text || '').trim() : '';
 }
 
+function buildAttachmentMetadataSnapshot(file) {
+  if (!file || typeof file !== 'object') {
+    return null;
+  }
+  return {
+    stored_name: String(file?.stored_name || ''),
+    name: String(file?.name || ''),
+    chat: file?.chat === true,
+    hasPath: Object.prototype.hasOwnProperty.call(file, 'path'),
+    keys: Object.keys(file).sort(),
+  };
+}
+
+function buildChatTurnSnapshot(messages) {
+  return (Array.isArray(messages) ? messages : EMPTY_ARRAY).map((message) => ({
+    role: String(message?.role || ''),
+    text: String(message?.text || ''),
+    turn: String(message?.turn || ''),
+  }));
+}
+
+function createSmokeAssertionError(message, comparison) {
+  const error = new Error(message);
+  error.smokeComparison = comparison;
+  return error;
+}
+
+function readSmokeComparison(error) {
+  return error && typeof error === 'object' && error.smokeComparison && typeof error.smokeComparison === 'object'
+    ? error.smokeComparison
+    : null;
+}
+
 function createInitialCaseState() {
   return SMOKE_CASES.map((entry) => ({
     id: entry.id,
@@ -423,6 +456,7 @@ function createInitialCaseState() {
     reason: entry.reason || '',
     status: 'pending',
     detail: '',
+    comparison: null,
     startedAt: 0,
     finishedAt: 0,
   }));
@@ -999,6 +1033,16 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     return cardState?.cardContent ? cardState : false;
   }, timeoutMs, label), [waitUntil]);
 
+  const waitForStoredCardFile = useCallback(async (cardId, storedName, label, timeoutMs = 15_000) => waitUntil(() => {
+    const cardState = cardStatesRef.current[cardId];
+    if (!cardState?.cardContent) {
+      return false;
+    }
+    const files = Array.isArray(cardState?.cardData?.files) ? cardState.cardData.files : EMPTY_ARRAY;
+    const file = files.find((entry) => String(entry?.stored_name || '') === String(storedName || ''));
+    return file ? { cardState, files, file } : false;
+  }, timeoutMs, label), [waitUntil]);
+
   const waitForCardStatus = useCallback(async (cardId, expectedStatus, historyStart, label, timeoutMs = 30_000) => waitUntil(() => {
     const history = runtimeRef.current.statusHistory.slice(historyStart);
     for (const entry of history) {
@@ -1075,7 +1119,15 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       2_000,
     );
     if (!assistantPoll.matched) {
-      throw new Error(`warmup probe final reply not found for turn ${turnId}`);
+      throw createSmokeAssertionError(`warmup probe final reply not found for turn ${turnId}`, {
+        expected: {
+          assistantReplyIncludes: `Echo: ${promptText}`,
+        },
+        found: {
+          latestAssistantReply: readLatestAssistantText(assistantPoll.messages),
+          turnMessages: buildChatTurnSnapshot(assistantPoll.messages),
+        },
+      });
     }
 
     appendLog('', `[warmup] polling processing-off for ${WARMUP_CHAT_CARD_ID}`);
@@ -1372,14 +1424,61 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       });
       const uploadedFile = Array.isArray(uploadResult?.files) ? uploadResult.files[0] : null;
       if (!uploadedFile || Object.prototype.hasOwnProperty.call(uploadedFile, 'path')) {
-        throw new Error('chat attachment metadata invalid after upload');
+        throw createSmokeAssertionError('chat attachment metadata invalid after upload', {
+          expected: {
+            uploadFile: {
+              present: true,
+              hasPath: false,
+            },
+          },
+          found: {
+            uploadFile: buildAttachmentMetadataSnapshot(uploadedFile),
+          },
+        });
       }
 
-      const storedCard = await waitForCardStateData(T4_CHAT_CARD_ID, `hook card state for ${T4_CHAT_CARD_ID}`);
-      const storedFiles = Array.isArray(storedCard?.cardData?.files) ? storedCard.cardData.files : EMPTY_ARRAY;
-      const storedFile = storedFiles.find((entry) => String(entry?.stored_name || '') === String(uploadedFile?.stored_name || ''));
+      let storedFileResult;
+      try {
+        storedFileResult = await waitForStoredCardFile(
+          T4_CHAT_CARD_ID,
+          uploadedFile?.stored_name,
+          `hook stored file state for ${T4_CHAT_CARD_ID}`,
+          15_000,
+        );
+      } catch {
+        const latestCardState = cardStatesRef.current[T4_CHAT_CARD_ID];
+        const latestFiles = Array.isArray(latestCardState?.cardData?.files) ? latestCardState.cardData.files : EMPTY_ARRAY;
+        throw createSmokeAssertionError('stored chat attachment metadata invalid after upload', {
+          expected: {
+            storedFile: {
+              present: true,
+              stored_name: String(uploadedFile?.stored_name || ''),
+              chat: true,
+              hasPath: false,
+            },
+          },
+          found: {
+            storedFile: null,
+            availableStoredFiles: latestFiles.map((entry) => buildAttachmentMetadataSnapshot(entry)),
+          },
+        });
+      }
+      const storedFiles = storedFileResult.files;
+      const storedFile = storedFileResult.file;
       if (!storedFile || storedFile?.chat !== true || Object.prototype.hasOwnProperty.call(storedFile || {}, 'path')) {
-        throw new Error('stored chat attachment metadata invalid after upload');
+        throw createSmokeAssertionError('stored chat attachment metadata invalid after upload', {
+          expected: {
+            storedFile: {
+              present: true,
+              stored_name: String(uploadedFile?.stored_name || ''),
+              chat: true,
+              hasPath: false,
+            },
+          },
+          found: {
+            storedFile: buildAttachmentMetadataSnapshot(storedFile),
+          },
+        });
       }
 
       const afterUploadMessages = await readChatMessages(T4_CHAT_CARD_ID, turnId);
@@ -1475,7 +1574,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     }
 
     throw new Error(`Unknown smoke case: ${caseId}`);
-  }, [appendLog, callAction, callControlplane, callMcp, closeBoardSse, ensureBoardRegistered, pollBoardStatus, pollChatMessages, pollChatProcessing, readChatMessages, reopenBoardSse, resetSseState, suiteContext.boardId, subscribeCardChats, unsubscribeCardChats, waitForCardStateData, waitForCardStatus, waitForCompletedCard, waitForSseSummary]);
+  }, [appendLog, callAction, callControlplane, callMcp, closeBoardSse, ensureBoardRegistered, pollBoardStatus, pollChatMessages, pollChatProcessing, readChatMessages, reopenBoardSse, resetSseState, suiteContext.boardId, subscribeCardChats, unsubscribeCardChats, waitForCardStateData, waitForCardStatus, waitForCompletedCard, waitForSseSummary, waitForStoredCardFile]);
 
   const runHostedAssistantSmoke = useCallback(async ({
     caseId,
@@ -1674,6 +1773,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           markCase(entry.id, {
             status: 'skipped',
             detail: entry.reason,
+            comparison: null,
             startedAt: Date.now(),
             finishedAt: Date.now(),
           });
@@ -1689,14 +1789,14 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           const hostedEntries = SMOKE_CASES.filter((candidate) => ['T8', 'T9', 'T8F', 'T9F'].includes(candidate.id) && candidate.mode === 'run');
           const startedAtValue = Date.now();
           for (const hostedEntry of hostedEntries) {
-            markCase(hostedEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…' });
+            markCase(hostedEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
             appendLog(hostedEntry.id, `Starting ${hostedEntry.id}: ${hostedEntry.title}`);
           }
           try {
             await runHostedAssistantCasesInParallel();
             const finishedAtValue = Date.now();
             for (const hostedEntry of hostedEntries) {
-              markCase(hostedEntry.id, { status: 'passed', finishedAt: finishedAtValue });
+              markCase(hostedEntry.id, { status: 'passed', finishedAt: finishedAtValue, comparison: null });
               appendLog(hostedEntry.id, `${hostedEntry.id} passed`, 'success');
             }
           } catch (error) {
@@ -1711,6 +1811,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
                 status: hostedEntry.id === failedCaseId ? 'failed' : 'pending',
                 finishedAt: finishedAtValue,
                 detail: hostedEntry.id === failedCaseId ? message : 'Skipped after parallel group failure.',
+                comparison: hostedEntry.id === failedCaseId ? readSmokeComparison(error) : null,
               });
             }
             appendLog(failedCaseId, message, 'error');
@@ -1719,11 +1820,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           continue;
         }
 
-        markCase(entry.id, { status: 'running', startedAt: Date.now(), finishedAt: 0, detail: 'Running…' });
+        markCase(entry.id, { status: 'running', startedAt: Date.now(), finishedAt: 0, detail: 'Running…', comparison: null });
         appendLog(entry.id, `Starting ${entry.id}: ${entry.title}`);
         try {
           await runCase(entry.id);
-          markCase(entry.id, { status: 'passed', finishedAt: Date.now() });
+          markCase(entry.id, { status: 'passed', finishedAt: Date.now(), comparison: null });
           appendLog(entry.id, `${entry.id} passed`, 'success');
         } catch (error) {
           if (error?.code === 'CANCELLED') {
@@ -1733,6 +1834,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             status: 'failed',
             finishedAt: Date.now(),
             detail: error instanceof Error ? error.message : String(error),
+            comparison: readSmokeComparison(error),
           });
           appendLog(entry.id, error instanceof Error ? error.message : String(error), 'error');
           throw error;
@@ -1909,6 +2011,29 @@ export function SmokeRunner({ serverOrigin, onClose }) {
                     <div style={{ fontSize: '0.76rem', color: 'var(--color-text-soft)' }}>
                       {entry.detail || entry.reason || 'Waiting to run'}
                     </div>
+                    {entry.comparison ? (
+                      <div
+                        style={{
+                          marginTop: '0.6rem',
+                          borderTop: '1px solid color-mix(in srgb, var(--color-border-strong) 60%, transparent)',
+                          paddingTop: '0.6rem',
+                          display: 'grid',
+                          gap: '0.45rem',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text)' }}>Expected vs Found</div>
+                        <div style={{ display: 'grid', gap: '0.4rem' }}>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-soft)' }}>Expected</div>
+                            <pre className="global-modal__pre" style={{ margin: 0, maxHeight: '8rem' }}>{jsonText(entry.comparison.expected)}</pre>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-soft)' }}>Found</div>
+                            <pre className="global-modal__pre" style={{ margin: 0, maxHeight: '8rem' }}>{jsonText(entry.comparison.found)}</pre>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

@@ -1,5 +1,30 @@
 import { expect, test } from '@playwright/test';
 
+async function waitForWarmupOutcome(statusChip, logPane, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const [statusText, logText] = await Promise.all([
+      statusChip.textContent(),
+      logPane.textContent(),
+    ]);
+    const normalizedStatusText = String(statusText || '');
+    const normalizedLogText = String(logText || '');
+
+    if (normalizedLogText.includes('[warmup] chat queue ready')) {
+      return;
+    }
+
+    if (normalizedStatusText.includes('FAILED')) {
+      const recentLines = normalizedLogText.trim().split('\n').slice(-8).join('\n');
+      throw new Error(`SmokeRunner failed during warmup before readiness:\n${recentLines}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error('Timed out waiting for SmokeRunner warmup readiness.');
+}
+
 async function ensureLiveTestBoard(page) {
   const boardSettingsDialog = page.locator('[role="dialog"][aria-label="Board settings"]');
   const boardSelect = page.getByTestId('board-settings-board-select');
@@ -39,7 +64,7 @@ test('SmokeRunner can be launched from App Config and complete warmup plus MB1 i
   await expect(statusChip).toContainText('RUNNING', { timeout: 30_000 });
 
   await expect(logPane).toContainText('[warmup] upserting', { timeout: 30_000 });
-  await expect(logPane).toContainText('[warmup] chat queue ready', { timeout: 2 * 60_000 });
+  await waitForWarmupOutcome(statusChip, logPane, 2 * 60_000);
   await expect(mb1Status).toContainText('passed', { timeout: 2 * 60_000 });
 
   const stopButton = page.getByTestId('smoke-runner-stop-button');
