@@ -10,7 +10,6 @@ import {
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
-import { listRuntimeCards, removeRuntimeCard, upsertRuntimeCard } from '../lib/client.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
 import { SmokeRunner } from './SmokeRunner.jsx';
@@ -167,6 +166,94 @@ function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '
   );
 }
 
+function describeCard(card) {
+  const id = typeof card?.id === 'string' ? card.id.trim() : '';
+  const title = typeof card?.meta?.title === 'string' ? card.meta.title.trim() : '';
+  return { id, title };
+}
+
+function TemplateIngestModal({ templateLabel, cardsToReplace, cardsToAdd, invalidCards = [], ingesting = false, onConfirm, onCancel }) {
+  const hasInvalidCards = invalidCards.length > 0;
+
+  return (
+    <GlobalModal title="Ingest Cards from Template" onClose={onCancel} className="board-modal__dialog" bodyClassName="p-3">
+      <div className="d-flex flex-column gap-3">
+        <div className="small text-muted">
+          Template: <strong>{templateLabel || 'Selected template'}</strong>
+        </div>
+        <div className="small">
+          This will upsert template cards into the current board. Existing cards with matching ids will be replaced. Board label, subtitle, and other board settings will not be changed.
+        </div>
+        <div className="d-flex gap-3 flex-wrap small">
+          <div className="badge text-bg-light border">Replace: {cardsToReplace.length}</div>
+          <div className="badge text-bg-light border">Add: {cardsToAdd.length}</div>
+          {hasInvalidCards ? (
+            <div className="badge border text-bg-danger border-danger">Invalid: {invalidCards.length}</div>
+          ) : null}
+        </div>
+        {hasInvalidCards ? (
+          <div className="d-flex flex-column gap-2">
+            <div className="fw-semibold small">Invalid cards</div>
+            <div className="border border-danger-subtle rounded p-2 bg-danger-subtle" style={{ maxHeight: '180px', overflow: 'auto' }}>
+              {invalidCards.map((card, index) => (
+                <div key={card.id || `invalid-${index}`} className="small py-1">
+                  <div>
+                    <strong>{card.id || '(missing id)'}</strong>
+                    {card.title ? ` - ${card.title}` : ''}
+                  </div>
+                  {Array.isArray(card.issues) && card.issues.length > 0 ? (
+                    <div className="text-danger-emphasis">
+                      {card.issues.join('; ')}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className="d-flex flex-column gap-2">
+          <div className="fw-semibold small">Cards to replace</div>
+          {cardsToReplace.length === 0 ? (
+            <div className="small text-muted">None.</div>
+          ) : (
+            <div className="border rounded p-2" style={{ maxHeight: '220px', overflow: 'auto' }}>
+              {cardsToReplace.map((card) => (
+                <div key={card.id} className="small py-1">
+                  <strong>{card.id}</strong>
+                  {card.title ? ` - ${card.title}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="d-flex flex-column gap-2">
+          <div className="fw-semibold small">New cards to add</div>
+          {cardsToAdd.length === 0 ? (
+            <div className="small text-muted">None.</div>
+          ) : (
+            <div className="border rounded p-2" style={{ maxHeight: '160px', overflow: 'auto' }}>
+              {cardsToAdd.map((card) => (
+                <div key={card.id} className="small py-1">
+                  <strong>{card.id}</strong>
+                  {card.title ? ` - ${card.title}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="d-flex justify-content-end gap-2">
+          <button type="button" className="btn btn-outline-secondary board-button" onClick={onCancel} disabled={ingesting}>
+            Discard
+          </button>
+          <button type="button" className="btn btn-primary board-button" onClick={onConfirm} disabled={ingesting || hasInvalidCards}>
+            {hasInvalidCards ? 'Fix Invalid Cards First' : (ingesting ? 'Ingesting…' : 'Go Ahead')}
+          </button>
+        </div>
+      </div>
+    </GlobalModal>
+  );
+}
+
 function downloadJsonFile(fileName, payload) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -225,16 +312,18 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
   const [resettingSeeds, setResettingSeeds] = useState(false);
   const [savingSeeds, setSavingSeeds] = useState(false);
+  const [preparingTemplateIngest, setPreparingTemplateIngest] = useState(false);
   const [loadingSeedManifest, setLoadingSeedManifest] = useState(false);
   const [seedManifestError, setSeedManifestError] = useState('');
   const [seedManifestEntries, setSeedManifestEntries] = useState([]);
   const [selectedSeedFileName, setSelectedSeedFileName] = useState('');
+  const [templateIngestPreview, setTemplateIngestPreview] = useState(null);
   const [addBoardOpen, setAddBoardOpen] = useState(false);
   const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
   const [addBoardError, setAddBoardError] = useState('');
   const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
   const [saveMetaError, setSaveMetaError] = useState('');
-  const [pendingAction, setPendingAction] = useState(null); // 'reset' | 'save' | null
+  const [pendingAction, setPendingAction] = useState(null); // 'runtime-import' | 'config' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
   const serverOriginHasError = serverUnreachable && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL;
@@ -394,31 +483,23 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     window.location.reload();
   };
 
-  const applyRuntimeDumpEnvelope = async (payload) => {
+  const applyRuntimeDumpEnvelope = async (payload, options = {}) => {
     if (!boardId || resettingSeeds) return false;
+    const {
+      removeMissing = true,
+      applyBoardMetadata = true,
+    } = options;
     setResettingSeeds(true);
     try {
       const envelope = normalizeRuntimeDumpEnvelope(payload);
       if (!Array.isArray(envelope?.cards)) {
         throw new Error('Runtime dump file must be a JSON array of cards or an object with a cards array');
       }
-      const nextCards = envelope.cards;
-      const currentCards = await listRuntimeCards(boardId);
-      const nextIds = new Set(nextCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
-      const currentIds = new Set(currentCards.map((card) => String(card?.id || '').trim()).filter(Boolean));
-
-      for (const card of nextCards) {
-        const cardId = typeof card?.id === 'string' ? card.id.trim() : '';
-        if (!cardId) throw new Error('Every card in the runtime dump must have a non-empty string id');
-        await upsertRuntimeCard(boardId, card);
-      }
-
-      for (const cardId of currentIds) {
-        if (!nextIds.has(cardId)) {
-          await removeRuntimeCard(boardId, cardId);
-        }
-      }
-      if (envelope.label || envelope.subtitle) {
+      await manageBoardsActions.applyImportBoard(boardId, payload, {
+        mode: removeMissing ? 'replace' : 'ingest',
+        applyBoardMetadata,
+      });
+      if (applyBoardMetadata && (envelope.label || envelope.subtitle)) {
         setFormState((current) => ({
           ...current,
           ...(envelope.label ? { defaultBoardLabel: envelope.label } : {}),
@@ -443,31 +524,65 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     }
   };
 
-  const handleImportSeedBoard = async () => {
-    if (!selectedSeedFileName || resettingSeeds) return;
-    const response = await fetch(`${SEED_BOARDS_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
+  const handlePrepareTemplateIngest = useCallback(async () => {
+    if (!boardId || !selectedSeedFileName || resettingSeeds || preparingTemplateIngest) {
+      return;
     }
-    const payload = await response.json();
-    const imported = await applyRuntimeDumpEnvelope(payload);
+
+    setPreparingTemplateIngest(true);
+    try {
+      const response = await fetch(`${SEED_BOARDS_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
+      }
+      const payload = await response.json();
+      const envelope = normalizeRuntimeDumpEnvelope(payload);
+      if (!Array.isArray(envelope?.cards)) {
+        throw new Error('Template file must be a JSON array of cards or an object with a cards array');
+      }
+      const preview = await manageBoardsActions.previewImportBoard(boardId, payload, 'ingest');
+
+      setTemplateIngestPreview({
+        templateLabel: seedManifestEntries.find((entry) => entry.fileName === selectedSeedFileName)?.label || envelope.label || selectedSeedFileName,
+        payload,
+        cardsToReplace: Array.isArray(preview?.replaceIds) ? preview.replaceIds : [],
+        cardsToAdd: Array.isArray(preview?.addIds) ? preview.addIds : [],
+        invalidCards: Array.isArray(preview?.invalidCards) ? preview.invalidCards : [],
+      });
+    } catch (error) {
+      console.error('[AppConfigModal] Failed to prepare template ingest', error);
+    } finally {
+      setPreparingTemplateIngest(false);
+    }
+  }, [boardId, preparingTemplateIngest, resettingSeeds, seedManifestEntries, selectedSeedFileName]);
+
+  const handleConfirmTemplateIngest = useCallback(async () => {
+    if (!templateIngestPreview?.payload) {
+      return;
+    }
+
+    const imported = await applyRuntimeDumpEnvelope(templateIngestPreview.payload, {
+      removeMissing: false,
+      applyBoardMetadata: false,
+    });
     if (imported) {
+      setTemplateIngestPreview(null);
       window.location.reload();
     }
-  };
+  }, [applyRuntimeDumpEnvelope, templateIngestPreview]);
 
   const handleExportRuntimeDump = async () => {
     if (!boardId || savingSeeds) return;
     setSavingSeeds(true);
     try {
-      const cards = await listRuntimeCards(boardId);
-      downloadJsonFile(`${boardId}-runtime-dump.json`, {
+      const payload = await manageBoardsActions.exportBoard(boardId);
+      downloadJsonFile(`${boardId}-runtime-dump.json`, payload || {
         version: RUNTIME_DUMP_VERSION,
         boardId,
         exportedAt: new Date().toISOString(),
         boardLabel: formState.defaultBoardLabel,
         boardSubtitle: formState.defaultBoardSubtitle,
-        cards,
+        cards: [],
       });
     } catch (error) {
       console.error('[AppConfigModal] Failed to export runtime dump', error);
@@ -733,7 +848,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     <button
                       type="button"
                       className="btn btn-outline-secondary board-button"
-                      onClick={() => setPendingAction('reset')}
+                      onClick={() => setPendingAction('runtime-import')}
                       disabled={resettingSeeds || !boardId}
                       title="Import board from a local JSON file"
                     >
@@ -749,13 +864,17 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                       {savingSeeds ? 'Saving…' : 'Export Board'}
                     </button>
                   </div>
+                </div>
+
+                <div className="board-settings-io-card d-flex flex-column gap-3">
+                  <div className="board-settings-io-card__title">Template Card Ingest</div>
 
                   <div className="d-flex align-items-center gap-2 flex-wrap">
                     <select
                       className="board-input board-settings-sample-select"
                       value={selectedSeedFileName}
                       onChange={(event) => setSelectedSeedFileName(event.target.value)}
-                      disabled={loadingSeedManifest || resettingSeeds || seedManifestEntries.length === 0}
+                      disabled={loadingSeedManifest || resettingSeeds || preparingTemplateIngest || seedManifestEntries.length === 0}
                       title={seedManifestError || 'Select a bundled sample board file'}
                     >
                       {seedManifestEntries.length === 0 ? (
@@ -770,11 +889,11 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     <button
                       type="button"
                       className="btn btn-outline-secondary board-button"
-                      onClick={() => setPendingAction('seed-import')}
-                      disabled={resettingSeeds || !boardId || !selectedSeedFileName || loadingSeedManifest || seedManifestEntries.length === 0}
-                      title="Import the selected sample board"
+                      onClick={() => { void handlePrepareTemplateIngest(); }}
+                      disabled={resettingSeeds || preparingTemplateIngest || !boardId || !selectedSeedFileName || loadingSeedManifest || seedManifestEntries.length === 0}
+                      title="Preview cards that will be added or replaced from the selected template"
                     >
-                      {resettingSeeds ? 'Importing…' : 'Import Sample'}
+                      {preparingTemplateIngest ? 'Preparing…' : resettingSeeds ? 'Ingesting…' : 'Ingest Cards from Template'}
                     </button>
                   </div>
                 </div>
@@ -791,7 +910,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             </form>
           </section>
 
-          {pendingAction === 'reset' ? (
+          {pendingAction === 'runtime-import' ? (
             <ChallengeConfirmModal
               message="This will overwrite the current runtime card state from a local dump file. Cards not present in the file will be removed."
               onConfirm={() => {
@@ -808,16 +927,15 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
               onCancel={() => setPendingAction(null)}
             />
           ) : null}
-          {pendingAction === 'seed-import' ? (
-            <ChallengeConfirmModal
-              message="This will overwrite the current runtime card state from the selected bundled seed board file. Cards not present in that file will be removed."
-              onConfirm={() => {
-                setPendingAction(null);
-                void handleImportSeedBoard().catch((error) => {
-                  console.error('[AppConfigModal] Failed to import seed board', error);
-                });
-              }}
-              onCancel={() => setPendingAction(null)}
+          {templateIngestPreview ? (
+            <TemplateIngestModal
+              templateLabel={templateIngestPreview.templateLabel}
+              cardsToReplace={templateIngestPreview.cardsToReplace}
+              cardsToAdd={templateIngestPreview.cardsToAdd}
+              invalidCards={templateIngestPreview.invalidCards}
+              ingesting={resettingSeeds}
+              onConfirm={() => { void handleConfirmTemplateIngest(); }}
+              onCancel={() => setTemplateIngestPreview(null)}
             />
           ) : null}
           {addBoardOpen ? (

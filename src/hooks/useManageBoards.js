@@ -126,6 +126,56 @@ export function useManageBoards(serverOrigin, options = {}) {
     return data?.board ?? null;
   }, [normalizedOrigin]);
 
+  const exportBoard = useCallback(async (boardId) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'export-board',
+      args: {
+        boardId: normalizedBoardId,
+      },
+    });
+    return data?.payload ?? null;
+  }, [normalizedOrigin]);
+
+  const previewImportBoard = useCallback(async (boardId, payload, mode = 'replace') => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'preview-import-board',
+      args: {
+        boardId: normalizedBoardId,
+        payload,
+        mode,
+      },
+    });
+    return data?.preview ?? null;
+  }, [normalizedOrigin]);
+
+  const applyImportBoard = useCallback(async (boardId, payload, { mode = 'replace', applyBoardMetadata = false } = {}) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'apply-import-board',
+      args: {
+        boardId: normalizedBoardId,
+        payload,
+        mode,
+        applyBoardMetadata,
+      },
+    });
+    return data ?? null;
+  }, [normalizedOrigin]);
+
   useEffect(() => {
     if (!enabled || !normalizedOrigin) {
       setBoards([]);
@@ -147,7 +197,10 @@ export function useManageBoards(serverOrigin, options = {}) {
     listBoards,
     addBoard,
     saveBoardMeta,
-  }), [addBoard, listBoards, saveBoardMeta]);
+    exportBoard,
+    previewImportBoard,
+    applyImportBoard,
+  }), [addBoard, applyImportBoard, exportBoard, listBoards, previewImportBoard, saveBoardMeta]);
 
   return {
     managedBoards: boards,
