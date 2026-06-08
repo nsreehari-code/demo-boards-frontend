@@ -19,6 +19,11 @@
       "label": "Teams Graph API (1 card)",
       "description": "Teams channel reader starter board for Graph-backed exploration",
       "fileName": "teams-graph-api.json"
+    },
+    {
+      "label": "WFPv1 Prompt Tuning (15 cards)",
+      "description": "Alert-focused prompt tuning workbench with sample review, revisions, validation, and batch scoring",
+      "fileName": "wfpv1-prompt-tuning.json"
     }
   ]
 }
