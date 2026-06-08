@@ -15,8 +15,8 @@ import { GlobalModal } from './GlobalModal.jsx';
 import { SmokeRunner } from './SmokeRunner.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
-const SEED_BOARDS_BASE_URL = `${import.meta.env.BASE_URL}assets/seed-boards/`;
-const SEED_BOARDS_MANIFEST_URL = `${SEED_BOARDS_BASE_URL}index.json`;
+const CARD_TEMPLATES_BASE_URL = `${import.meta.env.BASE_URL}assets/card-templates/`;
+const CARD_TEMPLATES_MANIFEST_URL = `${CARD_TEMPLATES_BASE_URL}index.json`;
 const FORWARD_ICON_SVG = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
@@ -395,7 +395,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       setLoadingSeedManifest(true);
       setSeedManifestError('');
       try {
-        const response = await fetch(SEED_BOARDS_MANIFEST_URL, { cache: 'no-store' });
+        const response = await fetch(CARD_TEMPLATES_MANIFEST_URL, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Failed to load seed manifest: ${response.status}`);
         }
@@ -531,7 +531,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
     setPreparingTemplateIngest(true);
     try {
-      const response = await fetch(`${SEED_BOARDS_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
+      const response = await fetch(`${CARD_TEMPLATES_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
       }
