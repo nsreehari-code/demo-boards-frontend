@@ -313,6 +313,7 @@ function toFormState(config) {
     defaultBoardId: config?.defaultBoardId ?? '',
     defaultBoardLabel: config?.defaultBoard?.label ?? '',
     defaultBoardSubtitle: config?.defaultBoard?.subtitle ?? '',
+    defaultBoardUiTemplate: '',
     refreshAllIntervalMinutes: String(Math.max(1, Math.round(Number(config?.refreshAllIntervalSeconds ?? 0) / 60)) || 30),
     transportMode: config?.transportMode ?? BOARD_TRANSPORT_MODE_SERVER_URL,
     serverOrigin: config?.serverOrigin ?? '',
@@ -509,12 +510,30 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         defaultBoardSubtitle: typeof metadata.pageSubtitle === 'string'
           ? metadata.pageSubtitle
           : '',
+        defaultBoardUiTemplate: selected.uiTemplate || 'default',
         refreshAllIntervalMinutes: Number.isFinite(refreshSeconds) && refreshSeconds > 0
           ? String(Math.max(1, Math.round(refreshSeconds / 60)))
           : '60',
       };
     });
   };
+
+  useEffect(() => {
+    if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      return;
+    }
+    const selected = boardOptions.find((entry) => entry.id === formState.defaultBoardId);
+    if (!selected) return;
+    setFormState((current) => {
+      if (current.defaultBoardUiTemplate && current.defaultBoardUiTemplate.trim()) {
+        return current;
+      }
+      return {
+        ...current,
+        defaultBoardUiTemplate: selected.uiTemplate || 'default',
+      };
+    });
+  }, [boardOptions, formState.defaultBoardId, formState.transportMode, open]);
 
   const submitAndReload = useCallback(() => {
     saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));
@@ -525,6 +544,9 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     event.preventDefault();
     if (formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL && formState.defaultBoardId) {
       try {
+        await manageBoardsActions.saveBoardRecord(formState.defaultBoardId, {
+          uiTemplate: formState.defaultBoardUiTemplate.trim(),
+        });
         await manageBoardsActions.saveBoardMeta(formState.defaultBoardId, metadataFromFormState(formState));
         setSaveMetaError('');
       } catch (error) {
@@ -837,6 +859,18 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   <label className="board-settings-field mb-0">
                     <span>Refresh Interval (minutes)</span>
                     <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" />
+                  </label>
+
+                  <label className="board-settings-field mb-0">
+                    <span>UI Template</span>
+                    <input
+                      className="board-input"
+                      type="text"
+                      value={formState.defaultBoardUiTemplate}
+                      onChange={updateField('defaultBoardUiTemplate')}
+                      placeholder="default"
+                      disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !formState.defaultBoardId}
+                    />
                   </label>
 
                   {saveMetaError ? (

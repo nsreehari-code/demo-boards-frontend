@@ -16,6 +16,7 @@ function normalizeManagedBoardEntries(payload) {
       return {
         id,
         label: label || id,
+        uiTemplate: typeof board?.uiTemplate === 'string' ? board.uiTemplate.trim() : '',
         metadata: board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
           ? board.metadata
           : {},
@@ -137,6 +138,26 @@ export function useManageBoards(serverOrigin, options = {}) {
     return data?.board ?? null;
   }, [normalizedOrigin]);
 
+  const saveBoardRecord = useCallback(async (boardId, record) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      throw new Error('Record is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'save-board-record',
+      args: {
+        boardId: normalizedBoardId,
+        record,
+      },
+    });
+    await listBoards();
+    return data?.board ?? null;
+  }, [listBoards, normalizedOrigin]);
+
   const exportBoard = useCallback(async (boardId) => {
     const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
     if (!normalizedBoardId) {
@@ -208,10 +229,11 @@ export function useManageBoards(serverOrigin, options = {}) {
     listBoards,
     addBoard,
     saveBoardMeta,
+    saveBoardRecord,
     exportBoard,
     previewImportBoard,
     applyImportBoard,
-  }), [addBoard, applyImportBoard, exportBoard, listBoards, previewImportBoard, saveBoardMeta]);
+  }), [addBoard, applyImportBoard, exportBoard, listBoards, previewImportBoard, saveBoardMeta, saveBoardRecord]);
 
   return {
     managedBoards: boards,
