@@ -11,6 +11,27 @@ import {
 import { AGENT_OUTPUT_CHANNEL, AGENT_TOOLS_CHANNEL } from '../lib/appConfig.js';
 import { useBoardInfo, useCardChatProcessing, useCardChatViews, useCardChatWatchParty } from './useSseSlices.js';
 
+function useReducedWatchParty(boardId, cardId, boardSseClientId) {
+  const watchParty = useCardChatWatchParty(boardId, cardId);
+
+  useEffect(() => {
+    if (!boardId || !cardId || !boardSseClientId) return undefined;
+
+    subscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
+    subscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
+
+    return () => {
+      unsubscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
+      unsubscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
+    };
+  }, [boardId, cardId, boardSseClientId]);
+
+  return useMemo(() => ({
+    agentOutput: watchParty?.agentOutput ?? '',
+    agentTools: watchParty?.agentTools ?? '',
+  }), [watchParty]);
+}
+
 export function useChatActions(boardId, cardId) {
   const boardInfo = useBoardInfo(boardId);
   const boardSseClientId = boardInfo?.sseClientId ?? null;
@@ -72,6 +93,7 @@ export function useChatState(boardId, cardId) {
 
   const chatState = chat?.chatState ?? null;
   const boardSseClientId = boardInfo?.sseClientId ?? null;
+  const watchParty = useReducedWatchParty(boardId, cardId, boardSseClientId);
 
   return useMemo(() => {
     if (!cardId) return null;
@@ -79,10 +101,13 @@ export function useChatState(boardId, cardId) {
       messages: Array.isArray(chatState?.messages) ? chatState.messages : [],
       processing: chatState?.processing === true,
       receiving: chatState?.receiving === true,
+      agentOutput: watchParty.agentOutput,
+      agentTools: watchParty.agentTools,
+      watchParty,
       boardSseClientId,
       chatActions,
     };
-  }, [cardId, chatState, boardSseClientId, chatActions]);
+  }, [cardId, chatState, watchParty, boardSseClientId, chatActions]);
 }
 
 export function useChatStateAIWorking(boardId, cardId) {
@@ -91,23 +116,6 @@ export function useChatStateAIWorking(boardId, cardId) {
 
 export function useChatWatchParty(boardId, cardId) {
   const boardInfo = useBoardInfo(boardId);
-  const watchParty = useCardChatWatchParty(boardId, cardId);
   const boardSseClientId = boardInfo?.sseClientId ?? null;
-
-  useEffect(() => {
-    if (!boardId || !cardId || !boardSseClientId) return undefined;
-
-    subscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
-    subscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
-
-    return () => {
-      unsubscribeWatchparty(boardId, cardId, AGENT_TOOLS_CHANNEL, boardSseClientId).catch(() => {});
-      unsubscribeWatchparty(boardId, cardId, AGENT_OUTPUT_CHANNEL, boardSseClientId).catch(() => {});
-    };
-  }, [boardId, cardId, boardSseClientId]);
-
-  return {
-    agentOutput: watchParty?.agentOutput ?? '',
-    agentTools: watchParty?.agentTools ?? '',
-  };
+  return useReducedWatchParty(boardId, cardId, boardSseClientId);
 }

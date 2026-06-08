@@ -18,7 +18,7 @@ export function createEmptyBoardSnapshot(boardId = null) {
     boardCardComputedValues: EMPTY_OBJECT,
     cardDefinitionsAndData: EMPTY_OBJECT,
     cardChatViews: EMPTY_OBJECT,
-    cardChatWatchParties: EMPTY_OBJECT,
+    cardWatchParties: EMPTY_OBJECT,
   };
 }
 
@@ -141,7 +141,7 @@ function buildCardChatViewsSnapshot(cardChatsByCardId, cardDefinitionsAndData) {
   return cardChatViews;
 }
 
-function buildState(payload) {
+function buildState(payload, prev = null) {
   const cardDefinitions = Array.isArray(payload.cardDefinitions) && payload.cardDefinitions.length > 0
     ? payload.cardDefinitions
     : buildFallbackCardDefinitions(payload.statusSnapshot, payload.cardRuntimeById);
@@ -157,7 +157,7 @@ function buildState(payload) {
     boardCardComputedValues: buildComputedValuesSnapshot(cardDefinitions, payload.cardRuntimeById),
     cardDefinitionsAndData,
     cardChatViews: buildCardChatViewsSnapshot(payload.cardChatsByCardId, cardDefinitionsAndData),
-    cardChatWatchParties: EMPTY_OBJECT,
+    cardWatchParties: prev?.cardWatchParties ?? EMPTY_OBJECT,
   };
 }
 
@@ -193,10 +193,11 @@ function buildReducerState(snapshot) {
     payload: snapshot,
     cardIds,
     modelsById,
+    cardWatchParties: snapshot?.cardWatchParties ?? EMPTY_OBJECT,
   };
 }
 
-function projectSnapshotFromReducer(base, reducerState, boardDataObjects, boardStatusSummary, cardChatWatchParties) {
+function projectSnapshotFromReducer(base, reducerState, boardDataObjects, boardStatusSummary) {
   const cardDefinitionsAndData = {};
   const boardCardComputedValues = {};
   const cardChatViews = {};
@@ -245,13 +246,13 @@ function projectSnapshotFromReducer(base, reducerState, boardDataObjects, boardS
     boardCardComputedValues,
     cardDefinitionsAndData,
     cardChatViews,
-    cardChatWatchParties,
+    cardWatchParties: reducerState.cardWatchParties ?? EMPTY_OBJECT,
   };
 }
 
 export function applyBoardSseFrame(prev, payload) {
   if (Array.isArray(payload?.cardDefinitions)) {
-    return buildState(payload);
+    return buildState(payload, prev);
   }
 
   const notifications = runtimeNotificationsFromPayload(payload);
@@ -261,31 +262,10 @@ export function applyBoardSseFrame(prev, payload) {
 
   const base = prev ?? createEmptyBoardSnapshot();
   let boardDataObjects = base.boardDataObjects ?? EMPTY_OBJECT;
-  let cardChatWatchParties = base.cardChatWatchParties ?? EMPTY_OBJECT;
   let boardStatusSummary = base.boardStatus?.summary ?? null;
   const reducerNotifications = [];
 
   for (const notification of notifications) {
-    if (notification.kind === 'card_watchparty' && notification.cardId && notification.channel) {
-      if (cardChatWatchParties === (prev?.cardChatWatchParties ?? EMPTY_OBJECT)) {
-        cardChatWatchParties = { ...cardChatWatchParties };
-      }
-      const previousWatchParty = cardChatWatchParties[notification.cardId] ?? EMPTY_OBJECT;
-      const nextWatchpartyByChannel = { ...previousWatchParty };
-      if (notification.clear) {
-        nextWatchpartyByChannel[notification.channel] = EMPTY_ARRAY;
-      } else if (notification.replace) {
-        nextWatchpartyByChannel[notification.channel] = [{ payload: notification.payload, ts: Date.now() }];
-      } else {
-        nextWatchpartyByChannel[notification.channel] = [
-          ...(nextWatchpartyByChannel[notification.channel] ?? EMPTY_ARRAY),
-          { payload: notification.payload, ts: Date.now() },
-        ];
-      }
-      cardChatWatchParties[notification.cardId] = nextWatchpartyByChannel;
-      continue;
-    }
-
     if (notification.kind === 'data_object' && notification.key) {
       if (boardDataObjects === (prev?.boardDataObjects ?? EMPTY_OBJECT)) {
         boardDataObjects = { ...boardDataObjects };
@@ -313,7 +293,6 @@ export function applyBoardSseFrame(prev, payload) {
     nextReducerState,
     boardDataObjects,
     boardStatusSummary,
-    cardChatWatchParties,
   );
 
   const anyChanged = nextSnapshot.boardStatus !== base.boardStatus
@@ -321,7 +300,7 @@ export function applyBoardSseFrame(prev, payload) {
     || nextSnapshot.boardCardComputedValues !== base.boardCardComputedValues
     || nextSnapshot.cardDefinitionsAndData !== base.cardDefinitionsAndData
     || nextSnapshot.cardChatViews !== base.cardChatViews
-    || nextSnapshot.cardChatWatchParties !== base.cardChatWatchParties;
+    || nextSnapshot.cardWatchParties !== base.cardWatchParties;
 
   if (!anyChanged && prev) {
     return prev;

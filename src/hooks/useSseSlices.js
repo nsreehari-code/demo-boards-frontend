@@ -287,7 +287,7 @@ function getCardChatWatchPartySnapshot(boardId, cardId) {
   if (!raw) return null;
 
   const previousValue = store.cardChatWatchPartyCache.get(cardId) ?? null;
-  const watchpartyState = raw.cardChatWatchParties?.[cardId] ?? EMPTY_OBJECT;
+  const watchpartyState = raw.cardWatchParties?.[cardId] ?? EMPTY_OBJECT;
   const agentOutputEvents = Array.isArray(watchpartyState[AGENT_OUTPUT_CHANNEL])
     ? watchpartyState[AGENT_OUTPUT_CHANNEL]
     : EMPTY_ARRAY;

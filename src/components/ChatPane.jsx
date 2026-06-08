@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BoardMarkdown from './BoardMarkdown.jsx';
-import { useChatState, useChatWatchParty } from '../hooks/useChatState.js';
+import { useChatState } from '../hooks/useChatState.js';
 import { useCardStateFilesData } from '../hooks/useCardState.js';
 import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
 
@@ -352,7 +352,8 @@ function toChipPreview(text) {
 }
 
 function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
-  const { agentOutput = '', agentTools = '' } = useChatWatchParty(boardId, cardId) ?? {};
+  const chat = useChatState(boardId, cardId);
+  const { agentOutput = '', agentTools = '' } = chat ?? {};
   const [activeChipKey, setActiveChipKey] = useState('');
   const [chipLabels] = useState(() => ({
     output: pickRandom(processingStates),
