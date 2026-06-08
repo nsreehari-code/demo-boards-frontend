@@ -1,4 +1,7 @@
 {
+  "version": 1,
+  "boardId": "wfpv1-prompt-tuning",
+  "exportedAt": "2026-06-08T00:00:00.000Z",
   "boardLabel": "WFPv1 Prompt Tuning",
   "boardSubtitle": "Alert-focused prompt tuning workbench with sample review, revisions, validation, and batch scoring",
   "cards": [
