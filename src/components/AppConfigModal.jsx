@@ -51,9 +51,13 @@ function createEmptyAddBoardForm() {
   return {
     boardId: '',
     label: '',
+    pageTitle: '',
+    pageSubtitle: '',
     ai: 'copilot',
     aiWorkspaceTemplate: 'default',
+    uiTemplate: 'default',
     refsTemplate: 'localfs-default',
+    templateFileName: '',
   };
 }
 
@@ -89,9 +93,19 @@ function normalizeSeedManifestEntries(payload) {
     .filter(Boolean);
 }
 
-function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '' }) {
+function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplates = false, submitting = false, errorMessage = '' }) {
   const [formState, setFormState] = useState(() => createEmptyAddBoardForm());
   const [localError, setLocalError] = useState('');
+  const isSubmitDisabled = [
+    formState.boardId,
+    formState.label,
+    formState.pageTitle,
+    formState.pageSubtitle,
+    formState.ai,
+    formState.aiWorkspaceTemplate,
+    formState.uiTemplate,
+    formState.refsTemplate,
+  ].some((value) => !value.trim()) || submitting;
 
   const updateField = (field) => (event) => {
     const value = event.target.value;
@@ -109,12 +123,16 @@ function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '
     const normalized = {
       boardId: formState.boardId.trim(),
       label: formState.label.trim(),
+      pageTitle: formState.pageTitle.trim(),
+      pageSubtitle: formState.pageSubtitle.trim(),
       ai: formState.ai.trim(),
       aiWorkspaceTemplate: formState.aiWorkspaceTemplate.trim(),
+      uiTemplate: formState.uiTemplate.trim(),
       refsTemplate: formState.refsTemplate.trim(),
+      templateFileName: formState.templateFileName.trim(),
     };
 
-    if (!normalized.boardId || !normalized.label || !normalized.ai || !normalized.aiWorkspaceTemplate || !normalized.refsTemplate) {
+    if (!normalized.boardId || !normalized.label || !normalized.pageTitle || !normalized.pageSubtitle || !normalized.ai || !normalized.aiWorkspaceTemplate || !normalized.uiTemplate || !normalized.refsTemplate) {
       setLocalError('All fields are required.');
       return;
     }
@@ -139,6 +157,14 @@ function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '
           <input className="board-input" type="text" value={formState.label} onChange={updateField('label')} placeholder="Live Test" />
         </label>
         <label className="board-settings-field mb-0">
+          <span>Page Title</span>
+          <input className="board-input" type="text" value={formState.pageTitle} onChange={updateField('pageTitle')} placeholder="Live Test" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>Page Subtitle</span>
+          <input className="board-input" type="text" value={formState.pageSubtitle} onChange={updateField('pageSubtitle')} placeholder="Live operational intelligence for agent workflows" />
+        </label>
+        <label className="board-settings-field mb-0">
           <span>AI</span>
           <input className="board-input" type="text" value={formState.ai} onChange={updateField('ai')} placeholder="copilot" />
         </label>
@@ -147,8 +173,24 @@ function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '
           <input className="board-input" type="text" value={formState.aiWorkspaceTemplate} onChange={updateField('aiWorkspaceTemplate')} placeholder="default" />
         </label>
         <label className="board-settings-field mb-0">
+          <span>UI Template</span>
+          <input className="board-input" type="text" value={formState.uiTemplate} onChange={updateField('uiTemplate')} placeholder="default" />
+        </label>
+        <label className="board-settings-field mb-0">
           <span>Refs Template</span>
           <input className="board-input" type="text" value={formState.refsTemplate} onChange={updateField('refsTemplate')} placeholder="localfs-default" />
+        </label>
+        <label className="board-settings-field mb-0">
+          <span>Card Template (optional)</span>
+          <select className="board-input" value={formState.templateFileName} onChange={updateField('templateFileName')} disabled={loadingTemplates}>
+            <option value="">No template</option>
+            {templateOptions.map((entry) => (
+              <option key={entry.fileName} value={entry.fileName}>{entry.label}</option>
+            ))}
+          </select>
+          <div className="board-settings-form__hint">
+            {loadingTemplates ? 'Loading templates…' : 'If selected, the template cards will be ingested into the newly created board.'}
+          </div>
         </label>
         {localError || errorMessage ? (
           <div className="board-settings-form__hint text-danger">
@@ -157,7 +199,7 @@ function AddBoardModal({ onClose, onSubmit, submitting = false, errorMessage = '
         ) : null}
         <div className="d-flex justify-content-end gap-2">
           <button type="button" className="btn btn-outline-secondary board-button" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="btn btn-primary board-button" disabled={submitting}>
+          <button type="submit" className="btn btn-primary board-button" disabled={isSubmitDisabled}>
             {submitting ? 'Adding…' : 'Add board'}
           </button>
         </div>
@@ -344,6 +386,21 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     setAddBoardError('');
     try {
       const createdBoard = await manageBoardsActions.addBoard(candidate);
+      if (candidate.templateFileName) {
+        const response = await fetch(`${CARD_TEMPLATES_BASE_URL}${encodeURIComponent(candidate.templateFileName)}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to load template ${candidate.templateFileName}: ${response.status}`);
+        }
+        const payload = await response.json();
+        const envelope = normalizeRuntimeDumpEnvelope(payload);
+        if (!Array.isArray(envelope?.cards)) {
+          throw new Error('Template file must be a JSON array of cards or an object with a cards array');
+        }
+        await manageBoardsActions.applyImportBoard(candidate.boardId, payload, {
+          mode: 'ingest',
+          applyBoardMetadata: false,
+        });
+      }
       setFormState((current) => ({
         ...current,
         defaultBoardId: candidate.boardId,
@@ -946,6 +1003,8 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 setAddBoardError('');
               }}
               onSubmit={handleAddBoard}
+              templateOptions={seedManifestEntries}
+              loadingTemplates={loadingSeedManifest}
               submitting={addBoardSubmitting}
               errorMessage={addBoardError}
             />

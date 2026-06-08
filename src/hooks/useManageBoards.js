@@ -49,8 +49,11 @@ function normalizeBoardCandidate(candidate) {
   return {
     boardId: typeof candidate?.boardId === 'string' ? candidate.boardId.trim() : '',
     label: typeof candidate?.label === 'string' ? candidate.label.trim() : '',
+    pageTitle: typeof candidate?.pageTitle === 'string' ? candidate.pageTitle.trim() : '',
+    pageSubtitle: typeof candidate?.pageSubtitle === 'string' ? candidate.pageSubtitle.trim() : '',
     ai: typeof candidate?.ai === 'string' ? candidate.ai.trim() : '',
     aiWorkspaceTemplate: typeof candidate?.aiWorkspaceTemplate === 'string' ? candidate.aiWorkspaceTemplate.trim() : '',
+    uiTemplate: typeof candidate?.uiTemplate === 'string' ? candidate.uiTemplate.trim() : '',
     refsTemplate: typeof candidate?.refsTemplate === 'string' ? candidate.refsTemplate.trim() : '',
   };
 }
@@ -89,8 +92,11 @@ export function useManageBoards(serverOrigin, options = {}) {
     const normalized = normalizeBoardCandidate(candidate);
     if (!normalized.boardId) throw new Error('Board id is required');
     if (!normalized.label) throw new Error('Label is required');
+    if (!normalized.pageTitle) throw new Error('Page title is required');
+    if (!normalized.pageSubtitle) throw new Error('Page subtitle is required');
     if (!normalized.ai) throw new Error('AI is required');
     if (!normalized.aiWorkspaceTemplate) throw new Error('AI workspace template is required');
+    if (!normalized.uiTemplate) throw new Error('UI template is required');
     if (!normalized.refsTemplate) throw new Error('Refs template is required');
 
     const data = await postManageBoards(normalizedOrigin, {
@@ -101,7 +107,12 @@ export function useManageBoards(serverOrigin, options = {}) {
           label: normalized.label,
           ai: normalized.ai,
           aiWorkspaceTemplate: normalized.aiWorkspaceTemplate,
+          uiTemplate: normalized.uiTemplate,
           refsTemplate: normalized.refsTemplate,
+          metadata: {
+            ...(normalized.pageTitle ? { pageTitle: normalized.pageTitle } : {}),
+            ...(normalized.pageSubtitle ? { pageSubtitle: normalized.pageSubtitle } : {}),
+          },
         },
       },
     });
