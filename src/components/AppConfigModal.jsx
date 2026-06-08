@@ -512,6 +512,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [resettingSeeds, setResettingSeeds] = useState(false);
   const [savingSeeds, setSavingSeeds] = useState(false);
   const [preparingTemplateIngest, setPreparingTemplateIngest] = useState(false);
+  const [refreshingWorkspaceBootstrap, setRefreshingWorkspaceBootstrap] = useState(false);
   const [loadingSeedManifest, setLoadingSeedManifest] = useState(false);
   const [seedManifestError, setSeedManifestError] = useState('');
   const [seedManifestEntries, setSeedManifestEntries] = useState([]);
@@ -834,6 +835,19 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     }
   };
 
+  const handleRefreshWorkspaceBootstrap = async () => {
+    if (!boardId || refreshingWorkspaceBootstrap) return;
+    setRefreshingWorkspaceBootstrap(true);
+    try {
+      await manageBoardsActions.refreshBoard(boardId);
+      window.location.reload();
+    } catch (error) {
+      console.error('[AppConfigModal] Failed to refresh workspace bootstrap', error);
+    } finally {
+      setRefreshingWorkspaceBootstrap(false);
+    }
+  };
+
   const boardSelectOptions = [...boardOptions];
   if (
     formState.defaultBoardId
@@ -1084,6 +1098,15 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                       title="Export the current board as a local JSON file"
                     >
                       {savingSeeds ? 'Saving…' : 'Export Board'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary board-button"
+                      onClick={() => { void handleRefreshWorkspaceBootstrap(); }}
+                      disabled={refreshingWorkspaceBootstrap || !boardId}
+                      title="Refresh the ai workspace and admin-cards to bootstrap state"
+                    >
+                      {refreshingWorkspaceBootstrap ? 'Refreshing…' : 'Refresh Workspace Bootstrap'}
                     </button>
                   </div>
                 </div>

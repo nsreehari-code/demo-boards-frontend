@@ -213,6 +213,22 @@ export function useManageBoards(serverOrigin, options = {}) {
     return data ?? null;
   }, [normalizedOrigin]);
 
+  const refreshBoard = useCallback(async (boardId) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'refresh-board',
+      args: {
+        boardId: normalizedBoardId,
+      },
+    });
+    await listBoards();
+    return normalizeManagedBoardEntry(data?.board ?? null);
+  }, [listBoards, normalizedOrigin]);
+
   useEffect(() => {
     if (!enabled || !normalizedOrigin) {
       setBoards([]);
@@ -249,10 +265,11 @@ export function useManageBoards(serverOrigin, options = {}) {
     },
     saveBoardMeta,
     saveBoardRecord,
+    refreshBoard,
     exportBoard,
     previewImportBoard,
     applyImportBoard,
-  }), [addBoard, applyImportBoard, exportBoard, listBoards, normalizedOrigin, previewImportBoard, saveBoardMeta, saveBoardRecord]);
+  }), [addBoard, applyImportBoard, exportBoard, listBoards, normalizedOrigin, previewImportBoard, refreshBoard, saveBoardMeta, saveBoardRecord]);
 
   return {
     managedBoards: boards,
