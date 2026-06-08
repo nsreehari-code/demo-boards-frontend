@@ -214,10 +214,11 @@ function SystemMessage({ msg, boardId, cardId }) {
   const indexedAttachment = parseIndexedSystemAttachment(text);
   const indexedFile = indexedAttachment ? filesUploaded[indexedAttachment.index] : null;
   const directLabel = indexedAttachment?.label || indexedFile?.name || indexedFile?.stored_name || text;
+  const showText = !(indexedFile && indexedAttachment);
 
   return (
     <div className="text-center small text-muted fst-italic px-2 my-1 d-flex flex-column align-items-center" style={{ gap: '0.35rem' }}>
-      <div>{text}</div>
+      {showText ? <div>{text}</div> : null}
       {indexedFile && indexedAttachment ? (
         <SystemAttachmentChip
           boardId={boardId}
