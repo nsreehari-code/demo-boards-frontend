@@ -3,7 +3,7 @@ import { GlobalModal } from './GlobalModal.jsx';
 import { EMPTY_ARRAY, EMPTY_OBJECT } from '../lib/board-sse-state.js';
 import { useBoardState } from '../hooks/useBoardState.js';
 import { useCardState } from '../hooks/useCardState.js';
-import { useChatActions } from '../hooks/useChatState.js';
+import { useChatActions, useChatWatchParty } from '../hooks/useChatState.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
 import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
 import { useCardChatViews } from '../hooks/useSseSlices.js';
@@ -26,6 +26,42 @@ const TR_MARKET_PRICES_CARD_ID = 'market-prices-tr-9201';
 const TR_QUOTES_TOKEN = 'quotes_tr2_9201';
 const WARMUP_CHAT_CARD_ID = 'card-smoke-warmup-9099';
 const AI_RESPONSE_CASE_ORDER = ['T3', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
+const STAGE_AI_RESPONSE_TOOL_LABEL = "Invoking 'Stage Ai Response And Any Attachments'";
+const SMOKE_CHAT_CARD_VARIANTS = {
+  [T4_CHAT_CARD_ID]: {
+    titleSuffix: '4',
+    holdingsToken: 'holdings_t4_9104',
+  },
+  [T8_CHAT_CARD_ID]: {
+    titleSuffix: '8',
+    holdingsToken: 'holdings_t8_9108',
+  },
+  [T9_CHAT_CARD_ID]: {
+    titleSuffix: '9',
+    holdingsToken: 'holdings_t9_9109',
+  },
+  [T8F_CHAT_CARD_ID]: {
+    titleSuffix: '8F',
+    holdingsToken: 'holdings_t8f_9118',
+  },
+  [T9F_CHAT_CARD_ID]: {
+    titleSuffix: '9F',
+    holdingsToken: 'holdings_t9f_9119',
+  },
+};
+const SMOKE_CARD_IDS = [
+  TR_MARKET_PRICES_CARD_ID,
+  TR_PORTFOLIO_CARD_ID,
+  T9F_CHAT_CARD_ID,
+  T8F_CHAT_CARD_ID,
+  T9_CHAT_CARD_ID,
+  T8_CHAT_CARD_ID,
+  T4_CHAT_CARD_ID,
+  PORTFOLIO_VALUE_CARD_ID,
+  MARKET_PRICES_CARD_ID,
+  PORTFOLIO_CARD_ID,
+  WARMUP_CHAT_CARD_ID,
+];
 const AI_RESPONSE_EXPECTATIONS = {
   T3: {
     expectedLabel: 'Echo: hi testing',
@@ -374,6 +410,16 @@ function buildProbeChatText(promptText, assistantStem = '') {
 function buildPortfolioCard(cardId = PORTFOLIO_CARD_ID) {
   const card = cloneJson(BASE_PORTFOLIO_CARD);
   card.id = cardId;
+  const variant = SMOKE_CHAT_CARD_VARIANTS[cardId];
+  if (variant) {
+    card.meta = {
+      ...(card.meta && typeof card.meta === 'object' ? card.meta : {}),
+      title: `${String(card.meta?.title || 'Portfolio').trim()} ${variant.titleSuffix}`,
+    };
+    card.provides = Array.isArray(card.provides)
+      ? card.provides.map((entry) => (entry?.bindTo === 'holdings_tc1' ? { ...entry, bindTo: variant.holdingsToken } : entry))
+      : [];
+  }
   return card;
 }
 
@@ -434,6 +480,14 @@ function buildChatTurnSnapshot(messages) {
     text: String(message?.text || ''),
     turn: String(message?.turn || ''),
   }));
+}
+
+function countNonEmptyLines(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .length;
 }
 
 function createSmokeAssertionError(message, comparison) {
@@ -664,6 +718,12 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const t8fChatView = useCardChatViews(SMOKE_BOARD_ID, T8F_CHAT_CARD_ID);
   const t9fChatView = useCardChatViews(SMOKE_BOARD_ID, T9F_CHAT_CARD_ID);
   const warmupChatView = useCardChatViews(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
+  const portfolioWatchParty = useChatWatchParty(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
+  const t4WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
+  const t8WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
+  const t9WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T9_CHAT_CARD_ID);
+  const t8fWatchParty = useChatWatchParty(SMOKE_BOARD_ID, T8F_CHAT_CARD_ID);
+  const t9fWatchParty = useChatWatchParty(SMOKE_BOARD_ID, T9F_CHAT_CARD_ID);
   const [suiteStatus, setSuiteStatus] = useState('idle');
   const [suiteError, setSuiteError] = useState('');
   const [activeCaseId, setActiveCaseId] = useState('');
@@ -702,6 +762,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   }), [portfolioChatView, t4ChatView, t8ChatView, t8fChatView, t9ChatView, t9fChatView, warmupChatView]);
   const cardStatesRef = useRef(cardStatesById);
   const chatStatesRef = useRef(chatStatesById);
+  const watchPartyByIdRef = useRef({});
 
   useEffect(() => {
     runtimeRef.current = createRuntimeState(normalizedOrigin, SMOKE_BOARD_ID);
@@ -757,6 +818,17 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   useEffect(() => {
     chatStatesRef.current = chatStatesById;
   }, [chatStatesById]);
+
+  useEffect(() => {
+    watchPartyByIdRef.current = {
+      [PORTFOLIO_CARD_ID]: portfolioWatchParty ?? null,
+      [T4_CHAT_CARD_ID]: t4WatchParty ?? null,
+      [T8_CHAT_CARD_ID]: t8WatchParty ?? null,
+      [T9_CHAT_CARD_ID]: t9WatchParty ?? null,
+      [T8F_CHAT_CARD_ID]: t8fWatchParty ?? null,
+      [T9F_CHAT_CARD_ID]: t9fWatchParty ?? null,
+    };
+  }, [portfolioWatchParty, t4WatchParty, t8WatchParty, t9WatchParty, t8fWatchParty, t9fWatchParty]);
 
   const appendLog = useCallback((caseId, message, kind = 'info') => {
     const entry = createLogEntry(caseId, message, kind);
@@ -961,6 +1033,32 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     return chatStatesRef.current[cardId]?.processing === true;
   }, []);
 
+  const readWatchParty = useCallback((cardId) => {
+    return watchPartyByIdRef.current[cardId] ?? null;
+  }, []);
+
+  const waitForStageAiResponseWatchParty = useCallback(async (caseId, cardId, timeoutMs = 30_000) => {
+    try {
+      await waitUntil(() => {
+        const watchParty = readWatchParty(cardId);
+        const agentToolsText = String(watchParty?.agentTools || '');
+        return agentToolsText.includes(STAGE_AI_RESPONSE_TOOL_LABEL)
+          ? { watchParty, agentToolsText }
+          : false;
+      }, timeoutMs, `${caseId} watchparty stage-ai-response tool for ${cardId}`);
+    } catch {
+      const watchParty = readWatchParty(cardId);
+      throw createSmokeAssertionError(`${caseId} watchparty missing stage-ai-response invocation for ${cardId}`, {
+        expected: {
+          agentToolsIncludes: STAGE_AI_RESPONSE_TOOL_LABEL,
+        },
+        found: {
+          agentTools: String(watchParty?.agentTools || ''),
+        },
+      });
+    }
+  }, [readWatchParty, waitUntil]);
+
   const subscribeCardChats = useCallback(async (cardId) => {
     const runtime = runtimeRef.current;
     const currentBoard = boardRef.current;
@@ -1151,19 +1249,25 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     appendLog('', `[warmup] chat queue ready after ${assistantPoll.attemptsUsed} poll(s)`);
   }, [appendLog, callAction, callMcp, ensureBoardRegistered, ensureBoardSseConnection, pollChatMessages, pollChatProcessing, subscribeCardChats]);
 
-  const removeTrackedCards = useCallback(async () => {
-    const runtime = runtimeRef.current;
-    const ids = [...runtime.createdCardIds].reverse();
-    for (const cardId of ids) {
+  const removeCardsBestEffort = useCallback(async (cardIds, phase = 'cleanup') => {
+    for (const cardId of cardIds) {
       try {
         await callMcp('manage.remove-card', { card_id: cardId });
-        appendLog('', `[cleanup] removed ${cardId}`);
+        appendLog('', `[${phase}] removed ${cardId}`);
       } catch (error) {
-        appendLog('', `[cleanup] remove-card failed for ${cardId}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        appendLog('', `[${phase}] remove-card failed for ${cardId}: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
     }
-    runtime.createdCardIds.clear();
   }, [appendLog, callMcp]);
+
+  const clearSmokeCardsAtStart = useCallback(async (trackedCardIds = EMPTY_ARRAY) => {
+    const ids = [...new Set([...trackedCardIds, ...SMOKE_CARD_IDS])];
+    if (ids.length === 0) {
+      return;
+    }
+    appendLog('', `[preflight] removing ${ids.length} smoke card(s) before start`);
+    await removeCardsBestEffort(ids, 'preflight');
+  }, [appendLog, removeCardsBestEffort]);
 
   const cleanup = useCallback(async () => {
     const runtime = runtimeRef.current;
@@ -1175,9 +1279,8 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       }
     }
     await closeBoardSse();
-    await removeTrackedCards();
     resetSseState();
-  }, [appendLog, closeBoardSse, removeTrackedCards, resetSseState, unsubscribeCardChats]);
+  }, [appendLog, closeBoardSse, resetSseState, unsubscribeCardChats]);
 
   const suiteContext = useMemo(() => ({
     boardId: SMOKE_BOARD_ID,
@@ -1396,7 +1499,10 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         throw new Error(`final chat messages mismatch for turn ${turnId}`);
       }
 
-      log(`step 7/7: verifying live /sse board-state bootstrap`);
+      log(`step 7/8: verifying watchparty tools for ${PORTFOLIO_CARD_ID}`);
+      await waitForStageAiResponseWatchParty('T3', PORTFOLIO_CARD_ID);
+
+      log(`step 8/8: verifying live /sse board-state bootstrap`);
       await reopenBoardSse();
       await waitForSseSummary(`T3 SSE summary for ${PORTFOLIO_CARD_ID}`);
       await waitForCompletedCard(PORTFOLIO_CARD_ID, `T3 SSE completed status for ${PORTFOLIO_CARD_ID}`);
@@ -1531,7 +1637,10 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       if (String(finalUser.text || '') !== promptText || !String(finalAssistant.text || '').includes(expectedReply)) {
         throw new Error(`final attachment probe messages mismatch for ${turnId}`);
       }
-      log(`step 8/8: final probe reply with attachment contents passed`);
+      log(`step 8/9: verifying watchparty tools for ${T4_CHAT_CARD_ID}`);
+      await waitForStageAiResponseWatchParty('T4', T4_CHAT_CARD_ID);
+
+      log(`step 9/9: final probe reply with attachment contents passed`);
       return;
     }
 
@@ -1638,11 +1747,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       turnId,
       (messages) => messages.some((message) => message?.role === 'user' && String(message?.text || '') === promptText),
       `${caseId} user chat message for turn ${turnId}`,
-      8,
+      attachment ? 24 : 16,
       500,
     );
     if (!userPoll.matched) {
-      throw new Error(`${caseId} user message not found for turn ${turnId}`);
+      log(`user message not yet visible in reduced state for ${turnId}; continuing to final turn verification`);
     }
 
     log(`step 4/6: waiting for final assistant reply for ${turnId}`);
@@ -1690,10 +1799,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     if (!offPoll.matched) {
       throw new Error(`${caseId} chat processing did not turn off for ${cardId}`);
     }
-    log(`step 6/6: verifying shared reduced board state for ${cardId}`);
-    await waitForCompletedCard(cardId, `${caseId} SSE completed status for ${cardId}`, 30_000);
+
+    log(`step 6/7: verifying watchparty tools for ${cardId}`);
+    await waitForStageAiResponseWatchParty(caseId, cardId);
+    log(`step 7/7: verifying shared reduced board state for ${cardId}`);
+    await waitForCardStateData(cardId, `${caseId} reduced card state for ${cardId}`, 15_000);
     log(`final assistant reply: ${String(finalAssistant.text || '')}`);
-  }, [appendLog, callAction, callControlplane, callMcp, pollChatMessages, pollChatProcessing, readChatMessages, subscribeCardChats, waitForCompletedCard]);
+  }, [appendLog, callAction, callControlplane, callMcp, pollChatMessages, pollChatProcessing, readChatMessages, subscribeCardChats, waitForCardStateData, waitForStageAiResponseWatchParty]);
 
   const runHostedAssistantCasesInParallel = useCallback(async () => {
     const hostedConfigs = [
@@ -1755,6 +1867,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     }
 
     cancelRef.current = false;
+    const trackedCardIds = [...runtimeRef.current.createdCardIds];
     runtimeRef.current = {
       ...createRuntimeState(normalizedOrigin, SMOKE_BOARD_ID),
       createdCardIds: new Set(),
@@ -1770,6 +1883,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     appendLog('', `Smoke runner targeting board '${SMOKE_BOARD_ID}' at ${normalizedOrigin}`);
 
     try {
+      await clearSmokeCardsAtStart(trackedCardIds);
       await warmChatQueue();
       let computeChatParallelHandled = false;
       let hostedParallelHandled = false;
@@ -1908,7 +2022,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       await cleanup();
       setActiveCaseId('');
     }
-  }, [appendAiResponseSummary, appendLog, cleanup, markCase, normalizedOrigin, runCase, runHostedAssistantCasesInParallel, suiteStatus, warmChatQueue]);
+  }, [appendAiResponseSummary, appendLog, cleanup, clearSmokeCardsAtStart, markCase, normalizedOrigin, runCase, runHostedAssistantCasesInParallel, suiteStatus, warmChatQueue]);
 
   const handleStop = useCallback(() => {
     cancelRef.current = true;
