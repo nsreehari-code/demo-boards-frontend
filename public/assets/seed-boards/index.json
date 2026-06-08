@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "label": "Portfolio Management",
+      "description": "Portfolio monitoring, risk, and rebalance workflow starter board",
+      "fileName": "portfolio-management.json"
+    },
+    {
+      "label": "Foundry AI Brief",
+      "description": "Single-card Azure AI Foundry brief template",
+      "fileName": "foundry-ai-brief.json"
+    },
+    {
+      "label": "WorkIQ / M365",
+      "description": "WorkIQ priorities, collaboration, and identity starter board",
+      "fileName": "workiq-m365.json"
+    },
+    {
+      "label": "Teams Graph API",
+      "description": "Teams channel reader starter board for Graph-backed exploration",
+      "fileName": "teams-graph-api.json"
+    }
+  ]
+}

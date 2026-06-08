@@ -208,6 +208,162 @@ function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplat
   );
 }
 
+function toPageDetailsDraft(board) {
+  const metadata = board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
+    ? board.metadata
+    : {};
+  const refreshSeconds = Number(metadata.refreshAllIntervalSeconds);
+  return {
+    pageTitle: typeof metadata.pageTitle === 'string' && metadata.pageTitle.trim()
+      ? metadata.pageTitle.trim()
+      : (typeof board?.label === 'string' ? board.label.trim() : ''),
+    pageSubtitle: typeof metadata.pageSubtitle === 'string' ? metadata.pageSubtitle : '',
+    refreshAllIntervalMinutes: Number.isFinite(refreshSeconds) && refreshSeconds > 0
+      ? String(Math.max(1, Math.round(refreshSeconds / 60)))
+      : '60',
+    uiTemplate: typeof board?.uiTemplate === 'string' && board.uiTemplate.trim()
+      ? board.uiTemplate.trim()
+      : 'default',
+  };
+}
+
+function PageDetailsSection({
+  boardId,
+  transportMode,
+  loadBoard,
+  onSave,
+}) {
+  const [draft, setDraft] = useState(() => toPageDetailsDraft(null));
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    if (transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !boardId) {
+      setDraft(toPageDetailsDraft(null));
+      setLoading(false);
+      setErrorMessage('');
+      setSuccessMessage('');
+      return undefined;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const fetchBoard = async () => {
+      try {
+        const board = await loadBoard(boardId);
+        if (cancelled) return;
+        setDraft(toPageDetailsDraft(board));
+      } catch (error) {
+        if (cancelled) return;
+        setDraft(toPageDetailsDraft(null));
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void fetchBoard();
+    return () => {
+      cancelled = true;
+    };
+  }, [boardId, loadBoard, transportMode]);
+
+  const updateField = (field) => (event) => {
+    const value = event.target.value;
+    setDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    if (errorMessage) setErrorMessage('');
+    if (successMessage) setSuccessMessage('');
+  };
+
+  const saveDisabled = transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL
+    || !boardId
+    || loading
+    || saving
+    || !draft.pageTitle.trim()
+    || !draft.pageSubtitle.trim()
+    || !draft.refreshAllIntervalMinutes.trim()
+    || !draft.uiTemplate.trim();
+
+  const handleSave = async () => {
+    const nextValues = {
+      pageTitle: draft.pageTitle.trim(),
+      pageSubtitle: draft.pageSubtitle.trim(),
+      refreshAllIntervalMinutes: draft.refreshAllIntervalMinutes.trim(),
+      uiTemplate: draft.uiTemplate.trim(),
+    };
+
+    if (!nextValues.pageTitle || !nextValues.pageSubtitle || !nextValues.refreshAllIntervalMinutes || !nextValues.uiTemplate) {
+      setErrorMessage('All page detail fields are required.');
+      setSuccessMessage('');
+      return;
+    }
+
+    setSaving(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      const savedBoard = await onSave(boardId, nextValues);
+      setDraft(toPageDetailsDraft(savedBoard));
+      setSuccessMessage('Saved.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="board-settings-io-card d-flex flex-column gap-3">
+      <div className="d-flex align-items-center justify-content-between gap-2">
+        <div className="board-settings-io-card__title">Page Details</div>
+        <button type="button" className="btn btn-outline-secondary board-button" onClick={() => { void handleSave(); }} disabled={saveDisabled}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+
+      <label className="board-settings-field mb-0">
+        <span>Page Title</span>
+        <input className="board-input" type="text" value={draft.pageTitle} onChange={updateField('pageTitle')} placeholder="Live" disabled={loading || transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !boardId} />
+      </label>
+
+      <label className="board-settings-field mb-0">
+        <span>Page Subtitle</span>
+        <input className="board-input" type="text" value={draft.pageSubtitle} onChange={updateField('pageSubtitle')} placeholder="Live operational intelligence for agent workflows" disabled={loading || transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !boardId} />
+      </label>
+
+      <label className="board-settings-field mb-0">
+        <span>Refresh Interval (minutes)</span>
+        <input className="board-input" type="number" min="1" step="1" value={draft.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" disabled={loading || transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !boardId} />
+      </label>
+
+      {loading ? (
+        <div className="board-settings-form__hint text-muted">
+          Loading latest board details…
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="board-settings-form__hint text-danger">
+          Save failed: {errorMessage}
+        </div>
+      ) : null}
+      {!errorMessage && successMessage ? (
+        <div className="board-settings-form__hint text-success">
+          {successMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function describeCard(card) {
   const id = typeof card?.id === 'string' ? card.id.trim() : '';
   const title = typeof card?.meta?.title === 'string' ? card.meta.title.trim() : '';
@@ -365,7 +521,6 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
   const [addBoardError, setAddBoardError] = useState('');
   const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
-  const [saveMetaError, setSaveMetaError] = useState('');
   const [pendingAction, setPendingAction] = useState(null); // 'runtime-import' | 'config' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
@@ -405,6 +560,10 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       setFormState((current) => ({
         ...current,
         defaultBoardId: candidate.boardId,
+        defaultBoardLabel: candidate.pageTitle,
+        defaultBoardSubtitle: candidate.pageSubtitle,
+        defaultBoardUiTemplate: candidate.uiTemplate,
+        refreshAllIntervalMinutes: '60',
       }));
       setAddBoardOpen(false);
       return createdBoard;
@@ -494,68 +653,73 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   const handleBoardSelectionChange = (event) => {
     const nextBoardId = event.target.value;
-    const selected = boardOptions.find((entry) => entry.id === nextBoardId);
-    setFormState((current) => {
-      const base = { ...current, defaultBoardId: nextBoardId };
-      if (!selected) return base;
-      const metadata = selected.metadata && typeof selected.metadata === 'object' && !Array.isArray(selected.metadata)
-        ? selected.metadata
-        : {};
-      const refreshSeconds = Number(metadata.refreshAllIntervalSeconds);
-      return {
-        ...base,
-        defaultBoardLabel: typeof metadata.pageTitle === 'string' && metadata.pageTitle
-          ? metadata.pageTitle
-          : selected.label,
-        defaultBoardSubtitle: typeof metadata.pageSubtitle === 'string'
-          ? metadata.pageSubtitle
-          : '',
-        defaultBoardUiTemplate: selected.uiTemplate || 'default',
-        refreshAllIntervalMinutes: Number.isFinite(refreshSeconds) && refreshSeconds > 0
-          ? String(Math.max(1, Math.round(refreshSeconds / 60)))
-          : '60',
-      };
-    });
+    setFormState((current) => ({
+      ...current,
+      defaultBoardId: nextBoardId,
+    }));
   };
 
   useEffect(() => {
     if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
-      return;
+      return undefined;
     }
-    const selected = boardOptions.find((entry) => entry.id === formState.defaultBoardId);
-    if (!selected) return;
-    setFormState((current) => {
-      if (current.defaultBoardUiTemplate && current.defaultBoardUiTemplate.trim()) {
-        return current;
+
+    let cancelled = false;
+
+    const loadSelectedBoard = async () => {
+      try {
+        const selected = await manageBoardsActions.getBoard(formState.defaultBoardId);
+        if (cancelled || !selected) return;
+        const nextDraft = toPageDetailsDraft(selected);
+        setFormState((current) => {
+          if (current.defaultBoardId !== selected.id) {
+            return current;
+          }
+          return {
+            ...current,
+            defaultBoardLabel: nextDraft.pageTitle,
+            defaultBoardSubtitle: nextDraft.pageSubtitle,
+            defaultBoardUiTemplate: nextDraft.uiTemplate,
+            refreshAllIntervalMinutes: nextDraft.refreshAllIntervalMinutes,
+          };
+        });
+      } catch {
+        // The Page Details section surfaces load failures directly.
       }
-      return {
-        ...current,
-        defaultBoardUiTemplate: selected.uiTemplate || 'default',
-      };
-    });
-  }, [boardOptions, formState.defaultBoardId, formState.transportMode, open]);
+    };
+
+    void loadSelectedBoard();
+    return () => {
+      cancelled = true;
+    };
+  }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
   const submitAndReload = useCallback(() => {
     saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));
     window.location.reload();
   }, [formState]);
 
-  const handleSubmit = useCallback(async (event) => {
-    event.preventDefault();
-    if (formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL && formState.defaultBoardId) {
-      try {
-        await manageBoardsActions.saveBoardRecord(formState.defaultBoardId, {
-          uiTemplate: formState.defaultBoardUiTemplate.trim(),
-        });
-        await manageBoardsActions.saveBoardMeta(formState.defaultBoardId, metadataFromFormState(formState));
-        setSaveMetaError('');
-      } catch (error) {
-        setSaveMetaError(error instanceof Error ? error.message : String(error));
-        return;
-      }
+  const handleSavePageDetails = useCallback(async (selectedBoardId, nextValues) => {
+    if (formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !selectedBoardId) {
+      throw new Error('Select a server-backed board before saving page details.');
     }
-    submitAndReload();
-  }, [formState, manageBoardsActions, submitAndReload]);
+
+    const nextRefreshMinutes = nextValues.refreshAllIntervalMinutes.trim();
+    const nextFormState = {
+      ...formState,
+      defaultBoardLabel: nextValues.pageTitle,
+      defaultBoardSubtitle: nextValues.pageSubtitle,
+      refreshAllIntervalMinutes: nextRefreshMinutes,
+      defaultBoardUiTemplate: nextValues.uiTemplate,
+    };
+
+    await manageBoardsActions.saveBoardRecord(selectedBoardId, {
+      uiTemplate: nextValues.uiTemplate,
+    });
+    const savedBoard = await manageBoardsActions.saveBoardMeta(selectedBoardId, metadataFromFormState(nextFormState));
+    setFormState(nextFormState);
+    return savedBoard;
+  }, [formState, manageBoardsActions]);
 
   const handleReset = () => {
     clearStoredAppConfigOverride();
@@ -794,7 +958,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
               </button>
             </div>
 
-            <form className="board-settings-form" onSubmit={handleSubmit}>
+            <div className="board-settings-form">
               {serverUnreachable ? (
                 <div className="board-settings-alert" role="alert" aria-live="assertive">
                   <span className="board-settings-alert__badge">
@@ -840,45 +1004,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
               ) : null}
 
               <div className="board-settings-io-section">
-                <div className="board-settings-io-card d-flex flex-column gap-3">
-                  <div className="d-flex align-items-center justify-content-between gap-2">
-                    <div className="board-settings-io-card__title">Page Details</div>
-                    <button type="submit" className="btn btn-outline-secondary board-button">Save</button>
-                  </div>
-
-                  <label className="board-settings-field mb-0">
-                    <span>Page Title</span>
-                    <input className="board-input" type="text" value={formState.defaultBoardLabel} onChange={updateField('defaultBoardLabel')} placeholder="Live" />
-                  </label>
-
-                  <label className="board-settings-field mb-0">
-                    <span>Page Subtitle</span>
-                    <input className="board-input" type="text" value={formState.defaultBoardSubtitle} onChange={updateField('defaultBoardSubtitle')} placeholder="Live operational intelligence for agent workflows" />
-                  </label>
-
-                  <label className="board-settings-field mb-0">
-                    <span>Refresh Interval (minutes)</span>
-                    <input className="board-input" type="number" min="1" step="1" value={formState.refreshAllIntervalMinutes} onChange={updateField('refreshAllIntervalMinutes')} placeholder="30" />
-                  </label>
-
-                  <label className="board-settings-field mb-0">
-                    <span>UI Template</span>
-                    <input
-                      className="board-input"
-                      type="text"
-                      value={formState.defaultBoardUiTemplate}
-                      onChange={updateField('defaultBoardUiTemplate')}
-                      placeholder="default"
-                      disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !formState.defaultBoardId}
-                    />
-                  </label>
-
-                  {saveMetaError ? (
-                    <div className="board-settings-form__hint text-danger">
-                      Save failed: {saveMetaError}
-                    </div>
-                  ) : null}
-                </div>
+                <PageDetailsSection
+                  boardId={formState.defaultBoardId}
+                  transportMode={formState.transportMode}
+                  loadBoard={manageBoardsActions.getBoard}
+                  onSave={handleSavePageDetails}
+                />
               </div>
 
               <div className="board-settings-io-section">
@@ -998,7 +1129,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   Seed board manifest error: {seedManifestError}
                 </div>
               ) : null}
-            </form>
+            </div>
           </section>
 
           {pendingAction === 'runtime-import' ? (
