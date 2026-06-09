@@ -13,9 +13,18 @@ const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';
 const NON_PROBE_RESPONSE_TIMEOUT_MS = 120_000;
 
-const PORTFOLIO_CARD_ID = 'card-portfolio-tc1-9008';
-const MARKET_PRICES_CARD_ID = 'market-prices-tc2-9027';
-const PORTFOLIO_VALUE_CARD_ID = 'portfolio-value-tc3-9043';
+const T0_PORTFOLIO_CARD_ID = 'card-portfolio-t0-9000';
+const T1_PORTFOLIO_CARD_ID = 'card-portfolio-t1-9001';
+const T1_MARKET_PRICES_CARD_ID = 'market-prices-t1-9021';
+const T1_PORTFOLIO_VALUE_CARD_ID = 'portfolio-value-t1-9041';
+const T1_HOLDINGS_TOKEN = 'holdings_t1_9001';
+const T1_QUOTES_TOKEN = 'quotes_t1_9021';
+const PORTFOLIO_CARD_ID = 'card-portfolio-t2-9002';
+const MARKET_PRICES_CARD_ID = 'market-prices-t2-9022';
+const PORTFOLIO_VALUE_CARD_ID = 'portfolio-value-t2-9042';
+const T2_HOLDINGS_TOKEN = 'holdings_t2_9002';
+const T2_QUOTES_TOKEN = 'quotes_t2_9022';
+const T3_CHAT_CARD_ID = 'card-portfolio-t3-9103';
 const T4_CHAT_CARD_ID = 'card-portfolio-t4-9104';
 const T8_CHAT_CARD_ID = 'card-portfolio-t8-9108';
 const T9_CHAT_CARD_ID = 'card-portfolio-t9-9109';
@@ -24,38 +33,92 @@ const T9F_CHAT_CARD_ID = 'card-portfolio-t9f-9119';
 const TR_PORTFOLIO_CARD_ID = 'card-portfolio-tr-9200';
 const TR_MARKET_PRICES_CARD_ID = 'market-prices-tr-9201';
 const TR_QUOTES_TOKEN = 'quotes_tr2_9201';
+const TR_HOLDINGS_TOKEN = 'holdings_tr_9200';
 const WARMUP_CHAT_CARD_ID = 'card-smoke-warmup-9099';
 const AI_RESPONSE_CASE_ORDER = ['T3', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
 const STAGE_AI_RESPONSE_TOOL_LABEL = "Invoking 'Stage Ai Response And Any Attachments'";
-const SMOKE_CHAT_CARD_VARIANTS = {
+const PORTFOLIO_CARD_VARIANTS = {
+  [T0_PORTFOLIO_CARD_ID]: {
+    caseLabel: 'T0',
+  },
+  [T1_PORTFOLIO_CARD_ID]: {
+    caseLabel: 'T1',
+    holdingsToken: T1_HOLDINGS_TOKEN,
+  },
+  [PORTFOLIO_CARD_ID]: {
+    caseLabel: 'T2',
+    holdingsToken: T2_HOLDINGS_TOKEN,
+  },
+  [T3_CHAT_CARD_ID]: {
+    caseLabel: 'T3',
+    holdingsToken: 'holdings_t3_9103',
+  },
   [T4_CHAT_CARD_ID]: {
-    titleSuffix: '4',
+    caseLabel: 'T4',
     holdingsToken: 'holdings_t4_9104',
   },
   [T8_CHAT_CARD_ID]: {
-    titleSuffix: '8',
+    caseLabel: 'T8',
     holdingsToken: 'holdings_t8_9108',
   },
   [T9_CHAT_CARD_ID]: {
-    titleSuffix: '9',
+    caseLabel: 'T9',
     holdingsToken: 'holdings_t9_9109',
   },
   [T8F_CHAT_CARD_ID]: {
-    titleSuffix: '8F',
+    caseLabel: 'T8F',
     holdingsToken: 'holdings_t8f_9118',
   },
   [T9F_CHAT_CARD_ID]: {
-    titleSuffix: '9F',
+    caseLabel: 'T9F',
     holdingsToken: 'holdings_t9f_9119',
+  },
+  [TR_PORTFOLIO_CARD_ID]: {
+    caseLabel: 'TR',
+    holdingsToken: TR_HOLDINGS_TOKEN,
+  },
+};
+const MARKET_PRICES_CARD_VARIANTS = {
+  [T1_MARKET_PRICES_CARD_ID]: {
+    caseLabel: 'T1',
+    holdingsToken: T1_HOLDINGS_TOKEN,
+    quotesToken: T1_QUOTES_TOKEN,
+  },
+  [MARKET_PRICES_CARD_ID]: {
+    caseLabel: 'T2',
+    holdingsToken: T2_HOLDINGS_TOKEN,
+    quotesToken: T2_QUOTES_TOKEN,
+  },
+  [TR_MARKET_PRICES_CARD_ID]: {
+    caseLabel: 'TR',
+    holdingsToken: TR_HOLDINGS_TOKEN,
+    quotesToken: TR_QUOTES_TOKEN,
+  },
+};
+const PORTFOLIO_VALUE_CARD_VARIANTS = {
+  [T1_PORTFOLIO_VALUE_CARD_ID]: {
+    caseLabel: 'T1',
+    holdingsToken: T1_HOLDINGS_TOKEN,
+    quotesToken: T1_QUOTES_TOKEN,
+  },
+  [PORTFOLIO_VALUE_CARD_ID]: {
+    caseLabel: 'T2',
+    holdingsToken: T2_HOLDINGS_TOKEN,
+    quotesToken: T2_QUOTES_TOKEN,
   },
 };
 const SMOKE_CARD_IDS = [
+  T1_PORTFOLIO_VALUE_CARD_ID,
+  T1_MARKET_PRICES_CARD_ID,
+  T1_PORTFOLIO_CARD_ID,
+  T0_PORTFOLIO_CARD_ID,
   TR_MARKET_PRICES_CARD_ID,
   TR_PORTFOLIO_CARD_ID,
   T9F_CHAT_CARD_ID,
   T8F_CHAT_CARD_ID,
   T9_CHAT_CARD_ID,
   T8_CHAT_CARD_ID,
+  T3_CHAT_CARD_ID,
   T4_CHAT_CARD_ID,
   PORTFOLIO_VALUE_CARD_ID,
   MARKET_PRICES_CARD_ID,
@@ -407,17 +470,24 @@ function buildProbeChatText(promptText, assistantStem = '') {
   return `${PROBE_ENVELOPE}${normalizedAssistantStem}__${normalizedPromptText}${PROBE_ENVELOPE}`;
 }
 
+function applyCaseLabelToTitle(card, caseLabel, fallbackTitle) {
+  if (!caseLabel) {
+    return;
+  }
+  card.meta = {
+    ...(card.meta && typeof card.meta === 'object' ? card.meta : {}),
+    title: `${String(card.meta?.title || fallbackTitle).trim()} (${caseLabel})`,
+  };
+}
+
 function buildPortfolioCard(cardId = PORTFOLIO_CARD_ID) {
   const card = cloneJson(BASE_PORTFOLIO_CARD);
   card.id = cardId;
-  const variant = SMOKE_CHAT_CARD_VARIANTS[cardId];
+  const variant = PORTFOLIO_CARD_VARIANTS[cardId];
   if (variant) {
-    card.meta = {
-      ...(card.meta && typeof card.meta === 'object' ? card.meta : {}),
-      title: `${String(card.meta?.title || 'Portfolio').trim()} ${variant.titleSuffix}`,
-    };
+    applyCaseLabelToTitle(card, variant.caseLabel, 'Portfolio');
     card.provides = Array.isArray(card.provides)
-      ? card.provides.map((entry) => (entry?.bindTo === 'holdings_tc1' ? { ...entry, bindTo: variant.holdingsToken } : entry))
+      ? card.provides.map((entry) => (entry?.bindTo === 'holdings_tc1' && variant.holdingsToken ? { ...entry, bindTo: variant.holdingsToken } : entry))
       : [];
   }
   return card;
@@ -434,23 +504,55 @@ function buildPortfolioT2Card() {
   return card;
 }
 
-function buildMarketPricesCard(cardId = MARKET_PRICES_CARD_ID, quotesToken = 'quotes_tc2') {
+function buildMarketPricesCard(cardId = MARKET_PRICES_CARD_ID, quotesToken, holdingsToken) {
   const card = cloneJson(BASE_MARKET_PRICES_CARD);
+  const variant = MARKET_PRICES_CARD_VARIANTS[cardId] || EMPTY_OBJECT;
+  const resolvedQuotesToken = quotesToken || variant.quotesToken || 'quotes_tc2';
+  const resolvedHoldingsToken = holdingsToken || variant.holdingsToken || 'holdings_tc1';
   card.id = cardId;
+  applyCaseLabelToTitle(card, variant.caseLabel, 'Market Prices');
+  card.requires = Array.isArray(card.requires)
+    ? card.requires.map((entry) => (entry === 'holdings_tc1' ? resolvedHoldingsToken : entry))
+    : [];
   card.provides = Array.isArray(card.provides)
-    ? card.provides.map((entry) => (entry?.bindTo === 'quotes_tc2' ? { ...entry, bindTo: quotesToken } : entry))
+    ? card.provides.map((entry) => (entry?.bindTo === 'quotes_tc2' ? { ...entry, bindTo: resolvedQuotesToken } : entry))
     : [];
   if (Array.isArray(card.source_defs)) {
-    card.source_defs = card.source_defs.map((entry) => (entry?.bindTo === 'quotes_tc2' ? { ...entry, bindTo: quotesToken } : entry));
+    card.source_defs = card.source_defs.map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return entry;
+      }
+      const nextEntry = entry?.bindTo === 'quotes_tc2' ? { ...entry, bindTo: resolvedQuotesToken } : { ...entry };
+      if (nextEntry?.projections?.quote_urls) {
+        nextEntry.projections = {
+          ...nextEntry.projections,
+          quote_urls: String(nextEntry.projections.quote_urls).replaceAll('holdings_tc1', resolvedHoldingsToken),
+        };
+      }
+      return nextEntry;
+    });
+  }
+  if (Array.isArray(card.compute)) {
+    card.compute = card.compute.map((entry) => (
+      entry?.expr
+        ? { ...entry, expr: String(entry.expr).replaceAll('quotes_tc2', resolvedQuotesToken) }
+        : entry
+    ));
   }
   return card;
 }
 
-function buildPortfolioValueCard(cardId = PORTFOLIO_VALUE_CARD_ID, quotesToken = 'quotes_tc2') {
+function buildPortfolioValueCard(cardId = PORTFOLIO_VALUE_CARD_ID, quotesToken, holdingsToken) {
   const card = cloneJson(BASE_PORTFOLIO_VALUE_CARD);
+  const variant = PORTFOLIO_VALUE_CARD_VARIANTS[cardId] || EMPTY_OBJECT;
+  const resolvedQuotesToken = quotesToken || variant.quotesToken || 'quotes_tc2';
+  const resolvedHoldingsToken = holdingsToken || variant.holdingsToken || 'holdings_tc1';
   card.id = cardId;
-  card.requires = ['holdings_tc1', quotesToken];
-  card.compute[0].expr = card.compute[0].expr.replaceAll('quotes_tc2', quotesToken);
+  applyCaseLabelToTitle(card, variant.caseLabel, 'Portfolio Value');
+  card.requires = [resolvedHoldingsToken, resolvedQuotesToken];
+  card.compute[0].expr = card.compute[0].expr
+    .replaceAll('holdings_tc1', resolvedHoldingsToken)
+    .replaceAll('quotes_tc2', resolvedQuotesToken);
   return card;
 }
 
@@ -691,9 +793,11 @@ function createLogEntry(caseId, message, kind = 'info') {
 export function SmokeRunner({ serverOrigin, onClose }) {
   const normalizedOrigin = useMemo(() => normalizeOrigin(serverOrigin), [serverOrigin]);
   const board = useBoardState(SMOKE_BOARD_ID);
+  const t1PortfolioCardHook = useCardState(SMOKE_BOARD_ID, T1_PORTFOLIO_CARD_ID);
   const portfolioCardHook = useCardState(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const marketPricesCardHook = useCardState(SMOKE_BOARD_ID, MARKET_PRICES_CARD_ID);
   const portfolioValueCardHook = useCardState(SMOKE_BOARD_ID, PORTFOLIO_VALUE_CARD_ID);
+  const t3CardHook = useCardState(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
   const t4CardHook = useCardState(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8CardHook = useCardState(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
   const t9CardHook = useCardState(SMOKE_BOARD_ID, T9_CHAT_CARD_ID);
@@ -702,6 +806,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const trPortfolioCardHook = useCardState(SMOKE_BOARD_ID, TR_PORTFOLIO_CARD_ID);
   const trMarketPricesCardHook = useCardState(SMOKE_BOARD_ID, TR_MARKET_PRICES_CARD_ID);
   const warmupCardHook = useCardState(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
+  const t3ChatActions = useChatActions(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
   const portfolioChatActions = useChatActions(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4ChatActions = useChatActions(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8ChatActions = useChatActions(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -711,6 +816,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const warmupChatActions = useChatActions(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
   const { manageBoardsActions } = useManageBoards(normalizedOrigin, { enabled: false });
   const { runtimeCardActions } = useRuntimeCards(SMOKE_BOARD_ID);
+  const t3ChatView = useCardChatViews(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
   const portfolioChatView = useCardChatViews(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4ChatView = useCardChatViews(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8ChatView = useCardChatViews(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -718,6 +824,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const t8fChatView = useCardChatViews(SMOKE_BOARD_ID, T8F_CHAT_CARD_ID);
   const t9fChatView = useCardChatViews(SMOKE_BOARD_ID, T9F_CHAT_CARD_ID);
   const warmupChatView = useCardChatViews(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
+  const t3WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
   const portfolioWatchParty = useChatWatchParty(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -739,9 +846,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const chatActionsRef = useRef({});
 
   const cardStatesById = useMemo(() => ({
+    [T1_PORTFOLIO_CARD_ID]: buildObservedCardState(board, T1_PORTFOLIO_CARD_ID),
+    [T1_MARKET_PRICES_CARD_ID]: buildObservedCardState(board, T1_MARKET_PRICES_CARD_ID),
+    [T1_PORTFOLIO_VALUE_CARD_ID]: buildObservedCardState(board, T1_PORTFOLIO_VALUE_CARD_ID),
     [PORTFOLIO_CARD_ID]: buildObservedCardState(board, PORTFOLIO_CARD_ID),
     [MARKET_PRICES_CARD_ID]: buildObservedCardState(board, MARKET_PRICES_CARD_ID),
     [PORTFOLIO_VALUE_CARD_ID]: buildObservedCardState(board, PORTFOLIO_VALUE_CARD_ID),
+    [T3_CHAT_CARD_ID]: buildObservedCardState(board, T3_CHAT_CARD_ID),
     [T4_CHAT_CARD_ID]: buildObservedCardState(board, T4_CHAT_CARD_ID),
     [T8_CHAT_CARD_ID]: buildObservedCardState(board, T8_CHAT_CARD_ID),
     [T9_CHAT_CARD_ID]: buildObservedCardState(board, T9_CHAT_CARD_ID),
@@ -753,13 +864,14 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   }), [board]);
   const chatStatesById = useMemo(() => ({
     [PORTFOLIO_CARD_ID]: portfolioChatView?.chatState ?? null,
+    [T3_CHAT_CARD_ID]: t3ChatView?.chatState ?? null,
     [T4_CHAT_CARD_ID]: t4ChatView?.chatState ?? null,
     [T8_CHAT_CARD_ID]: t8ChatView?.chatState ?? null,
     [T9_CHAT_CARD_ID]: t9ChatView?.chatState ?? null,
     [T8F_CHAT_CARD_ID]: t8fChatView?.chatState ?? null,
     [T9F_CHAT_CARD_ID]: t9fChatView?.chatState ?? null,
     [WARMUP_CHAT_CARD_ID]: warmupChatView?.chatState ?? null,
-  }), [portfolioChatView, t4ChatView, t8ChatView, t8fChatView, t9ChatView, t9fChatView, warmupChatView]);
+  }), [portfolioChatView, t3ChatView, t4ChatView, t8ChatView, t8fChatView, t9ChatView, t9fChatView, warmupChatView]);
   const cardStatesRef = useRef(cardStatesById);
   const chatStatesRef = useRef(chatStatesById);
   const watchPartyByIdRef = useRef({});
@@ -789,9 +901,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
   useEffect(() => {
     cardActionsRef.current = {
+      [T1_PORTFOLIO_CARD_ID]: t1PortfolioCardHook?.cardActions ?? null,
       [PORTFOLIO_CARD_ID]: portfolioCardHook?.cardActions ?? null,
       [MARKET_PRICES_CARD_ID]: marketPricesCardHook?.cardActions ?? null,
       [PORTFOLIO_VALUE_CARD_ID]: portfolioValueCardHook?.cardActions ?? null,
+      [T3_CHAT_CARD_ID]: t3CardHook?.cardActions ?? null,
       [T4_CHAT_CARD_ID]: t4CardHook?.cardActions ?? null,
       [T8_CHAT_CARD_ID]: t8CardHook?.cardActions ?? null,
       [T9_CHAT_CARD_ID]: t9CardHook?.cardActions ?? null,
@@ -801,11 +915,12 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       [TR_MARKET_PRICES_CARD_ID]: trMarketPricesCardHook?.cardActions ?? null,
       [WARMUP_CHAT_CARD_ID]: warmupCardHook?.cardActions ?? null,
     };
-  }, [marketPricesCardHook, portfolioCardHook, portfolioValueCardHook, t4CardHook, t8CardHook, t8fCardHook, t9CardHook, t9fCardHook, trMarketPricesCardHook, trPortfolioCardHook, warmupCardHook]);
+  }, [marketPricesCardHook, portfolioCardHook, portfolioValueCardHook, t1PortfolioCardHook, t3CardHook, t4CardHook, t8CardHook, t8fCardHook, t9CardHook, t9fCardHook, trMarketPricesCardHook, trPortfolioCardHook, warmupCardHook]);
 
   useEffect(() => {
     chatActionsRef.current = {
       [PORTFOLIO_CARD_ID]: portfolioChatActions,
+      [T3_CHAT_CARD_ID]: t3ChatActions,
       [T4_CHAT_CARD_ID]: t4ChatActions,
       [T8_CHAT_CARD_ID]: t8ChatActions,
       [T9_CHAT_CARD_ID]: t9ChatActions,
@@ -813,7 +928,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       [T9F_CHAT_CARD_ID]: t9fChatActions,
       [WARMUP_CHAT_CARD_ID]: warmupChatActions,
     };
-  }, [portfolioChatActions, t4ChatActions, t8ChatActions, t8fChatActions, t9ChatActions, t9fChatActions, warmupChatActions]);
+  }, [portfolioChatActions, t3ChatActions, t4ChatActions, t8ChatActions, t8fChatActions, t9ChatActions, t9fChatActions, warmupChatActions]);
 
   useEffect(() => {
     chatStatesRef.current = chatStatesById;
@@ -822,13 +937,14 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   useEffect(() => {
     watchPartyByIdRef.current = {
       [PORTFOLIO_CARD_ID]: portfolioWatchParty ?? null,
+      [T3_CHAT_CARD_ID]: t3WatchParty ?? null,
       [T4_CHAT_CARD_ID]: t4WatchParty ?? null,
       [T8_CHAT_CARD_ID]: t8WatchParty ?? null,
       [T9_CHAT_CARD_ID]: t9WatchParty ?? null,
       [T8F_CHAT_CARD_ID]: t8fWatchParty ?? null,
       [T9F_CHAT_CARD_ID]: t9fWatchParty ?? null,
     };
-  }, [portfolioWatchParty, t4WatchParty, t8WatchParty, t9WatchParty, t8fWatchParty, t9fWatchParty]);
+  }, [portfolioWatchParty, t3WatchParty, t4WatchParty, t8WatchParty, t9WatchParty, t8fWatchParty, t9fWatchParty]);
 
   const appendLog = useCallback((caseId, message, kind = 'info') => {
     const entry = createLogEntry(caseId, message, kind);
@@ -936,13 +1052,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
   const callMcp = useCallback(async (tool, args = {}) => {
     if (tool === 'discover.source-kinds') {
-      return await getCardActions(PORTFOLIO_CARD_ID).discoverSourceKinds();
+      return await getCardActions(T1_PORTFOLIO_CARD_ID).discoverSourceKinds();
     }
     if (tool === 'preflight.validate-candidate-card-definition') {
-      return await getCardActions(PORTFOLIO_CARD_ID).validateCandidateCardDefinition(args.candidate_card_content);
+      return await getCardActions(T1_PORTFOLIO_CARD_ID).validateCandidateCardDefinition(args.candidate_card_content);
     }
     if (tool === 'preflight.probe-single-source-in-candidate-card') {
-      return await getCardActions(PORTFOLIO_CARD_ID).probeSingleSourceInCandidateCard(
+      return await getCardActions(T1_PORTFOLIO_CARD_ID).probeSingleSourceInCandidateCard(
         args.candidate_card_content,
         args.source_idx,
         {
@@ -952,7 +1068,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       );
     }
     if (tool === 'preflight.run-single-source-in-candidate-card') {
-      return await getCardActions(PORTFOLIO_CARD_ID).runSingleSourceInCandidateCard(
+      return await getCardActions(T1_PORTFOLIO_CARD_ID).runSingleSourceInCandidateCard(
         args.candidate_card_content,
         args.source_idx,
         {
@@ -962,7 +1078,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       );
     }
     if (tool === 'preflight.run-one-cycle-with-candidate-card') {
-      return await getCardActions(PORTFOLIO_CARD_ID).runOneCycleWithCandidateCard(
+      return await getCardActions(T1_PORTFOLIO_CARD_ID).runOneCycleWithCandidateCard(
         args.candidate_card_content,
         {
           ...(args.mock_requires ? { mockRequires: args.mock_requires } : {}),
@@ -1017,8 +1133,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     await manageBoardsActions.addBoard({
       boardId: runtime.boardId,
       label: runtime.boardId,
+      pageTitle: runtime.boardId,
+      pageSubtitle: 'Smoke Runner board',
       ai: 'copilot',
       aiWorkspaceTemplate: 'default',
+      uiTemplate: 'default',
       refsTemplate: 'localfs-default',
     });
     return await manageBoardsActions.listBoards();
@@ -1133,7 +1252,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   }, timeoutMs, label), [waitUntil]);
 
   const waitForCardStateData = useCallback(async (cardId, label, timeoutMs = 15_000) => waitUntil(() => {
-    const cardState = cardStatesRef.current[cardId];
+    const cardState = buildObservedCardState(boardRef.current, cardId);
     return cardState?.cardContent ? cardState : false;
   }, timeoutMs, label), [waitUntil]);
 
@@ -1300,24 +1419,24 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     }
 
     if (caseId === 'T0') {
-      log(`upserting ${PORTFOLIO_CARD_ID}`);
-      await callMcp('manage.upsert-card', { card_id: PORTFOLIO_CARD_ID, candidate_card_content: buildPortfolioCard(PORTFOLIO_CARD_ID) });
-      recordCard(PORTFOLIO_CARD_ID);
-      const stored = await waitForCardStateData(PORTFOLIO_CARD_ID, `hook card state for ${PORTFOLIO_CARD_ID}`);
-      const expected = buildPortfolioCard(PORTFOLIO_CARD_ID);
+      log(`upserting ${T0_PORTFOLIO_CARD_ID}`);
+      await callMcp('manage.upsert-card', { card_id: T0_PORTFOLIO_CARD_ID, candidate_card_content: buildPortfolioCard(T0_PORTFOLIO_CARD_ID) });
+      recordCard(T0_PORTFOLIO_CARD_ID);
+      const stored = await waitForCardStateData(T0_PORTFOLIO_CARD_ID, `hook card state for ${T0_PORTFOLIO_CARD_ID}`);
+      const expected = buildPortfolioCard(T0_PORTFOLIO_CARD_ID);
       const storedCard = {
         ...stored.cardContent,
         card_data: stored.cardData,
       };
       if (jsonText(canonicalizeJson(storedCard)) !== jsonText(canonicalizeJson(expected))) {
-        throw new Error(`hook card state mismatch for ${PORTFOLIO_CARD_ID}`);
+        throw new Error(`hook card state mismatch for ${T0_PORTFOLIO_CARD_ID}`);
       }
       const poll = await pollBoardStatus((statusData) => {
-        const card = findBoardStatusCard(statusData, PORTFOLIO_CARD_ID);
+        const card = findBoardStatusCard(statusData, T0_PORTFOLIO_CARD_ID);
         return card && String(card.status || '') === 'completed';
-      }, `${PORTFOLIO_CARD_ID} to complete`, 6, 1_000);
-      if (!poll.matched) throw new Error(`timed out waiting for ${PORTFOLIO_CARD_ID} to reach completed`);
-      log(`${PORTFOLIO_CARD_ID} completed in ${poll.attemptsUsed} poll(s)`);
+      }, `${T0_PORTFOLIO_CARD_ID} to complete`, 6, 1_000);
+      if (!poll.matched) throw new Error(`timed out waiting for ${T0_PORTFOLIO_CARD_ID} to reach completed`);
+      log(`${T0_PORTFOLIO_CARD_ID} completed in ${poll.attemptsUsed} poll(s)`);
       return;
     }
 
@@ -1329,18 +1448,24 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       }
       log(`discover.source-kinds ok: ${Object.keys(sourceKinds.sourceKinds).length} kind(s)`);
 
-      const marketPricesCard = buildMarketPricesCard(MARKET_PRICES_CARD_ID);
-      const portfolioValueCard = buildPortfolioValueCard(PORTFOLIO_VALUE_CARD_ID);
+      await callMcp('manage.upsert-card', {
+        card_id: T1_PORTFOLIO_CARD_ID,
+        candidate_card_content: buildPortfolioCard(T1_PORTFOLIO_CARD_ID),
+      });
+      recordCard(T1_PORTFOLIO_CARD_ID);
+
+      const marketPricesCard = buildMarketPricesCard(T1_MARKET_PRICES_CARD_ID);
+      const portfolioValueCard = buildPortfolioValueCard(T1_PORTFOLIO_VALUE_CARD_ID);
 
       const marketPricesPreflight = await callMcp('preflight.validate-candidate-card-definition', {
         candidate_card_content: marketPricesCard,
       });
-      if (marketPricesPreflight?.cardId !== MARKET_PRICES_CARD_ID || marketPricesPreflight?.isValid !== true) {
+      if (marketPricesPreflight?.cardId !== T1_MARKET_PRICES_CARD_ID || marketPricesPreflight?.isValid !== true) {
         throw new Error(`market-prices candidate preflight failed: ${jsonText(marketPricesPreflight)}`);
       }
       log('market-prices candidate preflight passed');
 
-      const storedPortfolio = await waitForCardStateData(PORTFOLIO_CARD_ID, `hook card state for ${PORTFOLIO_CARD_ID}`);
+      const storedPortfolio = await waitForCardStateData(T1_PORTFOLIO_CARD_ID, `hook card state for ${T1_PORTFOLIO_CARD_ID}`);
       const holdings = storedPortfolio?.cardData?.holdings;
       if (!Array.isArray(holdings) || holdings.length === 0) {
         throw new Error('portfolio holdings missing for market-prices preflight');
@@ -1356,7 +1481,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         source_idx: 0,
         mock_projections: mockProjections,
       });
-      if (sourceProbe?.bindTo !== 'quotes_tc2' || sourceProbe?.reachable !== true) {
+      if (sourceProbe?.bindTo !== T1_QUOTES_TOKEN || sourceProbe?.reachable !== true) {
         throw new Error(`market-prices source probe failed: ${jsonText(sourceProbe)}`);
       }
       log('market-prices source probe passed');
@@ -1366,16 +1491,16 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         source_idx: 0,
         mock_projections: mockProjections,
       });
-      if (sourceRun?.bindTo !== 'quotes_tc2' || sourceRun?.ok !== true) {
+      if (sourceRun?.bindTo !== T1_QUOTES_TOKEN || sourceRun?.ok !== true) {
         throw new Error(`market-prices source run failed: ${jsonText(sourceRun)}`);
       }
       log('market-prices source run passed');
 
       const cycle = await callMcp('preflight.run-one-cycle-with-candidate-card', {
         candidate_card_content: marketPricesCard,
-        mock_requires: { holdings_tc1: holdings },
+        mock_requires: { [T1_HOLDINGS_TOKEN]: holdings },
       });
-      if (cycle?.cardId !== MARKET_PRICES_CARD_ID || cycle?.ok !== true || !cycle?.provides_outputs?.quotes_tc2?.quoteResponse) {
+      if (cycle?.cardId !== T1_MARKET_PRICES_CARD_ID || cycle?.ok !== true || !cycle?.provides_outputs?.[T1_QUOTES_TOKEN]?.quoteResponse) {
         throw new Error(`market-prices cycle preflight failed: ${jsonText(cycle)}`);
       }
       log('market-prices one-cycle preflight passed');
@@ -1383,7 +1508,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       const portfolioValuePreflight = await callMcp('preflight.validate-candidate-card-definition', {
         candidate_card_content: portfolioValueCard,
       });
-      if (portfolioValuePreflight?.cardId !== PORTFOLIO_VALUE_CARD_ID || portfolioValuePreflight?.isValid !== true) {
+      if (portfolioValuePreflight?.cardId !== T1_PORTFOLIO_VALUE_CARD_ID || portfolioValuePreflight?.isValid !== true) {
         throw new Error(`portfolio-value candidate preflight failed: ${jsonText(portfolioValuePreflight)}`);
       }
       log('portfolio-value candidate preflight passed');
@@ -1425,8 +1550,9 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
       log(`step 6/7: reading hook runtime for ${MARKET_PRICES_CARD_ID} and ${PORTFOLIO_VALUE_CARD_ID}`);
       const computePayload = await waitUntil(() => {
-        const marketRuntime = cardStatesRef.current[MARKET_PRICES_CARD_ID];
-        const portfolioRuntime = cardStatesRef.current[PORTFOLIO_VALUE_CARD_ID];
+        const currentBoard = boardRef.current;
+        const marketRuntime = buildObservedCardState(currentBoard, MARKET_PRICES_CARD_ID);
+        const portfolioRuntime = buildObservedCardState(currentBoard, PORTFOLIO_VALUE_CARD_ID);
         const holdings = storedPortfolio?.cardData?.holdings;
         const priceRows = portfolioRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
           || marketRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
@@ -1438,7 +1564,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         return Array.isArray(holdings) && Array.isArray(priceRows) && Array.isArray(positions) && Number.isFinite(totalValue)
           ? { holdings, priceRows, positions, totalValue }
           : false;
-      }, 15_000, `computed runtime payload for ${PORTFOLIO_VALUE_CARD_ID}`);
+      }, 30_000, `computed runtime payload for ${PORTFOLIO_VALUE_CARD_ID}`);
       const { holdings, priceRows, positions, totalValue } = computePayload;
       const expected = computePortfolioExpectation(holdings, priceRows);
       if (roundMoney(totalValue) !== expected.totalValue) {
@@ -1452,48 +1578,48 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     }
 
     if (caseId === 'T3') {
-      log(`step 0/7: upserting ${PORTFOLIO_CARD_ID} for chat`);
+      log(`step 0/7: upserting ${T3_CHAT_CARD_ID} for chat`);
       await callMcp('manage.upsert-card', {
-        card_id: PORTFOLIO_CARD_ID,
-        candidate_card_content: buildPortfolioCard(PORTFOLIO_CARD_ID),
+        card_id: T3_CHAT_CARD_ID,
+        candidate_card_content: buildPortfolioCard(T3_CHAT_CARD_ID),
       });
-      recordCard(PORTFOLIO_CARD_ID);
+      recordCard(T3_CHAT_CARD_ID);
       await ensureBoardSseConnection();
-      await subscribeCardChats(PORTFOLIO_CARD_ID);
+      await subscribeCardChats(T3_CHAT_CARD_ID);
 
       const turnId = makeTurnId();
       const promptText = 'hi testing';
       const probeText = buildProbeChatText(promptText, 'echo');
 
       log(`step 1/7: sending chat turn ${turnId}`);
-      await callAction('chat-send', PORTFOLIO_CARD_ID, {
+      await callAction('chat-send', T3_CHAT_CARD_ID, {
         text: probeText,
         probe: 'echo',
         'turn-id': turnId,
       });
 
       log(`step 2/7: verifying user chat entry is stored`);
-      const userPoll = await pollChatMessages(PORTFOLIO_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'user' && String(message?.text || '') === promptText), `user chat message for turn ${turnId}`, 8, 500);
+      const userPoll = await pollChatMessages(T3_CHAT_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'user' && String(message?.text || '') === promptText), `user chat message for turn ${turnId}`, 8, 500);
       if (!userPoll.matched) throw new Error(`user message not found for turn ${turnId}`);
 
       log(`step 3/7: verifying chat processing turns on`);
-      const onPoll = await pollChatProcessing(PORTFOLIO_CARD_ID, true, `chat processing on for ${PORTFOLIO_CARD_ID}`, 8, 1_000);
-      if (!onPoll.matched) throw new Error(`chat processing did not turn on for ${PORTFOLIO_CARD_ID}`);
+      const onPoll = await pollChatProcessing(T3_CHAT_CARD_ID, true, `chat processing on for ${T3_CHAT_CARD_ID}`, 8, 1_000);
+      if (!onPoll.matched) throw new Error(`chat processing did not turn on for ${T3_CHAT_CARD_ID}`);
 
       const expectedReply = `Echo: ${promptText}`;
       log(`step 4/7: waiting for probe final reply`);
-      const assistantPoll = await pollChatMessages(PORTFOLIO_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'assistant' && String(message?.text || '').includes(expectedReply)), `probe final reply for turn ${turnId}`, 16, 1_000);
+      const assistantPoll = await pollChatMessages(T3_CHAT_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'assistant' && String(message?.text || '').includes(expectedReply)), `probe final reply for turn ${turnId}`, 16, 1_000);
       if (!assistantPoll.matched) {
         recordAiResponse('T3', readLatestAssistantText(assistantPoll.messages));
         throw new Error(`probe final reply not found for turn ${turnId}`);
       }
 
       log(`step 5/7: verifying chat processing turns off`);
-      const offPoll = await pollChatProcessing(PORTFOLIO_CARD_ID, false, `chat processing off for ${PORTFOLIO_CARD_ID}`, 16, 1_000);
-      if (!offPoll.matched) throw new Error(`chat processing did not turn off for ${PORTFOLIO_CARD_ID}`);
+      const offPoll = await pollChatProcessing(T3_CHAT_CARD_ID, false, `chat processing off for ${T3_CHAT_CARD_ID}`, 16, 1_000);
+      if (!offPoll.matched) throw new Error(`chat processing did not turn off for ${T3_CHAT_CARD_ID}`);
 
       log(`step 6/7: verifying final inspected messages`);
-      const finalMessages = await readChatMessages(PORTFOLIO_CARD_ID, turnId);
+      const finalMessages = await readChatMessages(T3_CHAT_CARD_ID, turnId);
       const finalUser = finalMessages.find((message) => message?.role === 'user');
       const finalAssistant = finalMessages.find((message) => message?.role === 'assistant');
       if (!finalUser || !finalAssistant) throw new Error(`final persisted messages missing for turn ${turnId}`);
@@ -1502,13 +1628,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         throw new Error(`final chat messages mismatch for turn ${turnId}`);
       }
 
-      log(`step 7/8: verifying watchparty tools for ${PORTFOLIO_CARD_ID}`);
-      await waitForStageAiResponseWatchParty('T3', PORTFOLIO_CARD_ID);
+      log(`step 7/8: verifying watchparty tools for ${T3_CHAT_CARD_ID}`);
+      await waitForStageAiResponseWatchParty('T3', T3_CHAT_CARD_ID);
 
       log(`step 8/8: verifying live /sse board-state bootstrap`);
       await reopenBoardSse();
-      await waitForSseSummary(`T3 SSE summary for ${PORTFOLIO_CARD_ID}`);
-      await waitForCompletedCard(PORTFOLIO_CARD_ID, `T3 SSE completed status for ${PORTFOLIO_CARD_ID}`);
+      await waitForSseSummary(`T3 SSE summary for ${T3_CHAT_CARD_ID}`);
+      await waitForCompletedCard(T3_CHAT_CARD_ID, `T3 SSE completed status for ${T3_CHAT_CARD_ID}`);
       await closeBoardSse();
       resetSseState();
       return;

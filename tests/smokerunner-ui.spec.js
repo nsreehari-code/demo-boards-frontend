@@ -161,7 +161,7 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
   expect(finalLogText).toContain('[T9]');
   expect(finalLogText).toContain('[T8F]');
   expect(finalLogText).toContain('[T9F]');
-  expect(finalLogText).toContain('step 6/7: verifying watchparty notifications');
+  expect(finalLogText).toContain('step 6/7: verifying watchparty tools');
 
   const failureSummaryChip = page.locator('.global-modal__chip--fail').filter({ hasText: /^Failed\s+[1-9]/ });
   await expect(failureSummaryChip).toHaveCount(0);
