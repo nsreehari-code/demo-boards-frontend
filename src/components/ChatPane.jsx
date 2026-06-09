@@ -577,18 +577,6 @@ const ChatComposer = React.memo(function ChatComposer({
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           style={{ resize: 'none', minHeight: '38px', maxHeight: '160px' }}
         />
-        {isMini && onPopout ? (
-          <button
-            type="button"
-            className="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
-            onClick={onPopout}
-            title="Open full chat"
-            aria-label={`Open full chat for ${cardId}`}
-            data-testid={`chat-pane-popout-${cardId}`}
-          >
-            <ChatPopoutIcon />
-          </button>
-        ) : null}
         <button
           className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
           data-testid={`chat-pane-send-${cardId}`}
