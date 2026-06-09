@@ -373,7 +373,7 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
   }, [activeChipKey, chips.length, onLayoutChange]);
 
   return (
-    <div className="d-flex mb-2 w-100">
+    <div className="d-flex mb-2 w-100" data-testid={`chat-working-bubble-${cardId}`}>
       <div
         className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex flex-column align-items-stretch w-100"
         style={{
@@ -461,7 +461,7 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
   );
 }
 
-const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder, processing, turnId }) {
+const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder, processing, turnId, cardId }) {
   const [text, setText] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef(null);
@@ -483,7 +483,7 @@ const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder
     if (processing) return;
     const t = text.trim();
     if (!t) return;
-    chatActions.sendChat(t, { turnId }).catch(() => {});
+    chatActions.sendChatAction(t, { turnId }).catch(() => {});
     setText('');
   };
 
@@ -528,6 +528,7 @@ const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder
         <textarea
           ref={textareaRef}
           className="board-chat-pane__textarea form-control form-control-sm"
+          data-testid={`chat-pane-textarea-${cardId}`}
           rows={1}
           value={text}
           placeholder={placeholder ?? 'Send a message…'}
@@ -535,7 +536,13 @@ const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           style={{ resize: 'none', minHeight: '38px', maxHeight: '160px' }}
         />
-        <button className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0" onClick={send} disabled={processing || !text.trim()}>
+        <button
+          className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
+          data-testid={`chat-pane-send-${cardId}`}
+          aria-label={`Send chat for ${cardId}`}
+          onClick={send}
+          disabled={processing || !text.trim()}
+        >
           <i className="bi bi-send" />
         </button>
       </div>
@@ -717,7 +724,7 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
         )}
         <div ref={bottomRef} />
       </div>
-      {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} turnId={draftTurnId} />}
+      {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} turnId={draftTurnId} cardId={cardId} />}
     </div>
   );
 }

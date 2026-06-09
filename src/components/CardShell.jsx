@@ -19,6 +19,8 @@ const ChatHeaderButton = memo(function ChatHeaderButton({ boardId, cardId, onOpe
       className="board-icon-button"
       onClick={onOpenChat}
       title={chatProcessing ? 'Chat processing' : 'Open chat'}
+      aria-label={chatProcessing ? `Chat processing for ${cardId}` : `Open chat for ${cardId}`}
+      data-testid={`card-shell-open-chat-${cardId}`}
     >
       <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
     </button>
@@ -70,6 +72,7 @@ function ChatModal({ boardId, cardId, title, onClose }) {
       className="board-modal position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
       style={{ zIndex: 1200, padding: '1rem' }}
       onClick={onClose}
+      data-testid={`chat-modal-${cardId}`}
     >
       <div
         className="board-modal__dialog w-100"

@@ -25,6 +25,7 @@ const PORTFOLIO_VALUE_CARD_ID = 'portfolio-value-t2-9042';
 const T2_HOLDINGS_TOKEN = 'holdings_t2_9002';
 const T2_QUOTES_TOKEN = 'quotes_t2_9022';
 const T3_CHAT_CARD_ID = 'card-portfolio-t3-9103';
+const T3U_CHAT_CARD_ID = 'card-portfolio-t3u-9105';
 const T4_CHAT_CARD_ID = 'card-portfolio-t4-9104';
 const T8_CHAT_CARD_ID = 'card-portfolio-t8-9108';
 const T9_CHAT_CARD_ID = 'card-portfolio-t9-9109';
@@ -35,7 +36,7 @@ const TR_MARKET_PRICES_CARD_ID = 'market-prices-tr-9201';
 const TR_QUOTES_TOKEN = 'quotes_tr2_9201';
 const TR_HOLDINGS_TOKEN = 'holdings_tr_9200';
 const WARMUP_CHAT_CARD_ID = 'card-smoke-warmup-9099';
-const AI_RESPONSE_CASE_ORDER = ['T3', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
+const AI_RESPONSE_CASE_ORDER = ['T3', 'T3u', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
 const STAGE_AI_RESPONSE_TOOL_LABEL = "Invoking 'Stage Ai Response And Any Attachments'";
 const PORTFOLIO_CARD_VARIANTS = {
   [T0_PORTFOLIO_CARD_ID]: {
@@ -52,6 +53,10 @@ const PORTFOLIO_CARD_VARIANTS = {
   [T3_CHAT_CARD_ID]: {
     caseLabel: 'T3',
     holdingsToken: 'holdings_t3_9103',
+  },
+  [T3U_CHAT_CARD_ID]: {
+    caseLabel: 'T3u',
+    holdingsToken: 'holdings_t3u_9105',
   },
   [T4_CHAT_CARD_ID]: {
     caseLabel: 'T4',
@@ -76,6 +81,9 @@ const PORTFOLIO_CARD_VARIANTS = {
   [TR_PORTFOLIO_CARD_ID]: {
     caseLabel: 'TR',
     holdingsToken: TR_HOLDINGS_TOKEN,
+  },
+  [WARMUP_CHAT_CARD_ID]: {
+    caseLabel: 'W',
   },
 };
 const MARKET_PRICES_CARD_VARIANTS = {
@@ -118,6 +126,7 @@ const SMOKE_CARD_IDS = [
   T8F_CHAT_CARD_ID,
   T9_CHAT_CARD_ID,
   T8_CHAT_CARD_ID,
+  T3U_CHAT_CARD_ID,
   T3_CHAT_CARD_ID,
   T4_CHAT_CARD_ID,
   PORTFOLIO_VALUE_CARD_ID,
@@ -127,6 +136,10 @@ const SMOKE_CARD_IDS = [
 ];
 const AI_RESPONSE_EXPECTATIONS = {
   T3: {
+    expectedLabel: 'Echo: hi testing',
+    matches: (responseText) => String(responseText || '').includes('Echo: hi testing'),
+  },
+  T3u: {
     expectedLabel: 'Echo: hi testing',
     matches: (responseText) => String(responseText || '').includes('Echo: hi testing'),
   },
@@ -388,6 +401,7 @@ const SMOKE_CASES = [
   },
   { id: 'T2', title: 'Portfolio compute end-to-end', mode: 'run' },
   { id: 'T3', title: 'Probe chat lifecycle', mode: 'run' },
+  { id: 'T3u', title: 'Probe chat lifecycle via real ChatPane UI', mode: 'run' },
   { id: 'T4', title: 'Probe chat with attachment', mode: 'run' },
   {
     id: 'TS',
@@ -468,6 +482,12 @@ function buildProbeChatText(promptText, assistantStem = '') {
     ? assistantStem.trim()
     : 'echo';
   return `${PROBE_ENVELOPE}${normalizedAssistantStem}__${normalizedPromptText}${PROBE_ENVELOPE}`;
+}
+
+function setTextAreaInputValue(element, value) {
+  const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+  descriptor?.set?.call(element, value);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function applyCaseLabelToTitle(card, caseLabel, fallbackTitle) {
@@ -798,6 +818,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const marketPricesCardHook = useCardState(SMOKE_BOARD_ID, MARKET_PRICES_CARD_ID);
   const portfolioValueCardHook = useCardState(SMOKE_BOARD_ID, PORTFOLIO_VALUE_CARD_ID);
   const t3CardHook = useCardState(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
+  const t3uCardHook = useCardState(SMOKE_BOARD_ID, T3U_CHAT_CARD_ID);
   const t4CardHook = useCardState(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8CardHook = useCardState(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
   const t9CardHook = useCardState(SMOKE_BOARD_ID, T9_CHAT_CARD_ID);
@@ -807,6 +828,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const trMarketPricesCardHook = useCardState(SMOKE_BOARD_ID, TR_MARKET_PRICES_CARD_ID);
   const warmupCardHook = useCardState(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
   const t3ChatActions = useChatActions(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
+  const t3uChatActions = useChatActions(SMOKE_BOARD_ID, T3U_CHAT_CARD_ID);
   const portfolioChatActions = useChatActions(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4ChatActions = useChatActions(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8ChatActions = useChatActions(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -817,6 +839,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const { manageBoardsActions } = useManageBoards(normalizedOrigin, { enabled: false });
   const { runtimeCardActions } = useRuntimeCards(SMOKE_BOARD_ID);
   const t3ChatView = useCardChatViews(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
+  const t3uChatView = useCardChatViews(SMOKE_BOARD_ID, T3U_CHAT_CARD_ID);
   const portfolioChatView = useCardChatViews(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4ChatView = useCardChatViews(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8ChatView = useCardChatViews(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -825,6 +848,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const t9fChatView = useCardChatViews(SMOKE_BOARD_ID, T9F_CHAT_CARD_ID);
   const warmupChatView = useCardChatViews(SMOKE_BOARD_ID, WARMUP_CHAT_CARD_ID);
   const t3WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T3_CHAT_CARD_ID);
+  const t3uWatchParty = useChatWatchParty(SMOKE_BOARD_ID, T3U_CHAT_CARD_ID);
   const portfolioWatchParty = useChatWatchParty(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
   const t4WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T4_CHAT_CARD_ID);
   const t8WatchParty = useChatWatchParty(SMOKE_BOARD_ID, T8_CHAT_CARD_ID);
@@ -853,6 +877,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     [MARKET_PRICES_CARD_ID]: buildObservedCardState(board, MARKET_PRICES_CARD_ID),
     [PORTFOLIO_VALUE_CARD_ID]: buildObservedCardState(board, PORTFOLIO_VALUE_CARD_ID),
     [T3_CHAT_CARD_ID]: buildObservedCardState(board, T3_CHAT_CARD_ID),
+    [T3U_CHAT_CARD_ID]: buildObservedCardState(board, T3U_CHAT_CARD_ID),
     [T4_CHAT_CARD_ID]: buildObservedCardState(board, T4_CHAT_CARD_ID),
     [T8_CHAT_CARD_ID]: buildObservedCardState(board, T8_CHAT_CARD_ID),
     [T9_CHAT_CARD_ID]: buildObservedCardState(board, T9_CHAT_CARD_ID),
@@ -865,13 +890,14 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const chatStatesById = useMemo(() => ({
     [PORTFOLIO_CARD_ID]: portfolioChatView?.chatState ?? null,
     [T3_CHAT_CARD_ID]: t3ChatView?.chatState ?? null,
+    [T3U_CHAT_CARD_ID]: t3uChatView?.chatState ?? null,
     [T4_CHAT_CARD_ID]: t4ChatView?.chatState ?? null,
     [T8_CHAT_CARD_ID]: t8ChatView?.chatState ?? null,
     [T9_CHAT_CARD_ID]: t9ChatView?.chatState ?? null,
     [T8F_CHAT_CARD_ID]: t8fChatView?.chatState ?? null,
     [T9F_CHAT_CARD_ID]: t9fChatView?.chatState ?? null,
     [WARMUP_CHAT_CARD_ID]: warmupChatView?.chatState ?? null,
-  }), [portfolioChatView, t3ChatView, t4ChatView, t8ChatView, t8fChatView, t9ChatView, t9fChatView, warmupChatView]);
+  }), [portfolioChatView, t3ChatView, t3uChatView, t4ChatView, t8ChatView, t8fChatView, t9ChatView, t9fChatView, warmupChatView]);
   const cardStatesRef = useRef(cardStatesById);
   const chatStatesRef = useRef(chatStatesById);
   const watchPartyByIdRef = useRef({});
@@ -906,6 +932,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       [MARKET_PRICES_CARD_ID]: marketPricesCardHook?.cardActions ?? null,
       [PORTFOLIO_VALUE_CARD_ID]: portfolioValueCardHook?.cardActions ?? null,
       [T3_CHAT_CARD_ID]: t3CardHook?.cardActions ?? null,
+      [T3U_CHAT_CARD_ID]: t3uCardHook?.cardActions ?? null,
       [T4_CHAT_CARD_ID]: t4CardHook?.cardActions ?? null,
       [T8_CHAT_CARD_ID]: t8CardHook?.cardActions ?? null,
       [T9_CHAT_CARD_ID]: t9CardHook?.cardActions ?? null,
@@ -915,12 +942,13 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       [TR_MARKET_PRICES_CARD_ID]: trMarketPricesCardHook?.cardActions ?? null,
       [WARMUP_CHAT_CARD_ID]: warmupCardHook?.cardActions ?? null,
     };
-  }, [marketPricesCardHook, portfolioCardHook, portfolioValueCardHook, t1PortfolioCardHook, t3CardHook, t4CardHook, t8CardHook, t8fCardHook, t9CardHook, t9fCardHook, trMarketPricesCardHook, trPortfolioCardHook, warmupCardHook]);
+  }, [marketPricesCardHook, portfolioCardHook, portfolioValueCardHook, t1PortfolioCardHook, t3CardHook, t3uCardHook, t4CardHook, t8CardHook, t8fCardHook, t9CardHook, t9fCardHook, trMarketPricesCardHook, trPortfolioCardHook, warmupCardHook]);
 
   useEffect(() => {
     chatActionsRef.current = {
       [PORTFOLIO_CARD_ID]: portfolioChatActions,
       [T3_CHAT_CARD_ID]: t3ChatActions,
+      [T3U_CHAT_CARD_ID]: t3uChatActions,
       [T4_CHAT_CARD_ID]: t4ChatActions,
       [T8_CHAT_CARD_ID]: t8ChatActions,
       [T9_CHAT_CARD_ID]: t9ChatActions,
@@ -928,7 +956,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       [T9F_CHAT_CARD_ID]: t9fChatActions,
       [WARMUP_CHAT_CARD_ID]: warmupChatActions,
     };
-  }, [portfolioChatActions, t3ChatActions, t4ChatActions, t8ChatActions, t8fChatActions, t9ChatActions, t9fChatActions, warmupChatActions]);
+  }, [portfolioChatActions, t3ChatActions, t3uChatActions, t4ChatActions, t8ChatActions, t8fChatActions, t9ChatActions, t9fChatActions, warmupChatActions]);
 
   useEffect(() => {
     chatStatesRef.current = chatStatesById;
@@ -938,13 +966,14 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     watchPartyByIdRef.current = {
       [PORTFOLIO_CARD_ID]: portfolioWatchParty ?? null,
       [T3_CHAT_CARD_ID]: t3WatchParty ?? null,
+      [T3U_CHAT_CARD_ID]: t3uWatchParty ?? null,
       [T4_CHAT_CARD_ID]: t4WatchParty ?? null,
       [T8_CHAT_CARD_ID]: t8WatchParty ?? null,
       [T9_CHAT_CARD_ID]: t9WatchParty ?? null,
       [T8F_CHAT_CARD_ID]: t8fWatchParty ?? null,
       [T9F_CHAT_CARD_ID]: t9fWatchParty ?? null,
     };
-  }, [portfolioWatchParty, t3WatchParty, t4WatchParty, t8WatchParty, t9WatchParty, t8fWatchParty, t9fWatchParty]);
+  }, [portfolioWatchParty, t3WatchParty, t3uWatchParty, t4WatchParty, t8WatchParty, t9WatchParty, t8fWatchParty, t9fWatchParty]);
 
   const appendLog = useCallback((caseId, message, kind = 'info') => {
     const entry = createLogEntry(caseId, message, kind);
@@ -1277,6 +1306,49 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     return false;
   }, timeoutMs, label), [waitUntil]);
 
+  const openChatComposerViaUi = useCallback(async (cardId, labelPrefix = cardId, timeoutMs = 15_000) => {
+    const openButton = await waitUntil(() => {
+      const element = document.querySelector(`[data-testid="card-shell-open-chat-${cardId}"]`);
+      return element instanceof HTMLButtonElement ? element : false;
+    }, timeoutMs, `${labelPrefix} open chat button`);
+    openButton.click();
+    return await waitUntil(() => {
+      const modal = document.querySelector(`[data-testid="chat-modal-${cardId}"]`);
+      const textarea = document.querySelector(`[data-testid="chat-pane-textarea-${cardId}"]`);
+      const sendButton = document.querySelector(`[data-testid="chat-pane-send-${cardId}"]`);
+      return modal instanceof HTMLElement && textarea instanceof HTMLTextAreaElement && sendButton instanceof HTMLButtonElement
+        ? { modal, textarea, sendButton }
+        : false;
+    }, timeoutMs, `${labelPrefix} chat composer ready`);
+  }, [waitUntil]);
+
+  const sendChatThroughUi = useCallback(async (cardId, text, labelPrefix = cardId, timeoutMs = 15_000) => {
+    const composer = await openChatComposerViaUi(cardId, labelPrefix, timeoutMs);
+    setTextAreaInputValue(composer.textarea, text);
+    const sendButton = await waitUntil(() => {
+      const element = document.querySelector(`[data-testid="chat-pane-send-${cardId}"]`);
+      return element instanceof HTMLButtonElement && !element.disabled ? element : false;
+    }, timeoutMs, `${labelPrefix} send button enabled`);
+    sendButton.click();
+    return composer;
+  }, [openChatComposerViaUi, waitUntil]);
+
+  const waitForWorkingBubbleVisible = useCallback(async (cardId, labelPrefix = cardId, timeoutMs = 15_000) => waitUntil(() => {
+    const element = document.querySelector(`[data-testid="chat-working-bubble-${cardId}"]`);
+    return element instanceof HTMLElement ? element : false;
+  }, timeoutMs, `${labelPrefix} working bubble visible`), [waitUntil]);
+
+  const closeChatModalViaUi = useCallback(async (cardId) => {
+    const modal = document.querySelector(`[data-testid="chat-modal-${cardId}"]`);
+    if (!(modal instanceof HTMLElement)) {
+      return;
+    }
+    const closeButton = modal.querySelector('.board-icon-button');
+    if (closeButton instanceof HTMLButtonElement) {
+      closeButton.click();
+    }
+  }, []);
+
   const warmChatQueue = useCallback(async () => {
     const runtime = runtimeRef.current;
     appendLog('', `[warmup] ensuring board '${SMOKE_BOARD_ID}' is registered`);
@@ -1600,7 +1672,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
       log(`step 2/7: verifying user chat entry is stored`);
       const userPoll = await pollChatMessages(T3_CHAT_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'user' && String(message?.text || '') === promptText), `user chat message for turn ${turnId}`, 8, 500);
-      if (!userPoll.matched) throw new Error(`user message not found for turn ${turnId}`);
+      if (!userPoll.matched) throw new Error(`user message not found for prompt ${promptText}`);
 
       log(`step 3/7: verifying chat processing turns on`);
       const onPoll = await pollChatProcessing(T3_CHAT_CARD_ID, true, `chat processing on for ${T3_CHAT_CARD_ID}`, 8, 1_000);
@@ -1637,6 +1709,71 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       await waitForCompletedCard(T3_CHAT_CARD_ID, `T3 SSE completed status for ${T3_CHAT_CARD_ID}`);
       await closeBoardSse();
       resetSseState();
+      return;
+    }
+
+    if (caseId === 'T3u') {
+      log(`step 0/8: upserting ${T3U_CHAT_CARD_ID} for chat`);
+      await callMcp('manage.upsert-card', {
+        card_id: T3U_CHAT_CARD_ID,
+        candidate_card_content: buildPortfolioCard(T3U_CHAT_CARD_ID),
+      });
+      recordCard(T3U_CHAT_CARD_ID);
+      await ensureBoardSseConnection();
+      await subscribeCardChats(T3U_CHAT_CARD_ID);
+
+      const promptText = 'hi testing';
+      const probeText = buildProbeChatText(promptText, 'echo');
+
+      log(`step 1/8: sending chat through ChatPane UI`);
+      await sendChatThroughUi(T3U_CHAT_CARD_ID, probeText, 'T3u');
+
+      log(`step 2/8: verifying AI working bubble appears in ChatPane`);
+      await waitForWorkingBubbleVisible(T3U_CHAT_CARD_ID, 'T3u');
+
+      log(`step 3/8: verifying user chat entry is stored`);
+      const userPoll = await pollChatMessages(T3U_CHAT_CARD_ID, '', (messages) => messages.some((message) => message?.role === 'user' && String(message?.text || '') === promptText), `user chat message for prompt ${promptText}`, 8, 500);
+      if (!userPoll.matched) throw new Error(`user message not found for prompt ${promptText}`);
+      const userMessage = userPoll.messages.find((message) => message?.role === 'user' && String(message?.text || '') === promptText);
+      const turnId = String(userMessage?.turn || '').trim();
+      if (!turnId) throw new Error(`user message turn id missing for prompt ${promptText}`);
+
+      log(`step 4/8: verifying chat processing turns on`);
+      const onPoll = await pollChatProcessing(T3U_CHAT_CARD_ID, true, `chat processing on for ${T3U_CHAT_CARD_ID}`, 8, 1_000);
+      if (!onPoll.matched) throw new Error(`chat processing did not turn on for ${T3U_CHAT_CARD_ID}`);
+
+      const expectedReply = `Echo: ${promptText}`;
+      log(`step 5/8: waiting for probe final reply`);
+      const assistantPoll = await pollChatMessages(T3U_CHAT_CARD_ID, turnId, (messages) => messages.some((message) => message?.role === 'assistant' && String(message?.text || '').includes(expectedReply)), `probe final reply for turn ${turnId}`, 16, 1_000);
+      if (!assistantPoll.matched) {
+        recordAiResponse('T3u', readLatestAssistantText(assistantPoll.messages));
+        throw new Error(`probe final reply not found for turn ${turnId}`);
+      }
+
+      log(`step 6/8: verifying chat processing turns off`);
+      const offPoll = await pollChatProcessing(T3U_CHAT_CARD_ID, false, `chat processing off for ${T3U_CHAT_CARD_ID}`, 16, 1_000);
+      if (!offPoll.matched) throw new Error(`chat processing did not turn off for ${T3U_CHAT_CARD_ID}`);
+
+      log(`step 7/8: verifying final inspected messages`);
+      const finalMessages = await readChatMessages(T3U_CHAT_CARD_ID, turnId);
+      const finalUser = finalMessages.find((message) => message?.role === 'user');
+      const finalAssistant = finalMessages.find((message) => message?.role === 'assistant');
+      if (!finalUser || !finalAssistant) throw new Error(`final persisted messages missing for turn ${turnId}`);
+      recordAiResponse('T3u', String(finalAssistant.text || ''));
+      if (String(finalUser.text || '') !== promptText || !String(finalAssistant.text || '').includes(expectedReply)) {
+        throw new Error(`final chat messages mismatch for turn ${turnId}`);
+      }
+
+      log(`step 8/9: verifying watchparty tools for ${T3U_CHAT_CARD_ID}`);
+      await waitForStageAiResponseWatchParty('T3u', T3U_CHAT_CARD_ID);
+
+      log(`step 9/9: verifying live /sse board-state bootstrap`);
+      await reopenBoardSse();
+      await waitForSseSummary(`T3u SSE summary for ${T3U_CHAT_CARD_ID}`);
+      await waitForCompletedCard(T3U_CHAT_CARD_ID, `T3u SSE completed status for ${T3U_CHAT_CARD_ID}`);
+      await closeBoardSse();
+      resetSseState();
+      await closeChatModalViaUi(T3U_CHAT_CARD_ID);
       return;
     }
 
