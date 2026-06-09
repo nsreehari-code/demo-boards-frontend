@@ -1,9 +1,10 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
 import { useChatStateAIWorking } from '../hooks/useChatState.js';
 import { useBoardInspectState } from '../hooks/useBoardState.js';
 import { CardCore } from './CardCore.jsx';
-import { ChatPane } from './ChatPane.jsx';
+import { ChatPane, MiniChatPane } from './ChatPane.jsx';
+import { GlobalModal } from './GlobalModal.jsx';
 import { InspectCard } from './InspectCard.jsx';
 
 const CHAT_PROCESSING_PULSE_STYLE = {
@@ -11,18 +12,31 @@ const CHAT_PROCESSING_PULSE_STYLE = {
   transformOrigin: 'center',
 };
 
-const ChatHeaderButton = memo(function ChatHeaderButton({ boardId, cardId, onOpenChat }) {
+function ChatIconWithClose() {
+  return (
+    <span className="board-chat-toggle-icon" aria-hidden="true">
+      <i className="bi bi-chat" />
+      <span className="board-chat-toggle-icon__close">
+        <i className="bi bi-x" />
+      </span>
+    </span>
+  );
+}
+
+const ChatHeaderButton = memo(function ChatHeaderButton({ boardId, cardId, chatOpen, onToggleChat }) {
   const chatProcessing = useChatStateAIWorking(boardId, cardId);
   return (
     <button
       type="button"
       className="board-icon-button"
-      onClick={onOpenChat}
-      title={chatProcessing ? 'Chat processing' : 'Open chat'}
-      aria-label={chatProcessing ? `Chat processing for ${cardId}` : `Open chat for ${cardId}`}
+      onClick={onToggleChat}
+      title={chatOpen ? 'Close chat' : chatProcessing ? 'Chat processing' : 'Open chat'}
+      aria-label={chatOpen ? `Close chat for ${cardId}` : chatProcessing ? `Chat processing for ${cardId}` : `Open chat for ${cardId}`}
       data-testid={`card-shell-open-chat-${cardId}`}
     >
-      <i className="bi bi-chat" style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined} />
+      <span style={chatProcessing ? CHAT_PROCESSING_PULSE_STYLE : undefined}>
+        {chatOpen ? <ChatIconWithClose /> : <i className="bi bi-chat" />}
+      </span>
     </button>
   );
 });
@@ -53,44 +67,6 @@ function getStatusTone(status) {
     default:
       return 'board-tone--fresh';
   }
-}
-
-function ChatModal({ boardId, cardId, title, onClose }) {
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div
-      className="board-modal position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-      style={{ zIndex: 1200, padding: '1rem' }}
-      onClick={onClose}
-      data-testid={`chat-modal-${cardId}`}
-    >
-      <div
-        className="board-modal__dialog w-100"
-        style={{ maxWidth: '960px', height: 'min(90vh, 720px)' }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="board-modal__header d-flex align-items-center justify-content-between gap-2 px-3 py-3">
-          <div className="board-modal__title text-truncate">Chat: {title}</div>
-          <button type="button" className="board-icon-button" onClick={onClose} title="Close chat">
-            <i className="bi bi-x-lg" />
-          </button>
-        </div>
-        <div className="board-modal__body" style={{ height: 'calc(100% - 65px)' }}>
-          <ChatPane boardId={boardId} cardId={cardId} />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function CardShellComponent({ boardId, cardId, renderInInspect = false }) {
@@ -129,7 +105,19 @@ function CardShellBoardView({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const { inspectedCardId, setInspectedCardId } = useBoardInspectState(boardId);
   const [chatOpen, setChatOpen] = useState(false);
-  const handleOpenChat = useCallback(() => setChatOpen(true), []);
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [theme] = useState(() => (
+    typeof document !== 'undefined'
+      ? document.querySelector('.board-app-shell[data-theme]')?.getAttribute('data-theme') ?? null
+      : null
+  ));
+  const handleToggleChat = useCallback(() => {
+    setChatOpen((current) => !current);
+  }, []);
+  const handleOpenChatModal = useCallback(() => {
+    setChatOpen(false);
+    setChatModalOpen(true);
+  }, []);
 
   if (!cardState?.cardContent) return null;
 
@@ -194,17 +182,36 @@ function CardShellBoardView({ boardId, cardId }) {
               <ChatHeaderButton
                 boardId={boardId}
                 cardId={cardId}
-                onOpenChat={handleOpenChat}
+                chatOpen={chatOpen}
+                onToggleChat={handleToggleChat}
               />
             </div>
         </div>
-        <div className="board-card__body">
-          <CardCore boardId={boardId} cardId={cardId} />
+        <div className={`board-card__body${chatOpen ? ' board-card__body--with-mini-chat' : ''}`}>
+          {chatOpen ? (
+            <div className="board-card__mini-chat">
+              <MiniChatPane boardId={boardId} cardId={cardId} onPopout={handleOpenChatModal} />
+            </div>
+          ) : null}
+          <div className="board-card__content">
+            <CardCore boardId={boardId} cardId={cardId} />
+          </div>
         </div>
       </div>
 
-      {chatOpen ? (
-        <ChatModal boardId={boardId} cardId={cardId} title={title} onClose={() => setChatOpen(false)} />
+      {chatModalOpen ? (
+        <GlobalModal
+          title={`Chat: ${title}`}
+          onClose={() => setChatModalOpen(false)}
+          className="global-modal--chat"
+          bodyClassName="global-modal__body--chat"
+        >
+          <div className="board-app-shell chat-modal__theme-scope" data-theme={theme ?? undefined}>
+            <div data-testid={`chat-modal-${cardId}`} style={{ height: '100%' }}>
+              <ChatPane boardId={boardId} cardId={cardId} />
+            </div>
+          </div>
+        </GlobalModal>
       ) : null}
       {inspectOpen ? (
         <InspectCard

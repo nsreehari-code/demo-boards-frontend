@@ -41,6 +41,24 @@ function WorkingBubbleIcon() {
   );
 }
 
+function ChatPopoutIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 5h5v5" />
+      <path d="M10 14 19 5" />
+      <path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" />
+    </svg>
+  );
+}
+
+function ChatAttachIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.2a2 2 0 0 1-2.82-2.83l8.48-8.48" />
+    </svg>
+  );
+}
+
 const processingStates = [
   'The mission is underway…',
   'Engaging hyperdrive…',
@@ -375,11 +393,9 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
   return (
     <div className="d-flex mb-2 w-100" data-testid={`chat-working-bubble-${cardId}`}>
       <div
-        className="px-2 py-1 rounded-3 small text-muted fst-italic d-inline-flex flex-column align-items-stretch w-100"
+        className="board-chat-pane__working-bubble px-2 py-1 rounded-3 small fst-italic d-inline-flex flex-column align-items-stretch w-100"
         style={{
           maxWidth: '100%',
-          background: 'var(--bs-light, #f8f9fa)',
-          border: '1px solid var(--bs-border-color, #dee2e6)',
           gap: '0.45rem',
         }}
       >
@@ -461,11 +477,20 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
   );
 }
 
-const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder, processing, turnId, cardId }) {
+const ChatComposer = React.memo(function ChatComposer({
+  chatActions,
+  placeholder,
+  processing,
+  turnId,
+  cardId,
+  variant = 'default',
+  onPopout,
+}) {
   const [text, setText] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef(null);
   const textareaRef = useRef(null);
+  const isMini = variant === 'mini';
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -488,43 +513,59 @@ const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder
   };
 
   return (
-    <div className="board-chat-pane__composer border-top p-2 d-flex flex-column gap-2 flex-shrink-0">
-      <div
-        className={`board-chat-pane__dropzone border rounded-3 p-2 small text-center${processing ? ' is-disabled' : dragActive ? ' is-active' : ''}`}
-        role="button"
-        tabIndex={0}
-        aria-disabled={processing}
-        onClick={() => { if (!processing) fileRef.current?.click(); }}
-        onDragEnter={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-        onDragOver={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-        onDragLeave={(e) => { e.preventDefault(); if (!processing && e.currentTarget === e.target) setDragActive(false); }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragActive(false);
-          upload(e.dataTransfer.files?.[0]);
-        }}
-        onKeyDown={(e) => {
-          if (processing) return;
-          if (e.key === 'Enter' || e.key === ' ') {
+    <div className={`board-chat-pane__composer border-top d-flex flex-column gap-2 flex-shrink-0${isMini ? ' board-chat-pane__composer--mini p-1' : ' p-2'}`}>
+      {!isMini ? (
+        <div
+          className={`board-chat-pane__dropzone border rounded-3 p-2 small text-center${processing ? ' is-disabled' : dragActive ? ' is-active' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-disabled={processing}
+          onClick={() => { if (!processing) fileRef.current?.click(); }}
+          onDragEnter={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
+          onDragOver={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
+          onDragLeave={(e) => { e.preventDefault(); if (!processing && e.currentTarget === e.target) setDragActive(false); }}
+          onDrop={(e) => {
             e.preventDefault();
-            fileRef.current?.click();
-          }
-        }}
-      >
-        Drop a file here or click to browse
-        <input
-          ref={fileRef}
-          type="file"
-          className="d-none"
-          disabled={processing}
-          onChange={(e) => {
-            upload(e.target.files?.[0]);
-            e.target.value = '';
+            setDragActive(false);
+            upload(e.dataTransfer.files?.[0]);
           }}
-        />
-      </div>
+          onKeyDown={(e) => {
+            if (processing) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileRef.current?.click();
+            }
+          }}
+        >
+          Drop a file here or click to browse
+        </div>
+      ) : null}
 
-      <div className="board-chat-pane__input-row d-flex gap-2 align-items-end">
+      <input
+        ref={fileRef}
+        type="file"
+        className="d-none"
+        disabled={processing}
+        onChange={(e) => {
+          upload(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
+
+      <div className={`board-chat-pane__input-row d-flex gap-2 align-items-end${isMini ? ' board-chat-pane__input-row--mini' : ''}`}>
+        {isMini ? (
+          <button
+            type="button"
+            className="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
+            onClick={() => fileRef.current?.click()}
+            title="Attach file"
+            aria-label={`Attach file for ${cardId}`}
+            disabled={processing}
+            data-testid={`chat-pane-attach-${cardId}`}
+          >
+            <ChatAttachIcon />
+          </button>
+        ) : null}
         <textarea
           ref={textareaRef}
           className="board-chat-pane__textarea form-control form-control-sm"
@@ -536,6 +577,18 @@ const ChatComposer = React.memo(function ChatComposer({ chatActions, placeholder
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           style={{ resize: 'none', minHeight: '38px', maxHeight: '160px' }}
         />
+        {isMini && onPopout ? (
+          <button
+            type="button"
+            className="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
+            onClick={onPopout}
+            title="Open full chat"
+            aria-label={`Open full chat for ${cardId}`}
+            data-testid={`chat-pane-popout-${cardId}`}
+          >
+            <ChatPopoutIcon />
+          </button>
+        ) : null}
         <button
           className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
           data-testid={`chat-pane-send-${cardId}`}
@@ -560,7 +613,16 @@ function isPendingFileUploadMessage(msg) {
   return /^file uploaded:/i.test(text);
 }
 
-export function ChatPane({ boardId, cardId, readOnly = false, compact = false }) {
+function ChatPaneBase({
+  boardId,
+  cardId,
+  readOnly = false,
+  compact = false,
+  composerVariant = 'default',
+  onPopout,
+  className = '',
+  headerContent = null,
+}) {
   const chat = useChatState(boardId, cardId);
   const messages = chat?.messages ?? [];
   const processing = chat?.processing ?? false;
@@ -701,7 +763,8 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
   if (!chat) return null;
 
   return (
-    <div className="board-chat-pane">
+    <div className={`board-chat-pane ${className}`.trim()}>
+      {headerContent}
       <div
         ref={messagesRef}
         className="board-chat-pane__messages p-2"
@@ -724,7 +787,50 @@ export function ChatPane({ boardId, cardId, readOnly = false, compact = false })
         )}
         <div ref={bottomRef} />
       </div>
-      {!readOnly && chatActions && <ChatComposer chatActions={chatActions} processing={processing} turnId={draftTurnId} cardId={cardId} />}
+      {!readOnly && chatActions && !(composerVariant === 'mini' && processing) ? (
+        <ChatComposer
+          chatActions={chatActions}
+          processing={processing}
+          turnId={draftTurnId}
+          cardId={cardId}
+          variant={composerVariant}
+          onPopout={onPopout}
+        />
+      ) : null}
     </div>
+  );
+}
+
+export function ChatPane({ boardId, cardId, readOnly = false, compact = false }) {
+  return <ChatPaneBase boardId={boardId} cardId={cardId} readOnly={readOnly} compact={compact} />;
+}
+
+export function MiniChatPane({ boardId, cardId, readOnly = false, compact = false, onPopout }) {
+  const headerContent = onPopout ? (
+    <div className="board-chat-pane__mini-header px-2 py-1">
+      <div className="board-chat-pane__mini-title">Chat</div>
+      <button
+        type="button"
+        className="board-chat-pane__icon-button board-icon-button board-icon-button--sm"
+        onClick={onPopout}
+        title="Open full chat"
+        aria-label={`Open full chat for ${cardId}`}
+      >
+        <ChatPopoutIcon />
+      </button>
+    </div>
+  ) : null;
+
+  return (
+    <ChatPaneBase
+      boardId={boardId}
+      cardId={cardId}
+      readOnly={readOnly}
+      compact={compact}
+      composerVariant="mini"
+      onPopout={onPopout}
+      className="board-chat-pane--mini"
+      headerContent={headerContent}
+    />
   );
 }
