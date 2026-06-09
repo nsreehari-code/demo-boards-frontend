@@ -131,7 +131,7 @@ function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplat
       <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
         <label className="board-settings-field mb-0">
           <span>Board Id</span>
-          <input className="board-input" type="text" value={formState.boardId} onChange={updateField('boardId')} placeholder="live-test" />
+          <input className="board-input" type="text" value={formState.boardId} onChange={updateField('boardId')} placeholder="live-test-frontend" />
         </label>
         <label className="board-settings-field mb-0">
           <span>Label</span>
@@ -836,10 +836,10 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   }
 
   const smokeRunnerEnabled = formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
-    && formState.defaultBoardId === 'live-test';
+    && formState.defaultBoardId === 'live-test-frontend';
   const smokeRunnerTitle = smokeRunnerEnabled
-    ? 'Run the in-app smoke suite against the live-test board'
-    : 'Smoke suite is only available when the selected board id is live-test';
+    ? 'Run the in-app smoke suite against the live-test-frontend board'
+    : 'Smoke suite is only available when the selected board id is live-test-frontend';
 
   return (
     <>

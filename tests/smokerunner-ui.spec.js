@@ -1,5 +1,54 @@
 import { expect, test } from '@playwright/test';
 
+const SMOKE_BOARD_ID = 'live-test-frontend';
+const MANAGE_BOARDS_URL = 'http://127.0.0.1:7799/manage-boards';
+const SMOKE_BOARD_RECORD = {
+  label: 'live-test-frontend',
+  ai: 'copilot',
+  aiWorkspaceTemplate: 'default',
+  refsTemplate: 'localfs-default',
+  uiTemplate: 'default',
+};
+
+async function readManageBoardsPayload(response, operation) {
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(`${operation} failed with status ${response.status}: ${JSON.stringify(payload)}`);
+  }
+  if (payload?.status !== 'success') {
+    throw new Error(`${operation} returned non-success payload: ${JSON.stringify(payload)}`);
+  }
+  return payload;
+}
+
+async function ensureSmokeRunnerBoardRegistered(request) {
+  const listPayload = await readManageBoardsPayload(
+    await request.post(MANAGE_BOARDS_URL, {
+      data: { subcommand: 'list-boards' },
+    }),
+    'list-boards',
+  );
+  const boardIds = Array.isArray(listPayload?.data?.boards)
+    ? listPayload.data.boards.map((board) => String(board?.id || '').trim()).filter(Boolean)
+    : [];
+  if (boardIds.includes(SMOKE_BOARD_ID)) {
+    return;
+  }
+
+  await readManageBoardsPayload(
+    await request.post(MANAGE_BOARDS_URL, {
+      data: {
+        subcommand: 'add-board',
+        args: {
+          boardId: SMOKE_BOARD_ID,
+          record: SMOKE_BOARD_RECORD,
+        },
+      },
+    }),
+    'add-board',
+  );
+}
+
 async function waitForWarmupOutcome(statusChip, logPane, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -61,18 +110,20 @@ async function ensureLiveTestBoard(page) {
   await expect(boardSelect).toBeVisible();
 
   const currentBoardId = await boardSelect.inputValue();
-  if (currentBoardId !== 'live-test') {
-    await boardSelect.selectOption('live-test');
+  if (currentBoardId !== SMOKE_BOARD_ID) {
+    await boardSelect.selectOption(SMOKE_BOARD_ID);
     await page.getByRole('button', { name: 'Save and reload' }).click();
     await expect(page.locator('[role="dialog"][aria-label="Board settings"]')).toBeHidden();
     await page.getByTestId('open-board-settings').click();
     await expect(boardSettingsDialog).toBeVisible();
-    await expect(boardSelect).toHaveValue('live-test');
+    await expect(boardSelect).toHaveValue(SMOKE_BOARD_ID);
   }
 }
 
-test('SmokeRunner can be launched from App Config and complete the full rendered UI suite', async ({ page }) => {
+test('SmokeRunner can be launched from App Config and complete the full rendered UI suite', async ({ page, request }) => {
   test.setTimeout(15 * 60_000);
+
+  await ensureSmokeRunnerBoardRegistered(request);
 
   await page.goto('/');
   await page.getByTestId('open-board-settings').click();
@@ -83,7 +134,7 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
   await expect(testButton).toBeEnabled();
   await testButton.click();
 
-  await expect(page.getByText('Smoke Runner: live-test')).toBeVisible();
+  await expect(page.getByText(`Smoke Runner: ${SMOKE_BOARD_ID}`)).toBeVisible();
   await page.getByTestId('smoke-runner-run-button').click();
 
   const statusChip = page.getByTestId('smoke-runner-suite-status');
@@ -115,5 +166,5 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
   const failureSummaryChip = page.locator('.global-modal__chip--fail').filter({ hasText: /^Failed\s+[1-9]/ });
   await expect(failureSummaryChip).toHaveCount(0);
 
-  await expect(page.getByText('Smoke Runner: live-test')).toBeVisible();
+  await expect(page.getByText(`Smoke Runner: ${SMOKE_BOARD_ID}`)).toBeVisible();
 });

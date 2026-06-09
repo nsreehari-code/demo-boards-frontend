@@ -9,7 +9,7 @@ import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
 import { useCardChatViews } from '../hooks/useSseSlices.js';
 import { initBoard } from '../lib/client.js';
 
-const SMOKE_BOARD_ID = 'live-test';
+const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';
 const NON_PROBE_RESPONSE_TIMEOUT_MS = 120_000;
 
