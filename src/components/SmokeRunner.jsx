@@ -1424,19 +1424,22 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       const storedPortfolio = await waitForCardStateData(PORTFOLIO_CARD_ID, `hook card state for ${PORTFOLIO_CARD_ID}`);
 
       log(`step 6/7: reading hook runtime for ${MARKET_PRICES_CARD_ID} and ${PORTFOLIO_VALUE_CARD_ID}`);
-      const marketRuntime = await waitForCardStateData(MARKET_PRICES_CARD_ID, `hook card state for ${MARKET_PRICES_CARD_ID}`);
-      const portfolioRuntime = await waitForCardStateData(PORTFOLIO_VALUE_CARD_ID, `hook card state for ${PORTFOLIO_VALUE_CARD_ID}`);
-      const holdings = storedPortfolio?.cardData?.holdings;
-      const priceRows = portfolioRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
-        || marketRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
-        || marketRuntime?.cardRuntime?.computed_values?.normalizedQuotes?.quoteResponse?.result
-        || marketRuntime?.cardRuntime?.computed_values?.prices
-        || EMPTY_ARRAY;
-      const positions = portfolioRuntime?.cardRuntime?.computed_values?.positions;
-      const totalValue = Number(portfolioRuntime?.cardRuntime?.computed_values?.totalValue);
-      if (!Array.isArray(holdings) || !Array.isArray(priceRows) || !Array.isArray(positions) || !Number.isFinite(totalValue)) {
-        throw new Error(`runtime payload missing expected compute data`);
-      }
+      const computePayload = await waitUntil(() => {
+        const marketRuntime = cardStatesRef.current[MARKET_PRICES_CARD_ID];
+        const portfolioRuntime = cardStatesRef.current[PORTFOLIO_VALUE_CARD_ID];
+        const holdings = storedPortfolio?.cardData?.holdings;
+        const priceRows = portfolioRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
+          || marketRuntime?.requiresDataObjects?.quotes_tc2?.quoteResponse?.result
+          || marketRuntime?.cardRuntime?.computed_values?.normalizedQuotes?.quoteResponse?.result
+          || marketRuntime?.cardRuntime?.computed_values?.prices
+          || EMPTY_ARRAY;
+        const positions = portfolioRuntime?.cardRuntime?.computed_values?.positions;
+        const totalValue = Number(portfolioRuntime?.cardRuntime?.computed_values?.totalValue);
+        return Array.isArray(holdings) && Array.isArray(priceRows) && Array.isArray(positions) && Number.isFinite(totalValue)
+          ? { holdings, priceRows, positions, totalValue }
+          : false;
+      }, 15_000, `computed runtime payload for ${PORTFOLIO_VALUE_CARD_ID}`);
+      const { holdings, priceRows, positions, totalValue } = computePayload;
       const expected = computePortfolioExpectation(holdings, priceRows);
       if (roundMoney(totalValue) !== expected.totalValue) {
         throw new Error(`totalValue mismatch: expected ${expected.totalValue}, got ${roundMoney(totalValue)}`);
