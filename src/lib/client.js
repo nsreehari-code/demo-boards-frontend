@@ -11,6 +11,10 @@ import {
 } from './appConfig.js';
 import { createInBrowserBoardTransport } from './client-board-host.js';
 
+const normalizeOrigin = (serverOrigin = SERVER) => (typeof serverOrigin === 'string'
+  ? serverOrigin.trim().replace(/\/+$/, '')
+  : '');
+
 /**
  * Build the in-browser storage adapter from the full storage config so the
  * host can mix ref kinds across backends.
@@ -98,6 +102,26 @@ const boardTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_INBROWSER
     transportName: `inbrowser+${STORAGE_CONFIG.adapter}`,
   })
   : createHttpBoardTransport();
+
+async function postControlfaceMcpExtras(serverOrigin, tool, args = {}) {
+  const normalizedOrigin = normalizeOrigin(serverOrigin);
+  if (!normalizedOrigin) {
+    throw new Error('Server origin is required');
+  }
+  const response = await fetch(`${normalizedOrigin}/mcp-extras`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, args }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : `mcp-extras ${tool} failed with status ${response.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
 
 const bytesToBase64 = (bytes) => {
   let binary = '';
@@ -273,3 +297,40 @@ export const subscribeWatchparty = (boardId, cardId, channelName, clientId) =>
 
 export const unsubscribeWatchparty = (boardId, cardId, channelName, clientId) =>
   boardTransport.unsubscribeWatchparty(boardId, cardId, channelName, clientId);
+
+function normalizeSampleTemplateEntries(payload) {
+  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+  return entries
+    .map((entry) => {
+      const key = typeof entry?.key === 'string' ? entry.key.trim() : '';
+      const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+      if (!key || !label) return null;
+      return {
+        key,
+        label,
+        description: typeof entry?.description === 'string' ? entry.description.trim() : '',
+      };
+    })
+    .filter(Boolean);
+}
+
+export async function listSampleTemplates(serverOrigin = SERVER) {
+  const payload = await postControlfaceMcpExtras(serverOrigin, 'explore.list-sample-templates');
+  return normalizeSampleTemplateEntries(payload);
+}
+
+export async function getSampleTemplate(serverOrigin = SERVER, key) {
+  const normalizedKey = typeof key === 'string' ? key.trim() : '';
+  if (!normalizedKey) {
+    throw new Error('Template key is required');
+  }
+  const payload = await postControlfaceMcpExtras(serverOrigin, 'explore.get-sample-template', {
+    key: normalizedKey,
+  });
+  return {
+    key: typeof payload?.key === 'string' ? payload.key.trim() : normalizedKey,
+    label: typeof payload?.label === 'string' ? payload.label.trim() : normalizedKey,
+    description: typeof payload?.description === 'string' ? payload.description.trim() : '',
+    payload: payload?.payload ?? null,
+  };
+}

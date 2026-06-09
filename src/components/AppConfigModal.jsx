@@ -9,14 +9,13 @@ import {
   hasStoredAppConfigOverride,
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
+import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
 import { SmokeRunner } from './SmokeRunner.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
-const CARD_TEMPLATES_BASE_URL = `${import.meta.env.BASE_URL}assets/card-templates/`;
-const CARD_TEMPLATES_MANIFEST_URL = `${CARD_TEMPLATES_BASE_URL}index.json`;
 const FORWARD_ICON_SVG = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
@@ -57,7 +56,7 @@ function createEmptyAddBoardForm() {
     aiWorkspaceTemplate: 'default',
     uiTemplate: 'default',
     refsTemplate: 'localfs-default',
-    templateFileName: '',
+    templateKey: '',
   };
 }
 
@@ -73,24 +72,6 @@ function normalizeRuntimeDumpEnvelope(payload) {
     };
   }
   return null;
-}
-
-function normalizeSeedManifestEntries(payload) {
-  const entries = Array.isArray(payload)
-    ? payload
-    : (payload && typeof payload === 'object' && Array.isArray(payload.entries) ? payload.entries : []);
-  return entries
-    .map((entry) => {
-      const fileName = typeof entry?.fileName === 'string' ? entry.fileName.trim() : '';
-      const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
-      if (!fileName || !label) return null;
-      return {
-        fileName,
-        label,
-        description: typeof entry?.description === 'string' ? entry.description.trim() : '',
-      };
-    })
-    .filter(Boolean);
 }
 
 function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplates = false, submitting = false, errorMessage = '' }) {
@@ -129,7 +110,7 @@ function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplat
       aiWorkspaceTemplate: formState.aiWorkspaceTemplate.trim(),
       uiTemplate: formState.uiTemplate.trim(),
       refsTemplate: formState.refsTemplate.trim(),
-      templateFileName: formState.templateFileName.trim(),
+      templateKey: formState.templateKey.trim(),
     };
 
     if (!normalized.boardId || !normalized.label || !normalized.pageTitle || !normalized.pageSubtitle || !normalized.ai || !normalized.aiWorkspaceTemplate || !normalized.uiTemplate || !normalized.refsTemplate) {
@@ -182,10 +163,10 @@ function AddBoardModal({ onClose, onSubmit, templateOptions = [], loadingTemplat
         </label>
         <label className="board-settings-field mb-0">
           <span>Card Template (optional)</span>
-          <select className="board-input" value={formState.templateFileName} onChange={updateField('templateFileName')} disabled={loadingTemplates}>
+                      <select className="board-input" value={formState.templateKey} onChange={updateField('templateKey')} disabled={loadingTemplates}>
             <option value="">No template</option>
             {templateOptions.map((entry) => (
-              <option key={entry.fileName} value={entry.fileName}>{entry.label}</option>
+                          <option key={entry.key} value={entry.key}>{entry.label}</option>
             ))}
           </select>
           <div className="board-settings-form__hint">
@@ -516,7 +497,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [loadingSeedManifest, setLoadingSeedManifest] = useState(false);
   const [seedManifestError, setSeedManifestError] = useState('');
   const [seedManifestEntries, setSeedManifestEntries] = useState([]);
-  const [selectedSeedFileName, setSelectedSeedFileName] = useState('');
+  const [selectedSeedTemplateKey, setSelectedSeedTemplateKey] = useState('');
   const [templateIngestPreview, setTemplateIngestPreview] = useState(null);
   const [addBoardOpen, setAddBoardOpen] = useState(false);
   const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
@@ -543,12 +524,9 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     setAddBoardError('');
     try {
       const createdBoard = await manageBoardsActions.addBoard(candidate);
-      if (candidate.templateFileName) {
-        const response = await fetch(`${CARD_TEMPLATES_BASE_URL}${encodeURIComponent(candidate.templateFileName)}`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Failed to load template ${candidate.templateFileName}: ${response.status}`);
-        }
-        const payload = await response.json();
+      if (candidate.templateKey) {
+        const template = await getSampleTemplate(formState.serverOrigin, candidate.templateKey);
+        const payload = template.payload;
         const envelope = normalizeRuntimeDumpEnvelope(payload);
         if (!Array.isArray(envelope?.cards)) {
           throw new Error('Template file must be a JSON array of cards or an object with a cards array');
@@ -574,7 +552,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     } finally {
       setAddBoardSubmitting(false);
     }
-  }, [manageBoardsActions]);
+  }, [formState.serverOrigin, manageBoardsActions]);
 
   useEffect(() => {
     if (autoOpen) {
@@ -606,29 +584,30 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   }, [open]);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      setSeedManifestEntries([]);
+      setSelectedSeedTemplateKey('');
+      setSeedManifestError('');
+      setLoadingSeedManifest(false);
+      return undefined;
+    }
     let cancelled = false;
 
     const loadSeedManifest = async () => {
       setLoadingSeedManifest(true);
       setSeedManifestError('');
       try {
-        const response = await fetch(CARD_TEMPLATES_MANIFEST_URL, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Failed to load seed manifest: ${response.status}`);
-        }
-        const payload = await response.json();
-        const entries = normalizeSeedManifestEntries(payload);
+        const entries = await listSampleTemplates(formState.serverOrigin);
         if (cancelled) return;
         setSeedManifestEntries(entries);
-        setSelectedSeedFileName((current) => {
-          if (current && entries.some((entry) => entry.fileName === current)) return current;
-          return entries[0]?.fileName ?? '';
+        setSelectedSeedTemplateKey((current) => {
+          if (current && entries.some((entry) => entry.key === current)) return current;
+          return entries[0]?.key ?? '';
         });
       } catch (error) {
         if (cancelled) return;
         setSeedManifestEntries([]);
-        setSelectedSeedFileName('');
+        setSelectedSeedTemplateKey('');
         setSeedManifestError(error instanceof Error ? error.message : String(error));
       } finally {
         if (!cancelled) setLoadingSeedManifest(false);
@@ -637,7 +616,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
     void loadSeedManifest();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [formState.serverOrigin, formState.transportMode, open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -769,17 +748,14 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   };
 
   const handlePrepareTemplateIngest = useCallback(async () => {
-    if (!boardId || !selectedSeedFileName || resettingSeeds || preparingTemplateIngest) {
+    if (!boardId || !selectedSeedTemplateKey || resettingSeeds || preparingTemplateIngest) {
       return;
     }
 
     setPreparingTemplateIngest(true);
     try {
-      const response = await fetch(`${CARD_TEMPLATES_BASE_URL}${encodeURIComponent(selectedSeedFileName)}`, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`Failed to load seed board ${selectedSeedFileName}: ${response.status}`);
-      }
-      const payload = await response.json();
+      const template = await getSampleTemplate(formState.serverOrigin, selectedSeedTemplateKey);
+      const payload = template.payload;
       const envelope = normalizeRuntimeDumpEnvelope(payload);
       if (!Array.isArray(envelope?.cards)) {
         throw new Error('Template file must be a JSON array of cards or an object with a cards array');
@@ -787,7 +763,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       const preview = await manageBoardsActions.previewImportBoard(boardId, payload, 'ingest');
 
       setTemplateIngestPreview({
-        templateLabel: seedManifestEntries.find((entry) => entry.fileName === selectedSeedFileName)?.label || envelope.label || selectedSeedFileName,
+        templateLabel: template.label || envelope.label || selectedSeedTemplateKey,
         payload,
         cardsToReplace: Array.isArray(preview?.replaceIds) ? preview.replaceIds : [],
         cardsToAdd: Array.isArray(preview?.addIds) ? preview.addIds : [],
@@ -798,7 +774,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     } finally {
       setPreparingTemplateIngest(false);
     }
-  }, [boardId, preparingTemplateIngest, resettingSeeds, seedManifestEntries, selectedSeedFileName]);
+  }, [boardId, formState.serverOrigin, preparingTemplateIngest, resettingSeeds, selectedSeedTemplateKey]);
 
   const handleConfirmTemplateIngest = useCallback(async () => {
     if (!templateIngestPreview?.payload) {
@@ -1117,8 +1093,8 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   <div className="d-flex align-items-center gap-2 flex-wrap">
                     <select
                       className="board-input board-settings-sample-select"
-                      value={selectedSeedFileName}
-                      onChange={(event) => setSelectedSeedFileName(event.target.value)}
+                      value={selectedSeedTemplateKey}
+                      onChange={(event) => setSelectedSeedTemplateKey(event.target.value)}
                       disabled={loadingSeedManifest || resettingSeeds || preparingTemplateIngest || seedManifestEntries.length === 0}
                       title={seedManifestError || 'Select a bundled sample board file'}
                     >
@@ -1126,7 +1102,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                         <option value="">{loadingSeedManifest ? 'Loading seed boards…' : 'No seed boards available'}</option>
                       ) : null}
                       {seedManifestEntries.map((entry) => (
-                        <option key={entry.fileName} value={entry.fileName}>
+                        <option key={entry.key} value={entry.key}>
                           {entry.label}
                         </option>
                       ))}
@@ -1135,7 +1111,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                       type="button"
                       className="btn btn-outline-secondary board-button"
                       onClick={() => { void handlePrepareTemplateIngest(); }}
-                      disabled={resettingSeeds || preparingTemplateIngest || !boardId || !selectedSeedFileName || loadingSeedManifest || seedManifestEntries.length === 0}
+                      disabled={resettingSeeds || preparingTemplateIngest || !boardId || !selectedSeedTemplateKey || loadingSeedManifest || seedManifestEntries.length === 0}
                       title="Preview cards that will be added or replaced from the selected template"
                     >
                       {preparingTemplateIngest ? 'Preparing…' : resettingSeeds ? 'Ingesting…' : 'Ingest Cards from Template'}
