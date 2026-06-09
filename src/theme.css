@@ -1261,6 +1261,12 @@ a {
   vertical-align: middle;
 }
 
+.board-chat-pane__working-chip {
+  min-height: 2rem;
+  padding: 0.28rem 0.58rem 0.36rem;
+  line-height: 1.25;
+}
+
 .board-chat-pane__chip-label--shimmer {
   color: transparent;
   background-image: linear-gradient(

@@ -401,7 +401,7 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
               <button
                 key={chip.label}
                 type="button"
-                className={`badge rounded-pill border text-body-emphasis ${activeChipKey === chip.key ? 'text-bg-primary' : 'text-bg-light'}`}
+                className={`board-chat-pane__working-chip badge rounded-pill border text-body-emphasis ${activeChipKey === chip.key ? 'text-bg-primary' : 'text-bg-light'}`}
                 title={chip.value}
                 style={{
                   width: '100%',
