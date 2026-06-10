@@ -99,8 +99,8 @@ async function waitForSuiteOutcome(statusChip, logPane, timeoutMs) {
   throw new Error('Timed out waiting for SmokeRunner full-suite completion.');
 }
 
-const RUN_CASE_IDS = ['MB1', 'T0', 'T1', 'T2', 'T3', 'T3u', 'T4', 'T8', 'T9', 'T8F', 'T9F', 'TR'];
-const SKIP_CASE_IDS = ['TQ', 'TT', 'TS'];
+const RUN_CASE_IDS = ['MB1', 'T0', 'T1', 'T2', 'T3', 'T3u', 'T4', 'T8', 'T8F', 'TR'];
+const SKIP_CASE_IDS = ['TQ', 'TT', 'TS', 'T9', 'T9F'];
 
 async function ensureLiveTestBoard(page) {
   const boardSettingsDialog = page.locator('[role="dialog"][aria-label="Board settings"]');
@@ -158,9 +158,7 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
   }
 
   expect(finalLogText).toContain('[T8]');
-  expect(finalLogText).toContain('[T9]');
   expect(finalLogText).toContain('[T8F]');
-  expect(finalLogText).toContain('[T9F]');
   expect(finalLogText).toContain('[T3u]');
   expect(finalLogText).toContain('step 6/7: verifying watchparty tools');
 

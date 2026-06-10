@@ -906,7 +906,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     ) : null}
                     {boardSelectOptions.map((entry) => (
                       <option key={entry.id} value={entry.id}>
-                        {entry.label}
+                        {entry.label}{entry.id === boardId ? ' (current)' : ''}
                       </option>
                     ))}
                   </select>
@@ -914,6 +914,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     type="button"
                     className="btn btn-primary board-button board-settings-go-button d-inline-flex align-items-center gap-1"
                     onClick={submitAndReload}
+                    disabled={formState.defaultBoardId === boardId}
                     title="Switch board"
                     aria-label="Switch board"
                   >
@@ -936,7 +937,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             </div>
 
             <div className="board-settings-form">
-              <div className="d-flex align-items-center justify-content-start gap-2 mb-3">
+              <div className="d-flex align-items-center justify-content-between gap-2 mb-3">
                 <button
                   type="button"
                   className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1"
@@ -949,6 +950,17 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 >
                   {PLUS_ICON_SVG}
                   New Board
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary board-button ms-auto d-inline-flex align-items-center gap-1"
+                  onClick={() => setSmokeRunnerOpen(true)}
+                  disabled={!smokeRunnerEnabled}
+                  title={smokeRunnerTitle}
+                  data-testid="board-settings-smoke-test-button"
+                >
+                  <i className="bi bi-flask" aria-hidden="true" />
+                  Run Tests
                 </button>
               </div>
               {serverUnreachable ? (
@@ -1009,16 +1021,6 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   <div className="d-flex align-items-center justify-content-between gap-2">
                     <div className="board-settings-io-card__title">Server</div>
                     <div className="d-flex align-items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary board-button"
-                        onClick={() => setSmokeRunnerOpen(true)}
-                        disabled={!smokeRunnerEnabled}
-                        title={smokeRunnerTitle}
-                        data-testid="board-settings-smoke-test-button"
-                      >
-                        Test
-                      </button>
                       <button
                         type="button"
                         className="btn btn-outline-secondary board-button"

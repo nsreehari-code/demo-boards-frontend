@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build.mjs",
+    "test": "npm run test:smoke",
     "test:smoke": "playwright test -c playwright.smokerunner.config.js",
     "test:smoke:headed": "playwright test -c playwright.smokerunner.config.js --headed",
     "test:smokerunner": "playwright test -c playwright.smokerunner.config.js",
@@ -23,7 +24,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
-    "yaml-flow": "^8.9.2"
+    "yaml-flow": "^8.11.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",

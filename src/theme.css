@@ -2236,6 +2236,10 @@ a {
   font-weight: 600;
 }
 
+.board-button.d-inline-flex {
+  column-gap: 0.5rem;
+}
+
 .board-button.btn-primary,
 .board-button.btn-outline-primary:hover,
 .board-button.btn-outline-secondary:hover {
