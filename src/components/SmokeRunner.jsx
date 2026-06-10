@@ -1316,8 +1316,12 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       const modal = document.querySelector(`[data-testid="chat-modal-${cardId}"]`);
       const textarea = document.querySelector(`[data-testid="chat-pane-textarea-${cardId}"]`);
       const sendButton = document.querySelector(`[data-testid="chat-pane-send-${cardId}"]`);
-      return modal instanceof HTMLElement && textarea instanceof HTMLTextAreaElement && sendButton instanceof HTMLButtonElement
-        ? { modal, textarea, sendButton }
+      return textarea instanceof HTMLTextAreaElement && sendButton instanceof HTMLButtonElement
+        ? {
+            modal: modal instanceof HTMLElement ? modal : null,
+            textarea,
+            sendButton,
+          }
         : false;
     }, timeoutMs, `${labelPrefix} chat composer ready`);
   }, [waitUntil]);
@@ -1341,6 +1345,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const closeChatModalViaUi = useCallback(async (cardId) => {
     const modal = document.querySelector(`[data-testid="chat-modal-${cardId}"]`);
     if (!(modal instanceof HTMLElement)) {
+      const textarea = document.querySelector(`[data-testid="chat-pane-textarea-${cardId}"]`);
+      const openButton = document.querySelector(`[data-testid="card-shell-open-chat-${cardId}"]`);
+      if (textarea instanceof HTMLTextAreaElement && openButton instanceof HTMLButtonElement) {
+        openButton.click();
+      }
       return;
     }
     const closeButton = modal.querySelector('.board-icon-button');
@@ -1456,8 +1465,21 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     if (ids.length === 0) {
       return;
     }
-    appendLog('', `[preflight] removing ${ids.length} smoke card(s) before start`);
-    await removeCardsBestEffort(ids, 'preflight');
+    const availableCardIds = new Set(Object.keys(boardRef.current?.cardContents ?? EMPTY_OBJECT));
+    const removableIds = ids.filter((cardId) => availableCardIds.has(cardId));
+    const skippedIds = ids.filter((cardId) => !availableCardIds.has(cardId));
+
+    appendLog('', `[preflight] board state reports ${availableCardIds.size} available card(s)`);
+    if (skippedIds.length > 0) {
+      for (const cardId of skippedIds) {
+        appendLog('', `[preflight] skip remove for ${cardId}: card not present in board state`);
+      }
+    }
+    if (removableIds.length === 0) {
+      return;
+    }
+    appendLog('', `[preflight] removing ${removableIds.length} smoke card(s) before start`);
+    await removeCardsBestEffort(removableIds, 'preflight');
   }, [appendLog, removeCardsBestEffort]);
 
   const cleanup = useCallback(async () => {
@@ -2149,11 +2171,39 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     appendLog('', `Smoke runner targeting board '${SMOKE_BOARD_ID}' at ${normalizedOrigin}`);
 
     try {
+      const mb1Entry = SMOKE_CASES.find((entry) => entry.id === 'MB1');
+      if (mb1Entry && mb1Entry.mode === 'run') {
+        ensureNotCancelled(cancelRef);
+        setActiveCaseId(mb1Entry.id);
+        markCase(mb1Entry.id, { status: 'running', startedAt: Date.now(), finishedAt: 0, detail: 'Running…', comparison: null });
+        appendLog(mb1Entry.id, `Starting ${mb1Entry.id}: ${mb1Entry.title}`);
+        try {
+          await runCase(mb1Entry.id);
+          markCase(mb1Entry.id, { status: 'passed', finishedAt: Date.now(), comparison: null });
+          appendLog(mb1Entry.id, `${mb1Entry.id} passed`, 'success');
+        } catch (error) {
+          if (error?.code === 'CANCELLED') {
+            throw error;
+          }
+          markCase(mb1Entry.id, {
+            status: 'failed',
+            finishedAt: Date.now(),
+            detail: error instanceof Error ? error.message : String(error),
+            comparison: readSmokeComparison(error),
+          });
+          appendLog(mb1Entry.id, error instanceof Error ? error.message : String(error), 'error');
+          throw error;
+        }
+      }
+
       await clearSmokeCardsAtStart(trackedCardIds);
       await warmChatQueue();
       let computeChatParallelHandled = false;
       let hostedParallelHandled = false;
       for (const entry of SMOKE_CASES) {
+        if (entry.id === 'MB1') {
+          continue;
+        }
         ensureNotCancelled(cancelRef);
         setActiveCaseId(entry.id);
         if (entry.mode === 'skip') {

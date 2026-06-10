@@ -99,8 +99,8 @@ async function waitForSuiteOutcome(statusChip, logPane, timeoutMs) {
   throw new Error('Timed out waiting for SmokeRunner full-suite completion.');
 }
 
-const RUN_CASE_IDS = ['MB1', 'T0', 'T1', 'T2', 'T3', 'T3u', 'T4', 'T8', 'T8F', 'TR'];
-const SKIP_CASE_IDS = ['TQ', 'TT', 'TS', 'T9', 'T9F'];
+const RUN_CASE_IDS = ['MB1', 'T0', 'T1', 'T2', 'T3', 'T3u', 'T4', 'T8', 'T9', 'T8F', 'T9F', 'TR'];
+const SKIP_CASE_IDS = ['TQ', 'TT', 'TS'];
 
 async function ensureLiveTestBoard(page) {
   const boardSettingsDialog = page.locator('[role="dialog"][aria-label="Board settings"]');
@@ -112,7 +112,7 @@ async function ensureLiveTestBoard(page) {
   const currentBoardId = await boardSelect.inputValue();
   if (currentBoardId !== SMOKE_BOARD_ID) {
     await boardSelect.selectOption(SMOKE_BOARD_ID);
-    await page.getByRole('button', { name: 'Save and reload' }).click();
+    await page.getByRole('button', { name: 'Switch board' }).click();
     await expect(page.locator('[role="dialog"][aria-label="Board settings"]')).toBeHidden();
     await page.getByTestId('open-board-settings').click();
     await expect(boardSettingsDialog).toBeVisible();
@@ -158,7 +158,9 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
   }
 
   expect(finalLogText).toContain('[T8]');
+  expect(finalLogText).toContain('[T9]');
   expect(finalLogText).toContain('[T8F]');
+  expect(finalLogText).toContain('[T9F]');
   expect(finalLogText).toContain('[T3u]');
   expect(finalLogText).toContain('step 6/7: verifying watchparty tools');
 
