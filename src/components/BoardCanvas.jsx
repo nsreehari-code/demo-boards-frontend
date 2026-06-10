@@ -436,7 +436,7 @@ function FlowCardNode({ id, data }) {
         )) : null}
       </div>
       <div className="board-flow-node__card">
-        <CardShell boardId={data.boardId} cardId={id} />
+        <CardShell boardId={data.boardId} cardId={id} enableResize />
       </div>
       <div className="board-flow-node__tokens board-flow-node__tokens--bottom">
         {data.provides.length > 0 ? data.provides.map((token) => (

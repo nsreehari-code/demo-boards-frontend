@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
 import { useChatStateAIWorking } from '../hooks/useChatState.js';
 import { useBoardInspectState } from '../hooks/useBoardState.js';
@@ -6,6 +6,10 @@ import { CardCore } from './CardCore.jsx';
 import { ChatPane, MiniChatPane } from './ChatPane.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
 import { InspectCard } from './InspectCard.jsx';
+
+const CARD_WIDTH_STORAGE_PREFIX = 'demo-board:card-shell-width:';
+const MIN_CARD_WIDTH = 280;
+const MAX_CARD_WIDTH = 960;
 
 const CHAT_PROCESSING_PULSE_STYLE = {
   animation: 'card-shell-chat-pulse 0.9s ease-in-out infinite',
@@ -69,11 +73,126 @@ function getStatusTone(status) {
   }
 }
 
-function CardShellComponent({ boardId, cardId, renderInInspect = false }) {
+function clampCardWidth(nextWidth) {
+  const viewportMax = typeof window !== 'undefined'
+    ? Math.max(MIN_CARD_WIDTH, Math.min(MAX_CARD_WIDTH, window.innerWidth - 48))
+    : MAX_CARD_WIDTH;
+  return Math.max(MIN_CARD_WIDTH, Math.min(viewportMax, Math.round(nextWidth)));
+}
+
+function readStoredCardWidth(boardId, cardId) {
+  if (typeof window === 'undefined' || !boardId || !cardId) return null;
+  try {
+    const raw = window.localStorage.getItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampCardWidth(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistCardWidth(boardId, cardId, width) {
+  if (typeof window === 'undefined' || !boardId || !cardId) return;
+  try {
+    if (Number.isFinite(width) && width > 0) {
+      window.localStorage.setItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`, String(clampCardWidth(width)));
+    } else {
+      window.localStorage.removeItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`);
+    }
+  } catch {
+    // Best-effort persistence only.
+  }
+}
+
+const CARD_RESIZE_HANDLE_SVG = (
+  <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" className="board-card-shell__resize-icon">
+    <path fill="currentColor" d="M6.25 4.25a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Zm3.75 0a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Zm3.75 0a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Z" />
+  </svg>
+);
+
+function ResizableCardShell({ boardId, cardId, className = '', enabled = false, children }) {
+  const [width, setWidth] = useState(() => readStoredCardWidth(boardId, cardId));
+  const dragStateRef = useRef(null);
+
+  useEffect(() => {
+    setWidth(enabled ? readStoredCardWidth(boardId, cardId) : null);
+  }, [boardId, cardId, enabled]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    const handlePointerMove = (event) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      setWidth(clampCardWidth(drag.startWidth + (event.clientX - drag.startX)));
+    };
+
+    const handlePointerUp = () => {
+      if (!dragStateRef.current) return;
+      dragStateRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      persistCardWidth(boardId, cardId, width);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      if (dragStateRef.current) {
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      }
+    };
+  }, [boardId, cardId, enabled, width]);
+
+  const handleResizeStart = useCallback((event) => {
+    if (!enabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragStateRef.current = {
+      startX: event.clientX,
+      startWidth: width || event.currentTarget.closest('.board-card-shell')?.getBoundingClientRect().width || MIN_CARD_WIDTH,
+    };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ew-resize';
+  }, [enabled, width]);
+
+  const handleResetWidth = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setWidth(null);
+    persistCardWidth(boardId, cardId, null);
+  }, [boardId, cardId]);
+
+  return (
+    <div className={`board-card-shell${className ? ` ${className}` : ''}`} style={width ? { width: `${width}px` } : undefined}>
+      {children}
+      {enabled ? (
+        <button
+          type="button"
+          className="board-card-shell__resize-handle"
+          onPointerDown={handleResizeStart}
+          onDoubleClick={handleResetWidth}
+          title="Drag to resize card width. Double-click to reset."
+          aria-label="Resize card width"
+        >
+          {CARD_RESIZE_HANDLE_SVG}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function CardShellComponent({ boardId, cardId, renderInInspect = false, enableResize = false }) {
   if (renderInInspect) {
     return <CardShellInspectView boardId={boardId} cardId={cardId} />;
   }
-  return <CardShellBoardView boardId={boardId} cardId={cardId} />;
+  return <CardShellBoardView boardId={boardId} cardId={cardId} enableResize={enableResize} />;
 }
 
 function CardShellInspectView({ boardId, cardId }) {
@@ -83,25 +202,27 @@ function CardShellInspectView({ boardId, cardId }) {
   const status = cardState.cardRuntime?.status ?? 'fresh';
   const statusTone = getStatusTone(status);
   return (
-    <div className={`board-card ${statusTone}`}>
-      <div className="board-card__header">
-        <div className="board-card__title-wrap">
-          <div className="board-card__title-block">
-            <div className="board-card__title text-truncate">{title}</div>
-            <div className="board-card__meta">
-              {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+    <ResizableCardShell boardId={boardId} cardId={cardId} className="board-card-shell--inspect">
+      <div className={`board-card ${statusTone}`}>
+        <div className="board-card__header">
+          <div className="board-card__title-wrap">
+            <div className="board-card__title-block">
+              <div className="board-card__title text-truncate">{title}</div>
+              <div className="board-card__meta">
+                {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+              </div>
             </div>
           </div>
         </div>
+        <div className="board-card__body">
+          <CardCore boardId={boardId} cardId={cardId} />
+        </div>
       </div>
-      <div className="board-card__body">
-        <CardCore boardId={boardId} cardId={cardId} />
-      </div>
-    </div>
+    </ResizableCardShell>
   );
 }
 
-function CardShellBoardView({ boardId, cardId }) {
+function CardShellBoardView({ boardId, cardId, enableResize = false }) {
   const cardState = useCardState(boardId, cardId);
   const { inspectedCardId, setInspectedCardId } = useBoardInspectState(boardId);
   const [chatOpen, setChatOpen] = useState(false);
@@ -130,30 +251,31 @@ function CardShellBoardView({ boardId, cardId }) {
 
   return (
     <>
-      <div className={`board-card ${statusTone}`}>
-        <div
-          className="board-card__header"
-          onDoubleClick={(event) => {
-            if (event.target.closest('button')) return;
-            event.stopPropagation();
-            window.dispatchEvent(new CustomEvent('demo-board:toggle-card-focus', {
-              detail: { boardId, cardId },
-            }));
-          }}
-        >
-          <div className="board-card__title-wrap">
-            <div className="board-card__title-block">
-              <div className="board-card__title text-truncate">{title}</div>
-              <div className="board-card__meta">
-                {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+      <ResizableCardShell boardId={boardId} cardId={cardId} enabled={enableResize}>
+        <div className={`board-card ${statusTone}`}>
+          <div
+            className="board-card__header"
+            onDoubleClick={(event) => {
+              if (event.target.closest('button')) return;
+              event.stopPropagation();
+              window.dispatchEvent(new CustomEvent('demo-board:toggle-card-focus', {
+                detail: { boardId, cardId },
+              }));
+            }}
+          >
+            <div className="board-card__title-wrap">
+              <div className="board-card__title-block">
+                <div className="board-card__title text-truncate">{title}</div>
+                <div className="board-card__meta">
+                  {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="board-card__actions">
-            <button
-              type="button"
-              className="board-icon-button"
-              onClick={() => setInspectedCardId((current) => (current === cardId ? null : cardId))}
+            <div className="board-card__actions">
+              <button
+                type="button"
+                className="board-icon-button"
+                onClick={() => setInspectedCardId((current) => (current === cardId ? null : cardId))}
                 title={inspectOpen ? 'Close inspect view' : 'Show source information'}
                 aria-label={inspectOpen ? 'Close inspect view' : 'Show source information'}
               >
@@ -186,18 +308,19 @@ function CardShellBoardView({ boardId, cardId }) {
                 onToggleChat={handleToggleChat}
               />
             </div>
-        </div>
-        <div className={`board-card__body${chatOpen ? ' board-card__body--with-mini-chat' : ''}`}>
-          {chatOpen ? (
-            <div className="board-card__mini-chat">
-              <MiniChatPane boardId={boardId} cardId={cardId} onPopout={handleOpenChatModal} />
+          </div>
+          <div className={`board-card__body${chatOpen ? ' board-card__body--with-mini-chat' : ''}`}>
+            {chatOpen ? (
+              <div className="board-card__mini-chat">
+                <MiniChatPane boardId={boardId} cardId={cardId} onPopout={handleOpenChatModal} />
+              </div>
+            ) : null}
+            <div className="board-card__content">
+              <CardCore boardId={boardId} cardId={cardId} />
             </div>
-          ) : null}
-          <div className="board-card__content">
-            <CardCore boardId={boardId} cardId={cardId} />
           </div>
         </div>
-      </div>
+      </ResizableCardShell>
 
       {chatModalOpen ? (
         <GlobalModal

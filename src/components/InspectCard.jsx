@@ -1,8 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
+import { callBoardMcp } from '../lib/client.js';
 import { CardBackface } from './CardBackface.jsx';
+import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 import { CardShell } from './CardShell.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
+
+const DELETE_CARD_SVG = (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="inspect-card__trash-icon">
+    <path
+      fill="currentColor"
+      d="M9 3.75a1.5 1.5 0 0 0-1.5 1.5V6H4.75a.75.75 0 0 0 0 1.5h.79l.72 10.13A2.25 2.25 0 0 0 8.5 19.75h7a2.25 2.25 0 0 0 2.24-2.12l.72-10.13h.79a.75.75 0 0 0 0-1.5H16.5v-.75A1.5 1.5 0 0 0 15 3.75H9Zm6 2.25v-.75h-6V6h6Zm-5 3.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75Zm4 0a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75Z"
+    />
+  </svg>
+);
 
 function normalizeSourceFlightData(data) {
   if (!data || typeof data !== 'object') {
@@ -169,6 +180,8 @@ function InspectCardOutput({ flightResult }) {
 export function InspectCard({ boardId, cardId, title, onClose }) {
   const cardState = useCardState(boardId, cardId);
   const [flightResult, setFlightResult] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const mountedRef = useRef(true);
   const [theme] = useState(() => (
     typeof document !== 'undefined'
@@ -182,6 +195,8 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
 
   useEffect(() => {
     setFlightResult(null);
+    setDeletePending(false);
+    setDeleteConfirmOpen(false);
   }, [boardId, cardId]);
 
   const activeFlight = flightResult?.status === 'running' ? flightResult : null;
@@ -278,6 +293,42 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
     }
   }, [cardId, cardState, flightDisabled]);
 
+  const handleDeleteCard = useCallback(async () => {
+    if (!boardId || !cardId || deletePending) {
+      return;
+    }
+
+    setDeletePending(true);
+    try {
+      const response = await callBoardMcp(boardId, 'manage.remove-card', {
+        card_id: cardId,
+      });
+      if (!response.ok) {
+        throw new Error(`manage.remove-card failed with status ${response.status}`);
+      }
+      if (!mountedRef.current) {
+        return;
+      }
+      setDeleteConfirmOpen(false);
+      onClose?.();
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setFlightResult({
+        title: `Delete card: ${cardId}`,
+        kind: 'card',
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      setDeleteConfirmOpen(false);
+    } finally {
+      if (mountedRef.current) {
+        setDeletePending(false);
+      }
+    }
+  }, [boardId, cardId, deletePending, onClose]);
+
   if (!cardState?.cardContent) {
     return null;
   }
@@ -300,6 +351,19 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
               </div>
             </div>
           </div>
+          <div className="inspect-card__preview-actions">
+            <button
+              type="button"
+              className="inspect-card__trash-button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deletePending}
+              title="Delete this card"
+              aria-label="Delete this card"
+            >
+              {DELETE_CARD_SVG}
+              <span>{deletePending ? 'Deleting…' : 'Delete card'}</span>
+            </button>
+          </div>
         </div>
         <div className="inspect-card__sidebar">
           <div className="inspect-card__sidebar-pane inspect-card__sidebar-pane--top">
@@ -319,6 +383,16 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
           </div>
         </div>
       </div>
+      {deleteConfirmOpen ? (
+        <ChallengeConfirmModal
+          message={`This will remove card ${cardId} from the board runtime.`}
+          onConfirm={() => { void handleDeleteCard(); }}
+          onCancel={() => {
+            if (deletePending) return;
+            setDeleteConfirmOpen(false);
+          }}
+        />
+      ) : null}
     </GlobalModal>
   );
 }

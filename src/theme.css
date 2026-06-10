@@ -241,6 +241,56 @@ a {
   transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
 }
 
+.board-card-shell {
+  position: relative;
+  width: 100%;
+  min-width: min(100%, 17.5rem);
+  max-width: min(calc(100vw - 2rem), 60rem);
+}
+
+.board-card-shell--inspect {
+  max-width: min(100%, 60rem);
+}
+
+.board-card-shell .board-card {
+  width: 100%;
+}
+
+.board-card-shell__resize-handle {
+  position: absolute;
+  top: 1rem;
+  right: -0.7rem;
+  bottom: 1rem;
+  width: 1.2rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: rgba(110, 136, 166, 0.68);
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.board-card-shell:hover .board-card-shell__resize-handle,
+.board-card-shell__resize-handle:focus-visible {
+  opacity: 1;
+}
+
+.board-card-shell__resize-handle:hover,
+.board-card-shell__resize-handle:focus-visible {
+  background: rgba(132, 164, 198, 0.12);
+  color: rgba(53, 88, 125, 0.9);
+}
+
+.board-card-shell__resize-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
 .board-flow-node.is-highlighted {
   z-index: 2;
 }
@@ -2431,6 +2481,47 @@ a {
   justify-content: center;
   min-height: 100%;
   padding: 1.4rem 1rem;
+}
+
+.inspect-card__preview-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 1rem 1rem;
+}
+
+.inspect-card__trash-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger, #e05a5a) 58%, transparent);
+  background: color-mix(in srgb, var(--color-danger, #e05a5a) 16%, transparent);
+  color: color-mix(in srgb, var(--color-danger, #e05a5a) 90%, white 10%);
+  border-radius: 999px;
+  padding: 0.62rem 0.92rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.inspect-card__trash-button:hover:not(:disabled),
+.inspect-card__trash-button:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-danger, #e05a5a) 82%, transparent);
+  background: color-mix(in srgb, var(--color-danger, #e05a5a) 24%, transparent);
+  color: color-mix(in srgb, var(--color-danger, #e05a5a) 96%, white 4%);
+}
+
+.inspect-card__trash-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
+.inspect-card__trash-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }
 
 .inspect-card__preview-node {
