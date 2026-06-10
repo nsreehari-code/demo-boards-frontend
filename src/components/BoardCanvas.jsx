@@ -11,12 +11,15 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { CardShell } from './CardShell.jsx';
+import { BOARD_TRANSPORT_MODE, BOARD_TRANSPORT_MODE_SERVER_URL, SERVER } from '../lib/appConfig.js';
+import { buildDeterministicCanvasLayout, normalizeRuntimeCanvasLayout } from '../lib/boardCanvasLayout.js';
+import { useManageBoards } from '../hooks/useManageBoards.js';
+import { CardShell, readStoredCardWidth } from './CardShell.jsx';
 
 const NODE_WIDTH = 360;
 const COLUMN_GAP = 420;
 const ROW_GAP = 280;
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 const EDGE_CURVATURE_SUBTLE = 0.26;
 const EDGE_CURVATURE_BASE = 0.46;
 const EDGE_CURVATURE_DRAMATIC = 0.68;
@@ -36,10 +39,10 @@ function readCanvasState(boardId) {
       return null;
     }
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== STORAGE_VERSION) {
+    if (!parsed || (parsed.version !== 1 && parsed.version !== STORAGE_VERSION)) {
       return null;
     }
-    return parsed;
+    return normalizeRuntimeCanvasLayout(parsed);
   } catch {
     return null;
   }
@@ -118,19 +121,6 @@ function resolveProvidedTokens(card) {
   return uniqueTokens(explicitTokens);
 }
 
-function resolveCanvasPosition(card) {
-  const canvasLayout = card?.view?.layout?.canvas;
-  if (!canvasLayout || typeof canvasLayout !== 'object') {
-    return null;
-  }
-  const x = Number(canvasLayout.x);
-  const y = Number(canvasLayout.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return null;
-  }
-  return { x, y };
-}
-
 function buildGraph(cardIds, cardContents, cardRuntimes, dataObjects) {
   const visibleIds = new Set(cardIds);
   const cards = {};
@@ -191,59 +181,6 @@ function buildGraph(cardIds, cardContents, cardRuntimes, dataObjects) {
   }
 
   return { cards, edges, incoming, outgoing };
-}
-
-function buildLayout(cardIds, incoming, outgoing) {
-  if (cardIds.length === 0) {
-    return new Map();
-  }
-
-  const indegree = new Map(cardIds.map((cardId) => [cardId, incoming.get(cardId)?.size ?? 0]));
-  const depth = new Map(cardIds.map((cardId) => [cardId, 0]));
-  const queue = cardIds.filter((cardId) => (indegree.get(cardId) ?? 0) === 0);
-  const visited = new Set();
-
-  while (queue.length > 0) {
-    const cardId = queue.shift();
-    visited.add(cardId);
-    const nextDepth = (depth.get(cardId) ?? 0) + 1;
-    for (const nextId of outgoing.get(cardId) ?? []) {
-      depth.set(nextId, Math.max(depth.get(nextId) ?? 0, nextDepth));
-      const remaining = (indegree.get(nextId) ?? 0) - 1;
-      indegree.set(nextId, remaining);
-      if (remaining === 0) {
-        queue.push(nextId);
-      }
-    }
-  }
-
-  for (const cardId of cardIds) {
-    if (!visited.has(cardId)) {
-      depth.set(cardId, depth.get(cardId) ?? 0);
-    }
-  }
-
-  const columns = new Map();
-  for (const cardId of cardIds) {
-    const column = depth.get(cardId) ?? 0;
-    const columnCards = columns.get(column) ?? [];
-    columnCards.push(cardId);
-    columns.set(column, columnCards);
-  }
-
-  const positions = new Map();
-  const orderedColumns = [...columns.entries()].sort((left, right) => left[0] - right[0]);
-  for (const [column, columnCards] of orderedColumns) {
-    columnCards.sort();
-    columnCards.forEach((cardId, index) => {
-      positions.set(cardId, {
-        x: column * COLUMN_GAP,
-        y: index * ROW_GAP,
-      });
-    });
-  }
-
-  return positions;
 }
 
 function sameStringArray(left = [], right = []) {
@@ -467,19 +404,44 @@ function getMiniMapNodeClassName(node) {
   return node?.data?.status === 'running' ? 'is-running' : '';
 }
 
-export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects }) {
+export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, boardUi = null, boardMetadata = null }) {
   const [selectedToken, setSelectedToken] = useState(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const persistedCanvasState = useMemo(() => readCanvasState(boardId), [boardId]);
-  const canReusePersistedViewport = useMemo(
-    () => sameCardSet(persistedCanvasState?.cardIds, cardIds),
-    [cardIds, persistedCanvasState?.cardIds],
+  const managedCanvasState = useMemo(
+    () => normalizeRuntimeCanvasLayout(boardMetadata?.runtimeLayout?.canvas),
+    [boardMetadata?.runtimeLayout?.canvas],
   );
+  const manageBoardsActions = useManageBoards(SERVER, { enabled: false });
+  const reusableCanvasState = useMemo(() => {
+    if (sameCardSet(persistedCanvasState?.cardIds, cardIds)) {
+      return persistedCanvasState;
+    }
+    if (sameCardSet(managedCanvasState?.cardIds, cardIds)) {
+      return managedCanvasState;
+    }
+    return null;
+  }, [cardIds, managedCanvasState, persistedCanvasState]);
   const hasRestoredViewportRef = useRef(false);
   const previousSelectedTokenRef = useRef(null);
   const graph = useMemo(() => buildGraph(cardIds, cardContents, cardRuntimes, dataObjects), [cardIds, cardContents, cardRuntimes, dataObjects]);
-  const baseLayout = useMemo(() => buildLayout(cardIds, graph.incoming, graph.outgoing), [cardIds, graph.incoming, graph.outgoing]);
+  const baseLayout = useMemo(() => buildDeterministicCanvasLayout({
+    boardUi,
+    cardIds,
+    cardContents,
+    incoming: graph.incoming,
+    outgoing: graph.outgoing,
+  }), [boardUi, cardContents, cardIds, graph.incoming, graph.outgoing]);
   const availableTokens = useMemo(() => Object.keys(dataObjects ?? {}), [dataObjects]);
+
+  const resolveStoredPosition = useCallback((cardId) => reusableCanvasState?.positions?.[cardId] ?? null, [reusableCanvasState?.positions]);
+  const resolveStoredWidth = useCallback((cardId) => {
+    const storedWidth = reusableCanvasState?.widths?.[cardId];
+    if (Number.isFinite(storedWidth)) {
+      return storedWidth;
+    }
+    return readStoredCardWidth(boardId, cardId);
+  }, [boardId, reusableCanvasState?.widths]);
 
   const highlightedEdgeIds = useMemo(() => {
     if (!selectedToken) {
@@ -509,18 +471,43 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
 
   const persistNodes = useCallback((nextNodes, viewport = null) => {
     const positions = Object.fromEntries(nextNodes.map((node) => [node.id, node.position]));
+    const widths = Object.fromEntries(nextNodes
+      .map((node) => [node.id, Number(node.style?.width)])
+      .filter(([, width]) => Number.isFinite(width)));
     writeCanvasState(boardId, {
       cardIds: nextNodes.map((node) => node.id),
       positions,
+      widths,
       viewport,
     });
   }, [boardId]);
 
+  const persistManagedLayout = useCallback((nextNodes, viewport = null) => {
+    if (BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      return;
+    }
+
+    const positions = Object.fromEntries(nextNodes.map((node) => [node.id, node.position]));
+    const widths = Object.fromEntries(nextNodes
+      .map((node) => [node.id, Number(node.style?.width)])
+      .filter(([, width]) => Number.isFinite(width)));
+
+    void manageBoardsActions.saveBoardMeta(boardId, {
+      runtimeLayout: {
+        canvas: {
+          cardIds: nextNodes.map((node) => node.id),
+          positions,
+          widths,
+          viewport,
+        },
+      },
+    }).catch(() => {});
+  }, [boardId, manageBoardsActions]);
+
   const graphNodes = useMemo(() => cardIds.map((cardId) => ({
     id: cardId,
     type: 'boardCard',
-    position: canReusePersistedViewport ? persistedCanvasState?.positions?.[cardId] : null
-      ?? resolveCanvasPosition(cardContents[cardId])
+    position: resolveStoredPosition(cardId)
       ?? baseLayout.get(cardId)
       ?? { x: 0, y: 0 },
     draggable: true,
@@ -537,8 +524,8 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
       isHighlighted: !selectedToken || highlightedNodeIds.has(cardId),
       isDimmed: !!selectedToken && !highlightedNodeIds.has(cardId),
     },
-    style: { width: NODE_WIDTH },
-  })), [availableTokens, baseLayout, cardContents, boardId, canReusePersistedViewport, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, persistedCanvasState?.positions, selectedToken]);
+    style: { width: resolveStoredWidth(cardId) ?? baseLayout.get(cardId)?.w ?? NODE_WIDTH },
+  })), [availableTokens, baseLayout, boardId, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, resolveStoredPosition, resolveStoredWidth, selectedToken]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -589,8 +576,8 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
       previousSelectedTokenRef.current = selectedToken;
 
       const frameId = window.requestAnimationFrame(() => {
-        if (canReusePersistedViewport && persistedCanvasState?.viewport) {
-          reactFlowInstance.setViewport(persistedCanvasState.viewport, { duration: 0 });
+        if (reusableCanvasState?.viewport) {
+          reactFlowInstance.setViewport(reusableCanvasState.viewport, { duration: 0 });
           return;
         }
 
@@ -630,13 +617,14 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [canReusePersistedViewport, cardIds, highlightedNodeIds, nodes, persistedCanvasState?.viewport, reactFlowInstance, selectedToken]);
+  }, [cardIds, highlightedNodeIds, nodes, reactFlowInstance, reusableCanvasState?.viewport, selectedToken]);
 
   const latestPersistRef = useRef(null);
   latestPersistRef.current = () => {
     if (!nodes.length) return;
     const viewport = reactFlowInstance?.getViewport?.() ?? null;
     persistNodes(nodes, viewport);
+    persistManagedLayout(nodes, viewport);
   };
 
   useEffect(() => {
@@ -647,6 +635,46 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
       latestPersistRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    const handler = (event) => {
+      const detail = event?.detail;
+      if (!detail || detail.boardId !== boardId || !detail.cardId) {
+        return;
+      }
+
+      setNodes((currentNodes) => {
+        let changed = false;
+        const nextNodes = currentNodes.map((node) => {
+          if (node.id !== detail.cardId) {
+            return node;
+          }
+          const nextWidth = Number.isFinite(Number(detail.width)) ? Number(detail.width) : NODE_WIDTH;
+          if (Number(node.style?.width) === nextWidth) {
+            return node;
+          }
+          changed = true;
+          return {
+            ...node,
+            style: {
+              ...(node.style ?? {}),
+              width: nextWidth,
+            },
+          };
+        });
+
+        if (changed) {
+          const viewport = reactFlowInstance?.getViewport?.() ?? null;
+          persistNodes(nextNodes, viewport);
+        }
+
+        return changed ? nextNodes : currentNodes;
+      });
+    };
+
+    window.addEventListener('demo-board:card-width-changed', handler);
+    return () => window.removeEventListener('demo-board:card-width-changed', handler);
+  }, [boardId, persistNodes, reactFlowInstance, setNodes]);
 
   const focusedCardIdRef = useRef(null);
   const savedViewportRef = useRef(null);
@@ -719,6 +747,10 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
         panOnScroll
         selectionOnDrag
         onInit={setReactFlowInstance}
+        onNodeDragStop={() => {
+          const viewport = reactFlowInstance?.getViewport?.() ?? null;
+          persistNodes(nodes, viewport);
+        }}
       >
         {selectedToken ? (
           <div className="board-canvas-token-banner">

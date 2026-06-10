@@ -80,7 +80,7 @@ function clampCardWidth(nextWidth) {
   return Math.max(MIN_CARD_WIDTH, Math.min(viewportMax, Math.round(nextWidth)));
 }
 
-function readStoredCardWidth(boardId, cardId) {
+export function readStoredCardWidth(boardId, cardId) {
   if (typeof window === 'undefined' || !boardId || !cardId) return null;
   try {
     const raw = window.localStorage.getItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`);
@@ -92,7 +92,7 @@ function readStoredCardWidth(boardId, cardId) {
   }
 }
 
-function persistCardWidth(boardId, cardId, width) {
+export function persistCardWidth(boardId, cardId, width) {
   if (typeof window === 'undefined' || !boardId || !cardId) return;
   try {
     if (Number.isFinite(width) && width > 0) {
@@ -136,6 +136,9 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
       persistCardWidth(boardId, cardId, width);
+      window.dispatchEvent(new CustomEvent('demo-board:card-width-changed', {
+        detail: { boardId, cardId, width: width ?? null },
+      }));
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -167,6 +170,9 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
     event.stopPropagation();
     setWidth(null);
     persistCardWidth(boardId, cardId, null);
+    window.dispatchEvent(new CustomEvent('demo-board:card-width-changed', {
+      detail: { boardId, cardId, width: null },
+    }));
   }, [boardId, cardId]);
 
   return (

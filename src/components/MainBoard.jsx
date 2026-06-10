@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { CentrePane } from './CentrePane.jsx';
 import { IngestPane } from './IngestPane.jsx';
 import { TruthsetExplorePane } from './TruthsetExplorePane.jsx';
-import { useBoardUiConfig } from '../hooks/useBoardUiConfig.js';
+import { useManagedBoardConfig } from '../hooks/useManagedBoardConfig.js';
 import { compileCardFilter } from '../lib/cardFilterExpression.js';
 
 const DEFAULT_FILTERS = {
@@ -16,7 +16,9 @@ function resolveFilters(uiFilters, name) {
 }
 
 export function MainBoard({ boardId }) {
-  const uiConfig = useBoardUiConfig(boardId);
+  const managedBoardConfig = useManagedBoardConfig(boardId);
+  const uiConfig = managedBoardConfig?.ui ?? null;
+  const boardMetadata = managedBoardConfig?.metadata ?? null;
 
   const { ingestFilters, truthsetFilters, centreExcludeFilters } = useMemo(() => {
     const uiFilters = uiConfig?.filters;
@@ -33,7 +35,13 @@ export function MainBoard({ boardId }) {
     <>
       <IngestPane boardId={boardId} includeFilters={ingestFilters} layoutStrategy="vertical" />
       <TruthsetExplorePane boardId={boardId} includeFilters={truthsetFilters} layoutStrategy="vertical" />
-      <CentrePane boardId={boardId} excludeFilters={centreExcludeFilters} layoutStrategy="infinite-canvas" />
+      <CentrePane
+        boardId={boardId}
+        excludeFilters={centreExcludeFilters}
+        layoutStrategy="infinite-canvas"
+        boardUi={uiConfig}
+        boardMetadata={boardMetadata}
+      />
     </>
   );
 }

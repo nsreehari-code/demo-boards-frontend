@@ -889,11 +889,11 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             aria-label="Board settings"
           >
             <div className="board-settings-modal__header">
-              <div>
+              <div className="board-settings-modal__header-content">
                 <div className="board-settings-modal__eyebrow mb-2">Board</div>
-                <div className="d-flex align-items-center gap-2">
+                <div className="d-flex align-items-center gap-2 board-settings-board-row">
                   <select
-                    className="board-input board-settings-sample-select"
+                    className="board-input board-settings-sample-select board-settings-board-select"
                     value={formState.defaultBoardId}
                     onChange={handleBoardSelectionChange}
                     disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
@@ -912,26 +912,13 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   </select>
                   <button
                     type="button"
-                    className="btn btn-primary board-button d-inline-flex align-items-center gap-1"
+                    className="btn btn-primary board-button board-settings-go-button d-inline-flex align-items-center gap-1"
                     onClick={submitAndReload}
-                    title="Save and reload"
-                    aria-label="Save and reload"
+                    title="Switch board"
+                    aria-label="Switch board"
                   >
                     {FORWARD_ICON_SVG}
-                    Go
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1 ms-auto"
-                    onClick={() => {
-                      setAddBoardError('');
-                      setAddBoardOpen(true);
-                    }}
-                    disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
-                    title="New board"
-                  >
-                    {PLUS_ICON_SVG}
-                    New
+                    Switch
                   </button>
                 </div>
               </div>
@@ -949,6 +936,21 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             </div>
 
             <div className="board-settings-form">
+              <div className="d-flex align-items-center justify-content-start gap-2 mb-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1"
+                  onClick={() => {
+                    setAddBoardError('');
+                    setAddBoardOpen(true);
+                  }}
+                  disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
+                  title="New board"
+                >
+                  {PLUS_ICON_SVG}
+                  New Board
+                </button>
+              </div>
               {serverUnreachable ? (
                 <div className="board-settings-alert" role="alert" aria-live="assertive">
                   <span className="board-settings-alert__badge">
