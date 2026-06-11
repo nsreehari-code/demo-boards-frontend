@@ -143,6 +143,40 @@ export function useManageBoards(serverOrigin, options = {}) {
     return normalizeManagedBoardEntry(data?.board ?? null);
   }, [normalizedOrigin]);
 
+  const getLayout = useCallback(async (boardId) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'get-layout',
+      args: {
+        boardId: normalizedBoardId,
+      },
+    });
+    return data?.layout ?? null;
+  }, [normalizedOrigin]);
+
+  const saveLayout = useCallback(async (boardId, layout) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) {
+      throw new Error('Layout is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'save-layout',
+      args: {
+        boardId: normalizedBoardId,
+        layout,
+      },
+    });
+    return data?.layout ?? null;
+  }, [normalizedOrigin]);
+
   const saveBoardRecord = useCallback(async (boardId, record) => {
     const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
     if (!normalizedBoardId) {
@@ -264,12 +298,14 @@ export function useManageBoards(serverOrigin, options = {}) {
       return normalizeManagedBoardEntry(data?.board ?? null);
     },
     saveBoardMeta,
+    getLayout,
+    saveLayout,
     saveBoardRecord,
     refreshBoard,
     exportBoard,
     previewImportBoard,
     applyImportBoard,
-  }), [addBoard, applyImportBoard, exportBoard, listBoards, normalizedOrigin, previewImportBoard, refreshBoard, saveBoardMeta, saveBoardRecord]);
+  }), [addBoard, applyImportBoard, exportBoard, getLayout, listBoards, normalizedOrigin, previewImportBoard, refreshBoard, saveBoardMeta, saveBoardRecord, saveLayout]);
 
   return {
     managedBoards: boards,

@@ -28,7 +28,7 @@ function resolveLayoutStrategy(layoutStrategy) {
   };
 }
 
-export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flowing-cards', boardUi = null, boardMetadata = null }) {
+export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flowing-cards', boardUi = null, boardMetadata = null, boardLayout = null }) {
   const board = useBoardState(boardId);
 
   if (!board) return null;
@@ -47,6 +47,7 @@ export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flo
           dataObjects={board.dataObjects}
           boardUi={boardUi}
           boardMetadata={boardMetadata}
+          boardLayout={boardLayout}
         />
       </div>
     );

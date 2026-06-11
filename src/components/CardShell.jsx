@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useCardWidthState } from '../hooks/useCoordsState.jsx';
 import { useCardState } from '../hooks/useCardState.js';
 import { useChatStateAIWorking } from '../hooks/useChatState.js';
 import { useBoardInspectState } from '../hooks/useBoardState.js';
@@ -7,7 +8,6 @@ import { ChatPane, MiniChatPane } from './ChatPane.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
 import { InspectCard } from './InspectCard.jsx';
 
-const CARD_WIDTH_STORAGE_PREFIX = 'demo-board:card-shell-width:';
 const MIN_CARD_WIDTH = 280;
 const MAX_CARD_WIDTH = 960;
 
@@ -80,31 +80,6 @@ function clampCardWidth(nextWidth) {
   return Math.max(MIN_CARD_WIDTH, Math.min(viewportMax, Math.round(nextWidth)));
 }
 
-export function readStoredCardWidth(boardId, cardId) {
-  if (typeof window === 'undefined' || !boardId || !cardId) return null;
-  try {
-    const raw = window.localStorage.getItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`);
-    if (!raw) return null;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? clampCardWidth(parsed) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function persistCardWidth(boardId, cardId, width) {
-  if (typeof window === 'undefined' || !boardId || !cardId) return;
-  try {
-    if (Number.isFinite(width) && width > 0) {
-      window.localStorage.setItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`, String(clampCardWidth(width)));
-    } else {
-      window.localStorage.removeItem(`${CARD_WIDTH_STORAGE_PREFIX}${boardId}:${cardId}`);
-    }
-  } catch {
-    // Best-effort persistence only.
-  }
-}
-
 const CARD_RESIZE_HANDLE_SVG = (
   <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" className="board-card-shell__resize-icon">
     <path fill="currentColor" d="M6.25 4.25a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Zm3.75 0a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Zm3.75 0a.75.75 0 0 1 .75.75v10a.75.75 0 0 1-1.5 0V5a.75.75 0 0 1 .75-.75Z" />
@@ -112,12 +87,8 @@ const CARD_RESIZE_HANDLE_SVG = (
 );
 
 function ResizableCardShell({ boardId, cardId, className = '', enabled = false, children }) {
-  const [width, setWidth] = useState(() => readStoredCardWidth(boardId, cardId));
+  const [width, setWidth] = useCardWidthState(cardId);
   const dragStateRef = useRef(null);
-
-  useEffect(() => {
-    setWidth(enabled ? readStoredCardWidth(boardId, cardId) : null);
-  }, [boardId, cardId, enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -135,10 +106,6 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
       dragStateRef.current = null;
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      persistCardWidth(boardId, cardId, width);
-      window.dispatchEvent(new CustomEvent('demo-board:card-width-changed', {
-        detail: { boardId, cardId, width: width ?? null },
-      }));
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -169,11 +136,7 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
     event.preventDefault();
     event.stopPropagation();
     setWidth(null);
-    persistCardWidth(boardId, cardId, null);
-    window.dispatchEvent(new CustomEvent('demo-board:card-width-changed', {
-      detail: { boardId, cardId, width: null },
-    }));
-  }, [boardId, cardId]);
+  }, [setWidth]);
 
   return (
     <div className={`board-card-shell${className ? ` ${className}` : ''}`} style={width ? { width: `${width}px` } : undefined}>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  applyNodeChanges,
   BaseEdge,
   Background,
   Controls,
@@ -11,67 +12,14 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { BOARD_TRANSPORT_MODE, BOARD_TRANSPORT_MODE_SERVER_URL, SERVER } from '../lib/appConfig.js';
-import { buildDeterministicCanvasLayout, normalizeRuntimeCanvasLayout } from '../lib/boardCanvasLayout.js';
-import { useManageBoards } from '../hooks/useManageBoards.js';
-import { CardShell, readStoredCardWidth } from './CardShell.jsx';
+import { buildDeterministicCanvasLayout } from '../lib/boardCanvasLayout.js';
+import { useBoardLayoutActions, useBoardLayoutState } from '../hooks/useCoordsState.jsx';
+import { CardShell } from './CardShell.jsx';
 
 const NODE_WIDTH = 360;
-const COLUMN_GAP = 420;
-const ROW_GAP = 280;
-const STORAGE_VERSION = 2;
 const EDGE_CURVATURE_SUBTLE = 0.26;
 const EDGE_CURVATURE_BASE = 0.46;
 const EDGE_CURVATURE_DRAMATIC = 0.68;
-
-function storageKeyForBoard(boardId) {
-  return `demo-board.canvas.${boardId}`;
-}
-
-function readCanvasState(boardId) {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(storageKeyForBoard(boardId));
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || (parsed.version !== 1 && parsed.version !== STORAGE_VERSION)) {
-      return null;
-    }
-    return normalizeRuntimeCanvasLayout(parsed);
-  } catch {
-    return null;
-  }
-}
-
-function writeCanvasState(boardId, payload) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKeyForBoard(boardId), JSON.stringify({
-      version: STORAGE_VERSION,
-      ...payload,
-    }));
-  } catch {
-    // Ignore localStorage failures.
-  }
-}
-
-function sameCardSet(savedCardIds, cardIds) {
-  if (!Array.isArray(savedCardIds) || savedCardIds.length !== cardIds.length) {
-    return false;
-  }
-
-  const left = [...savedCardIds].sort();
-  const right = [...cardIds].sort();
-  return left.every((cardId, index) => cardId === right[index]);
-}
 
 function tokenHandleId(kind, token) {
   return `${kind}:${token}`;
@@ -404,24 +352,11 @@ function getMiniMapNodeClassName(node) {
   return node?.data?.status === 'running' ? 'is-running' : '';
 }
 
-export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, boardUi = null, boardMetadata = null }) {
+export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, boardUi = null, boardMetadata = null, boardLayout = null }) {
   const [selectedToken, setSelectedToken] = useState(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
-  const persistedCanvasState = useMemo(() => readCanvasState(boardId), [boardId]);
-  const managedCanvasState = useMemo(
-    () => normalizeRuntimeCanvasLayout(boardMetadata?.runtimeLayout?.canvas),
-    [boardMetadata?.runtimeLayout?.canvas],
-  );
-  const manageBoardsActions = useManageBoards(SERVER, { enabled: false });
-  const reusableCanvasState = useMemo(() => {
-    if (sameCardSet(persistedCanvasState?.cardIds, cardIds)) {
-      return persistedCanvasState;
-    }
-    if (sameCardSet(managedCanvasState?.cardIds, cardIds)) {
-      return managedCanvasState;
-    }
-    return null;
-  }, [cardIds, managedCanvasState, persistedCanvasState]);
+  const layoutState = useBoardLayoutState();
+  const { setManyCoords, setWidth, setViewport } = useBoardLayoutActions();
   const hasRestoredViewportRef = useRef(false);
   const previousSelectedTokenRef = useRef(null);
   const graph = useMemo(() => buildGraph(cardIds, cardContents, cardRuntimes, dataObjects), [cardIds, cardContents, cardRuntimes, dataObjects]);
@@ -431,17 +366,23 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     cardContents,
     incoming: graph.incoming,
     outgoing: graph.outgoing,
-  }), [boardUi, cardContents, cardIds, graph.incoming, graph.outgoing]);
+    storedPositions: layoutState.positions,
+    storedWidths: layoutState.widths,
+  }), [boardUi, cardContents, cardIds, graph.incoming, graph.outgoing, layoutState.positions, layoutState.widths]);
   const availableTokens = useMemo(() => Object.keys(dataObjects ?? {}), [dataObjects]);
+  const cardsWithNoCoords = useMemo(
+    () => cardIds.filter((cardId) => !layoutState.positions?.[cardId]),
+    [cardIds, layoutState.positions],
+  );
 
-  const resolveStoredPosition = useCallback((cardId) => reusableCanvasState?.positions?.[cardId] ?? null, [reusableCanvasState?.positions]);
+  const resolveStoredPosition = useCallback((cardId) => layoutState.positions?.[cardId] ?? null, [layoutState.positions]);
   const resolveStoredWidth = useCallback((cardId) => {
-    const storedWidth = reusableCanvasState?.widths?.[cardId];
+    const storedWidth = layoutState.widths?.[cardId];
     if (Number.isFinite(storedWidth)) {
       return storedWidth;
     }
-    return readStoredCardWidth(boardId, cardId);
-  }, [boardId, reusableCanvasState?.widths]);
+    return null;
+  }, [layoutState.widths]);
 
   const highlightedEdgeIds = useMemo(() => {
     if (!selectedToken) {
@@ -469,46 +410,10 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     setSelectedToken((currentToken) => (currentToken === token ? null : token));
   }, []);
 
-  const persistNodes = useCallback((nextNodes, viewport = null) => {
-    const positions = Object.fromEntries(nextNodes.map((node) => [node.id, node.position]));
-    const widths = Object.fromEntries(nextNodes
-      .map((node) => [node.id, Number(node.style?.width)])
-      .filter(([, width]) => Number.isFinite(width)));
-    writeCanvasState(boardId, {
-      cardIds: nextNodes.map((node) => node.id),
-      positions,
-      widths,
-      viewport,
-    });
-  }, [boardId]);
-
-  const persistManagedLayout = useCallback((nextNodes, viewport = null) => {
-    if (BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
-      return;
-    }
-
-    const positions = Object.fromEntries(nextNodes.map((node) => [node.id, node.position]));
-    const widths = Object.fromEntries(nextNodes
-      .map((node) => [node.id, Number(node.style?.width)])
-      .filter(([, width]) => Number.isFinite(width)));
-
-    void manageBoardsActions.saveBoardMeta(boardId, {
-      runtimeLayout: {
-        canvas: {
-          cardIds: nextNodes.map((node) => node.id),
-          positions,
-          widths,
-          viewport,
-        },
-      },
-    }).catch(() => {});
-  }, [boardId, manageBoardsActions]);
-
   const graphNodes = useMemo(() => cardIds.map((cardId) => ({
     id: cardId,
     type: 'boardCard',
     position: resolveStoredPosition(cardId)
-      ?? baseLayout.get(cardId)
       ?? { x: 0, y: 0 },
     draggable: true,
     data: {
@@ -531,20 +436,46 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
 
   useEffect(() => {
-    setNodes((currentNodes) => {
-      const positionsById = new Map(currentNodes.map((node) => [node.id, node.position]));
-      const nextNodes = graphNodes.map((node) => ({
-        ...node,
-        position: positionsById.get(node.id) ?? node.position,
-      }));
+    if (cardsWithNoCoords.length === 0) {
+      return;
+    }
 
-      if (currentNodes.length === nextNodes.length && currentNodes.every((node, index) => sameNodeView(node, nextNodes[index]))) {
+    const nextCoordsByCardId = Object.fromEntries(
+      cardsWithNoCoords
+        .map((cardId) => [cardId, baseLayout.get(cardId)])
+        .filter(([, placement]) => placement),
+    );
+
+    if (Object.keys(nextCoordsByCardId).length > 0) {
+      setManyCoords(nextCoordsByCardId);
+    }
+  }, [baseLayout, cardsWithNoCoords, setManyCoords]);
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentById = new Map(currentNodes.map((node) => [node.id, node]));
+      const positionsById = new Map(currentNodes.map((node) => [node.id, node.position]));
+      let changed = currentNodes.length !== graphNodes.length;
+      const nextNodes = graphNodes.map((node) => {
+        const candidateNode = {
+          ...node,
+          position: layoutState.positions?.[node.id] ?? positionsById.get(node.id) ?? node.position,
+        };
+        const currentNode = currentById.get(node.id);
+        if (currentNode && sameNodeView(currentNode, candidateNode)) {
+          return currentNode;
+        }
+        changed = true;
+        return candidateNode;
+      });
+
+      if (!changed) {
         return currentNodes;
       }
 
       return nextNodes;
     });
-  }, [graphNodes, setNodes]);
+  }, [graphNodes, layoutState.positions, setNodes]);
 
   useEffect(() => {
     setEdges((currentEdges) => {
@@ -576,8 +507,8 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
       previousSelectedTokenRef.current = selectedToken;
 
       const frameId = window.requestAnimationFrame(() => {
-        if (reusableCanvasState?.viewport) {
-          reactFlowInstance.setViewport(reusableCanvasState.viewport, { duration: 0 });
+        if (layoutState.viewport) {
+          reactFlowInstance.setViewport(layoutState.viewport, { duration: 0 });
           return;
         }
 
@@ -617,64 +548,7 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [cardIds, highlightedNodeIds, nodes, reactFlowInstance, reusableCanvasState?.viewport, selectedToken]);
-
-  const latestPersistRef = useRef(null);
-  latestPersistRef.current = () => {
-    if (!nodes.length) return;
-    const viewport = reactFlowInstance?.getViewport?.() ?? null;
-    persistNodes(nodes, viewport);
-    persistManagedLayout(nodes, viewport);
-  };
-
-  useEffect(() => {
-    const handler = () => latestPersistRef.current?.();
-    window.addEventListener('demo-board:persist-canvas', handler);
-    return () => {
-      window.removeEventListener('demo-board:persist-canvas', handler);
-      latestPersistRef.current?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    const handler = (event) => {
-      const detail = event?.detail;
-      if (!detail || detail.boardId !== boardId || !detail.cardId) {
-        return;
-      }
-
-      setNodes((currentNodes) => {
-        let changed = false;
-        const nextNodes = currentNodes.map((node) => {
-          if (node.id !== detail.cardId) {
-            return node;
-          }
-          const nextWidth = Number.isFinite(Number(detail.width)) ? Number(detail.width) : NODE_WIDTH;
-          if (Number(node.style?.width) === nextWidth) {
-            return node;
-          }
-          changed = true;
-          return {
-            ...node,
-            style: {
-              ...(node.style ?? {}),
-              width: nextWidth,
-            },
-          };
-        });
-
-        if (changed) {
-          const viewport = reactFlowInstance?.getViewport?.() ?? null;
-          persistNodes(nextNodes, viewport);
-        }
-
-        return changed ? nextNodes : currentNodes;
-      });
-    };
-
-    window.addEventListener('demo-board:card-width-changed', handler);
-    return () => window.removeEventListener('demo-board:card-width-changed', handler);
-  }, [boardId, persistNodes, reactFlowInstance, setNodes]);
+  }, [cardIds, highlightedNodeIds, layoutState.viewport, nodes, reactFlowInstance, selectedToken]);
 
   const focusedCardIdRef = useRef(null);
   const savedViewportRef = useRef(null);
@@ -734,7 +608,17 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={(changes) => {
+          onNodesChange(changes);
+          const nextCoordsByCardId = Object.fromEntries(
+            changes
+              .filter((change) => change.type === 'position' && change.position && change.dragging === false)
+              .map((change) => [change.id, change.position]),
+          );
+          if (Object.keys(nextCoordsByCardId).length > 0) {
+            setManyCoords(nextCoordsByCardId);
+          }
+        }}
         onEdgesChange={onEdgesChange}
         minZoom={0.24}
         maxZoom={1.35}
@@ -747,9 +631,12 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
         panOnScroll
         selectionOnDrag
         onInit={setReactFlowInstance}
-        onNodeDragStop={() => {
-          const viewport = reactFlowInstance?.getViewport?.() ?? null;
-          persistNodes(nodes, viewport);
+        onMoveEnd={() => {
+          setViewport(reactFlowInstance?.getViewport?.() ?? null);
+        }}
+        onNodeDragStop={(_, node) => {
+          setManyCoords({ [node.id]: node.position });
+          setViewport(reactFlowInstance?.getViewport?.() ?? null);
         }}
       >
         {selectedToken ? (

@@ -4,24 +4,39 @@ import {
   BOARD_TRANSPORT_MODE_SERVER_URL,
   SERVER,
 } from '../lib/appConfig.js';
+import { normalizeRuntimeCanvasLayout } from '../lib/boardCanvasLayout.js';
 
 async function fetchManagedBoardConfig(serverOrigin, boardId) {
   const origin = typeof serverOrigin === 'string' ? serverOrigin.trim().replace(/\/+$/, '') : '';
   const id = typeof boardId === 'string' ? boardId.trim() : '';
   if (!origin || !id) return null;
 
-  const response = await fetch(`${origin}/manage-boards`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subcommand: 'get-board', args: { boardId: id } }),
-  });
-  if (!response.ok) {
-    throw new Error(`get-board failed: ${response.status}`);
+  const [boardResponse, layoutResponse] = await Promise.all([
+    fetch(`${origin}/manage-boards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subcommand: 'get-board', args: { boardId: id } }),
+    }),
+    fetch(`${origin}/manage-boards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subcommand: 'get-layout', args: { boardId: id } }),
+    }),
+  ]);
+  if (!boardResponse.ok) {
+    throw new Error(`get-board failed: ${boardResponse.status}`);
+  }
+  if (!layoutResponse.ok) {
+    throw new Error(`get-layout failed: ${layoutResponse.status}`);
   }
 
-  const payload = await response.json();
+  const payload = await boardResponse.json();
+  const layoutPayload = await layoutResponse.json();
   if (payload?.status !== 'success') {
     throw new Error(typeof payload?.error === 'string' ? payload.error : 'get-board failed');
+  }
+  if (layoutPayload?.status !== 'success') {
+    throw new Error(typeof layoutPayload?.error === 'string' ? layoutPayload.error : 'get-layout failed');
   }
 
   const board = payload?.data?.board;
@@ -29,9 +44,12 @@ async function fetchManagedBoardConfig(serverOrigin, boardId) {
     return null;
   }
 
+  const layout = layoutPayload?.data?.layout;
+
   return {
     ui: board.ui && typeof board.ui === 'object' && !Array.isArray(board.ui) ? board.ui : {},
     metadata: board.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata) ? board.metadata : {},
+    layout: normalizeRuntimeCanvasLayout(layout?.canvas) ? { canvas: normalizeRuntimeCanvasLayout(layout?.canvas) } : null,
     board,
   };
 }
