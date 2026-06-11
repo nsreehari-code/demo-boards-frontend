@@ -154,7 +154,21 @@ function SourceBlock({ summary, onRunFlight, isLoading, disabled }) {
   );
 }
 
-function ChipRow({ value }) {
+function ChipRow({ value, onClick, isActive = false }) {
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className="board-card-backface__chip"
+        onClick={onClick}
+        aria-pressed={isActive}
+        style={{ cursor: 'pointer', opacity: isActive ? 1 : 0.92 }}
+      >
+        {value}
+      </button>
+    );
+  }
+
   return (
     <span className="board-card-backface__chip">{value}</span>
   );
@@ -168,6 +182,8 @@ export function CardBackface({
   flightDisabled,
   onRunCardFlight,
   onRunFlight,
+  onInspectToken,
+  activeTokenKey,
 }) {
   const requires = Array.isArray(cardContent?.requires) ? cardContent.requires : EMPTY_ARRAY;
   const provides = Array.isArray(cardContent?.provides) ? cardContent.provides : EMPTY_ARRAY;
@@ -219,7 +235,12 @@ export function CardBackface({
               <div className="board-card-backface__section-title">Depends On</div>
               <div className="board-card-backface__chips-row">
                 {requires.map((key) => (
-                  <ChipRow key={`requires-${key}`} value={key} />
+                  <ChipRow
+                    key={`requires-${key}`}
+                    value={key}
+                    onClick={onInspectToken ? () => onInspectToken({ token: key, kind: 'require' }) : null}
+                    isActive={activeTokenKey === `require:${key}`}
+                  />
                 ))}
               </div>
             </div>
@@ -229,7 +250,12 @@ export function CardBackface({
               <div className="board-card-backface__section-title">Produces</div>
               <div className="board-card-backface__chips-row">
                 {provides.map((item, idx) => (
-                  <ChipRow key={`provides-${idx}`} value={item.bindTo} />
+                  <ChipRow
+                    key={`provides-${idx}`}
+                    value={item.bindTo}
+                    onClick={onInspectToken ? () => onInspectToken({ token: item.bindTo, kind: 'provide' }) : null}
+                    isActive={activeTokenKey === `provide:${item.bindTo}`}
+                  />
                 ))}
               </div>
             </div>

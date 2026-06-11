@@ -11,6 +11,21 @@ import {
 
 const EMPTY_FILES = Object.freeze([]);
 
+function resolveProvideTokens(cardContent) {
+  const provideDefs = Array.isArray(cardContent?.provides) ? cardContent.provides : EMPTY_FILES;
+  const tokens = [];
+  for (const entry of provideDefs) {
+    if (typeof entry === 'string' && entry) {
+      tokens.push(entry);
+      continue;
+    }
+    if (entry && typeof entry === 'object' && typeof entry.bindTo === 'string' && entry.bindTo.trim()) {
+      tokens.push(entry.bindTo.trim());
+    }
+  }
+  return [...new Set(tokens)];
+}
+
 function readJsonResponse(response) {
   return response.json()
     .catch(() => null)
@@ -62,6 +77,16 @@ export function useCardState(boardId, cardId) {
   const requiresDataObjects = useMemo(() => {
     const next = {};
     for (const token of resolveRequireTokens(cardContent)) {
+      if (token in dataObjects) {
+        next[token] = dataObjects[token];
+      }
+    }
+    return next;
+  }, [cardContent, dataObjects]);
+
+  const providesDataObjects = useMemo(() => {
+    const next = {};
+    for (const token of resolveProvideTokens(cardContent)) {
       if (token in dataObjects) {
         next[token] = dataObjects[token];
       }
@@ -132,6 +157,7 @@ export function useCardState(boardId, cardId) {
     cardData,
     cardRuntime,
     requiresDataObjects,
+    providesDataObjects,
     cardActions,
   };
 }

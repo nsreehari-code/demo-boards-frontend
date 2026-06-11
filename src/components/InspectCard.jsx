@@ -150,6 +150,31 @@ function InspectCardOutput({ flightResult }) {
     );
   }
 
+  if (flightResult.kind === 'token') {
+    const statusClassName = flightResult.missing ? 'global-modal__chip--fail' : 'global-modal__chip--ok';
+    return (
+      <div className="inspect-card__output-stack">
+        <div className="inspect-card__output-summary">
+          <div>
+            <div className="inspect-card__pane-label">Selected Token</div>
+            <div className="inspect-card__output-title">{flightResult.title}</div>
+          </div>
+          <span className={`global-modal__chip ${statusClassName}`}>{flightResult.missing ? 'missing' : 'available'}</span>
+        </div>
+        <div className="inspect-card__output-content">
+          <div className="global-modal__chips">
+            <span className="global-modal__chip">{flightResult.token}</span>
+            <span className="global-modal__chip">{flightResult.tokenKind}</span>
+          </div>
+          <div className="global-modal__section">
+            <div className="global-modal__section-title">Current Data</div>
+            <pre className="global-modal__pre">{JSON.stringify(flightResult.data, null, 2)}</pre>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const statusLabel = flightResult.status === 'running'
     ? 'running'
     : (flightResult.status === 'error' ? 'failed' : 'completed');
@@ -201,6 +226,9 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
 
   const activeFlight = flightResult?.status === 'running' ? flightResult : null;
   const flightDisabled = activeFlight !== null;
+  const activeTokenKey = flightResult?.kind === 'token' && flightResult?.token
+    ? `${flightResult.tokenKind}:${flightResult.token}`
+    : '';
 
   const loadingBySource = useMemo(() => {
     if (activeFlight?.kind !== 'source' || !Number.isInteger(activeFlight.sourceIndex)) {
@@ -293,6 +321,25 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
     }
   }, [cardId, cardState, flightDisabled]);
 
+  const handleInspectToken = useCallback(({ token, kind }) => {
+    if (!token || !kind) {
+      return;
+    }
+
+    const tokenData = kind === 'require'
+      ? cardState?.requiresDataObjects?.[token]
+      : cardState?.providesDataObjects?.[token];
+
+    setFlightResult({
+      title: `${kind === 'require' ? 'Requires' : 'Provides'}: ${token}`,
+      kind: 'token',
+      token,
+      tokenKind: kind,
+      missing: tokenData === undefined,
+      data: tokenData ?? null,
+    });
+  }, [cardState?.providesDataObjects, cardState?.requiresDataObjects]);
+
   const handleDeleteCard = useCallback(async () => {
     if (!boardId || !cardId || deletePending) {
       return;
@@ -376,6 +423,8 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
               activeFlight={activeFlight}
               onRunCardFlight={handleRunCardFlight}
               onRunFlight={handleRunFlight}
+              onInspectToken={handleInspectToken}
+              activeTokenKey={activeTokenKey}
             />
           </div>
           <div className="inspect-card__sidebar-pane inspect-card__sidebar-pane--bottom">

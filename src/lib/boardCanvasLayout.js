@@ -180,8 +180,41 @@ function measureComponentLayout(componentPlacements) {
   return { width, height };
 }
 
-function findOpenPosition(bounds, occupiedRects, config) {
+function findOpenPosition(bounds, occupiedRects, config, preferredOrigin = null) {
   const maxColumns = Math.max(1, Math.ceil(Math.sqrt(occupiedRects.length + 1)) + 2);
+
+  if (preferredOrigin) {
+    const originColumn = Math.max(0, Math.round((preferredOrigin.x - config.origin.x) / config.columnGap));
+    const originRow = Math.max(0, Math.round((preferredOrigin.y - config.origin.y) / config.rowGap));
+    const maxRadius = Math.max(8, maxColumns + 4);
+
+    for (let radius = 0; radius <= maxRadius; radius += 1) {
+      for (let rowOffset = -radius; rowOffset <= radius; rowOffset += 1) {
+        for (let columnOffset = -radius; columnOffset <= radius; columnOffset += 1) {
+          if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) !== radius) {
+            continue;
+          }
+
+          const columnIndex = originColumn + columnOffset;
+          const rowIndex = originRow + rowOffset;
+          if (columnIndex < 0 || rowIndex < 0) {
+            continue;
+          }
+
+          const candidate = {
+            x: config.origin.x + (columnIndex * config.columnGap),
+            y: config.origin.y + (rowIndex * config.rowGap),
+            w: bounds.width,
+            h: bounds.height,
+          };
+
+          if (!occupiedRects.some((occupiedRect) => rectanglesOverlap(candidate, occupiedRect))) {
+            return candidate;
+          }
+        }
+      }
+    }
+  }
 
   for (let rowIndex = 0; rowIndex < 200; rowIndex += 1) {
     for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
@@ -202,6 +235,43 @@ function findOpenPosition(bounds, occupiedRects, config) {
     y: config.origin.y,
     w: bounds.width,
     h: bounds.height,
+  };
+}
+
+function resolvePreferredOrigin(componentIds, bounds, incoming, outgoing, positionedRectsById) {
+  const componentSet = new Set(componentIds);
+  const neighborRects = [];
+
+  for (const cardId of componentIds) {
+    for (const neighborId of incoming.get(cardId) ?? []) {
+      if (componentSet.has(neighborId)) continue;
+      const rect = positionedRectsById.get(neighborId);
+      if (rect) neighborRects.push(rect);
+    }
+    for (const neighborId of outgoing.get(cardId) ?? []) {
+      if (componentSet.has(neighborId)) continue;
+      const rect = positionedRectsById.get(neighborId);
+      if (rect) neighborRects.push(rect);
+    }
+  }
+
+  if (neighborRects.length === 0) {
+    return null;
+  }
+
+  let centerX = 0;
+  let centerY = 0;
+  for (const rect of neighborRects) {
+    centerX += rect.x + (rect.w / 2);
+    centerY += rect.y + (rect.h / 2);
+  }
+
+  centerX /= neighborRects.length;
+  centerY /= neighborRects.length;
+
+  return {
+    x: centerX - (bounds.width / 2),
+    y: centerY - (bounds.height / 2),
   };
 }
 
@@ -259,6 +329,7 @@ export function buildDeterministicCanvasLayout({
   const config = resolveBoardCanvasLayoutConfig(boardUi);
   const placements = new Map();
   const occupiedRects = [];
+  const positionedRectsById = new Map();
 
   const cardDescriptors = cardIds.map((cardId) => {
     const card = cardContents[cardId] ?? {};
@@ -279,12 +350,14 @@ export function buildDeterministicCanvasLayout({
     if (!descriptor.storedPosition) {
       continue;
     }
-    occupiedRects.push({
+    const rect = {
       x: descriptor.storedPosition.x,
       y: descriptor.storedPosition.y,
       w: descriptor.storedWidth ?? descriptor.width,
       h: descriptor.height,
-    });
+    };
+    occupiedRects.push(rect);
+    positionedRectsById.set(descriptor.cardId, rect);
   }
 
   const unsavedDescriptors = cardDescriptors.filter((descriptor) => !descriptor.storedPosition);
@@ -333,7 +406,8 @@ export function buildDeterministicCanvasLayout({
       });
 
     const bounds = measureComponentLayout(componentPlacements);
-    const anchor = findOpenPosition(bounds, occupiedRects, config);
+    const preferredOrigin = resolvePreferredOrigin(componentIds, bounds, incoming, outgoing, positionedRectsById);
+    const anchor = findOpenPosition(bounds, occupiedRects, config, preferredOrigin);
 
     for (const [cardId, placement] of componentPlacements.entries()) {
       const absolutePlacement = {
@@ -344,6 +418,7 @@ export function buildDeterministicCanvasLayout({
       };
       placements.set(cardId, absolutePlacement);
       occupiedRects.push(absolutePlacement);
+      positionedRectsById.set(cardId, absolutePlacement);
     }
   });
 
