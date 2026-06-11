@@ -1,8 +1,67 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BoardMarkdown from './BoardMarkdown.jsx';
 import { useChatState } from '../hooks/useChatState.js';
 import { useCardStateFilesData } from '../hooks/useCardState.js';
-import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
+import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
+
+// Number of user turns to fetch each time "Show previous messages" is clicked.
+const HISTORY_TURNS_PER_PAGE = 5;
+
+async function fetchChatHistoryBeforeTurn(boardId, cardId, beforeTurnId, turns) {
+  const response = await callBoardMcp(boardId, 'inspect.chat-messages-on-cards', {
+    card_id: cardId,
+    tail_turns: turns,
+    ...(beforeTurnId ? { tail_turns_before_id: beforeTurnId } : null),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : `inspect.chat-messages-on-cards failed with status ${response.status}`;
+    throw new Error(message);
+  }
+  const data = payload && typeof payload === 'object' && payload.status === 'success' && 'data' in payload
+    ? payload.data
+    : payload;
+  return Array.isArray(data?.messages) ? data.messages : [];
+}
+
+// Merge a fresh SSE messages snapshot into the previously-accumulated live
+// messages. The board's SSE chat view typically carries only the most recent
+// turn, so we accumulate across snapshots instead of replacing: new messages
+// are appended, and an existing message (same turn/role/occurrence) is updated
+// in place to support streaming text. Returns the previous array unchanged when
+// nothing changed to avoid needless re-renders.
+function mergeLiveMessages(prev, incoming) {
+  if (!Array.isArray(incoming) || incoming.length === 0) return prev;
+
+  const byKey = new Map();
+  const order = [];
+  for (const entry of prev) {
+    byKey.set(entry.key, entry.msg);
+    order.push(entry.key);
+  }
+
+  const counts = new Map();
+  let changed = false;
+  for (const msg of incoming) {
+    const turn = typeof msg?.turn === 'string' ? msg.turn : '';
+    const base = `${turn}|${msg?.role ?? ''}`;
+    const occurrence = counts.get(base) ?? 0;
+    counts.set(base, occurrence + 1);
+    const key = `${base}|${occurrence}`;
+    if (!byKey.has(key)) {
+      order.push(key);
+      changed = true;
+    } else if (byKey.get(key) !== msg) {
+      changed = true;
+    }
+    byKey.set(key, msg);
+  }
+
+  if (!changed) return prev;
+  return order.map((key) => ({ key, msg: byKey.get(key) }));
+}
 
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
 function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
@@ -610,6 +669,7 @@ function ChatPaneBase({
   onPopout,
   className = '',
   headerContent = null,
+  historyEnabled = false,
 }) {
   const chat = useChatState(boardId, cardId);
   const messages = chat?.messages ?? [];
@@ -623,9 +683,70 @@ function ChatPaneBase({
   const scrollFrameRef = useRef(null);
   const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
   const [openMsgId, setOpenMsgId] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [liveMessages, setLiveMessages] = useState([]);
+  const liveKeyRef = useRef('');
+  const initialHistoryFetchKeyRef = useRef('');
   const handleToggleExpand = useCallback((msgId) => {
     setOpenMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
+
+  // Accumulate live SSE messages so new turns append rather than replace the
+  // already-rendered conversation (the SSE chat view may only carry the latest
+  // turn). Reset accumulation when the board/card changes.
+  useEffect(() => {
+    if (!historyEnabled) return;
+    const key = `${boardId}::${cardId}`;
+    setLiveMessages((prev) => {
+      if (liveKeyRef.current !== key) {
+        liveKeyRef.current = key;
+        return mergeLiveMessages([], messages);
+      }
+      return mergeLiveMessages(prev, messages);
+    });
+  }, [historyEnabled, boardId, cardId, messages]);
+
+  const liveForDisplay = useMemo(
+    () => (historyEnabled ? liveMessages.map((entry) => entry.msg) : messages),
+    [historyEnabled, liveMessages, messages],
+  );
+
+  const displayMessages = useMemo(
+    () => (historyEnabled && history.length > 0 ? [...history, ...liveForDisplay] : liveForDisplay),
+    [historyEnabled, history, liveForDisplay],
+  );
+
+  const handleLoadPrevious = useCallback(async () => {
+    if (!boardId || !cardId || historyLoading) return;
+    const topTurnId = displayMessages
+      .map((msg) => (typeof msg?.turn === 'string' ? msg.turn.trim() : ''))
+      .find((turn) => turn) || '';
+    setHistoryLoading(true);
+    try {
+      const older = await fetchChatHistoryBeforeTurn(boardId, cardId, topTurnId, HISTORY_TURNS_PER_PAGE);
+      if (older.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistory((prev) => [...older, ...prev]);
+    } catch {
+      setHasMoreHistory(false);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [boardId, cardId, historyLoading, displayMessages]);
+
+  // On opening a history-enabled pane (and when the board/card changes), run a
+  // single initial "previous messages" fetch automatically.
+  useEffect(() => {
+    if (!historyEnabled || !boardId || !cardId) return;
+    const key = `${boardId}::${cardId}`;
+    if (initialHistoryFetchKeyRef.current === key) return;
+    initialHistoryFetchKeyRef.current = key;
+    handleLoadPrevious();
+  }, [historyEnabled, boardId, cardId, handleLoadPrevious]);
 
   const scrollToBottom = (behavior = 'auto') => {
     const element = messagesRef.current;
@@ -691,6 +812,9 @@ function ChatPaneBase({
   useEffect(() => {
     initialScrollDoneRef.current = false;
     shouldStickToBottomRef.current = true;
+    setHistory([]);
+    setHasMoreHistory(true);
+    setHistoryLoading(false);
   }, [boardId, cardId]);
 
   useEffect(() => {
@@ -757,8 +881,20 @@ function ChatPaneBase({
         ref={messagesRef}
         className="board-chat-pane__messages p-2"
       >
+        {historyEnabled && hasMoreHistory ? (
+          <div className="board-chat-pane__history-row text-center my-1">
+            <button
+              type="button"
+              className="btn btn-link btn-sm p-0 text-decoration-none"
+              onClick={handleLoadPrevious}
+              disabled={historyLoading}
+            >
+              {historyLoading ? 'Loading previous messages…' : 'Show previous messages'}
+            </button>
+          </div>
+        ) : null}
         <MessageList
-          messages={messages}
+          messages={displayMessages}
           compact={compact}
           boardId={boardId}
           cardId={cardId}
@@ -790,7 +926,11 @@ function ChatPaneBase({
 }
 
 export function ChatPane({ boardId, cardId, readOnly = false, compact = false }) {
-  return <ChatPaneBase boardId={boardId} cardId={cardId} readOnly={readOnly} compact={compact} />;
+  return <ChatPaneBase boardId={boardId} cardId={cardId} readOnly={readOnly} compact={compact} historyEnabled={true} />;
+}
+
+export function GandalfChatPane({ boardId, cardId, readOnly = false, compact = false }) {
+  return <ChatPaneBase boardId={boardId} cardId={cardId} readOnly={readOnly} compact={compact} historyEnabled={true} />;
 }
 
 export function MiniChatPane({ boardId, cardId, readOnly = false, compact = false, onPopout }) {

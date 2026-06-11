@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { useCardState } from '../hooks/useCardState.js';
-import { ChatPane } from './ChatPane.jsx';
+import { GandalfChatPane } from './ChatPane.jsx';
 
 function IngestCardComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
@@ -15,7 +15,7 @@ function IngestCardComponent({ boardId, cardId }) {
         <div className="fw-semibold text-truncate flex-grow-1 min-w-0">{title}</div>
       </div>
       <div className="board-ingest-card__body min-h-0 d-flex flex-column overflow-hidden">
-        <ChatPane boardId={boardId} cardId={cardId} compact />
+        <GandalfChatPane boardId={boardId} cardId={cardId} compact />
       </div>
     </div>
   );
