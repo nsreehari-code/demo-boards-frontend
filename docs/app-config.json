@@ -8,6 +8,16 @@
   "pageTitle": "Live",
   "pageSubtitle": "Live operational intelligence for agent workflows",
   "refreshAllIntervalSeconds": 1800,
+  "canvasLayout": {
+    "defaultCardWidth": 360,
+    "defaultCardHeight": 240,
+    "columnGap": 420,
+    "rowGap": 280,
+    "origin": {
+      "x": 40,
+      "y": 40
+    }
+  },
   "transportMode": "server-url",
   "serverOrigin": "http://127.0.0.1:7799",
   "storage": {
