@@ -28,7 +28,7 @@ Each entry says **what** the knob is, **where it lives**, **who sets it**, and
 | Path state (lifecycle) | `meta.path_state`, `meta.path_state_rationale` | Agent (card author) | `src/components/CardShell.jsx`, `src/theme.css` |
 | Runtime status | `cardRuntime.status` | Runtime (not authored) | `src/components/CardShell.jsx`, `src/theme.css` |
 | Pane routing | pane names (`gandalf`, `truthset`, …) — *match conditions are config-driven* | Board UI config / template | `src/lib/cardPresentationConfig.js` |
-| Renderer selection | renderer names (`default`, `ingest`, `protected`) — *match conditions are config-driven* | Board UI config / template | `src/components/CardRenderer.jsx` |
+| Renderer selection | renderer names (`default`, `ingest`) — *match conditions are config-driven* | Board UI config / template | `src/components/CardRenderer.jsx` |
 | View kinds | `view.elements[].kind` | Agent (card author) | `src/components/CardCoreView.jsx` |
 | Element render options | `view.elements[].data.*` (columns, chartType, writeTo, colorMap, thresholds, …) | Agent (card author) | `src/components/CardCoreView.jsx` |
 | App config | `app-config.json` (transportMode, serverOrigin, storage, canvasLayout, …) | Deployer | `src/lib/appConfig.js` |
@@ -47,13 +47,12 @@ board template. Each links to its detailed section below.
 
 | Flag | Read in | Purpose |
 | --- | --- | --- |
-| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `PasswdProtectedCardRendering.jsx`, `BoardCanvas.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
+| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `BoardCanvas.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
 | `meta.presentation.prominence` | `boardCanvasLayout.js` | Ordering weight (§1). |
 | `meta.presentation.footprint` | `boardCanvasLayout.js` | Card width (§1). |
 | `meta.presentation.resizable` | `CardShell.jsx` | Whether the user may resize at runtime (§1). |
 | `meta.path_state` | `CardShell.jsx` | Lifecycle annotation — dims/greys/strikes the body (§2). |
 | `meta.path_state_rationale` | `CardShell.jsx` | Hover explanation for the path state (§2). |
-| `meta.password` / `meta.passwd` / `meta.passphrase` / `meta.accessPassword` | `PasswdProtectedCardRendering.jsx` | Passphrase for the `protected` renderer (first non-empty one wins) (§4). |
 
 > **Not in this list:** flags like `meta.gandalf`, `meta.truthset`,
 > `meta.ingest`, `meta.confidential`, `meta.highconfidential`. The UI code does
@@ -167,14 +166,28 @@ the same palette and are interchangeable in `colorMap`:
 
 ---
 
-## 4. Renderers & panes
+## 4. Implemented renderers & panes
 
-A card is routed to a **pane** and assigned a **renderer**. *Which* card lands in
-which pane / renderer is decided by **config-driven match rules** — these rules
-are supplied per board/template (`paneRules`, `cardRendererRules` in UI config)
-and are **not** a fixed part of this contract. The hard truth this doc records is
-**what each renderer and pane actually produces**; the match conditions are only
-examples.
+A card is routed to one of the currently implemented **pane surfaces** and then
+rendered by one of the currently implemented **renderer names**. The pane /
+renderer *selection* is still driven by config (`paneRules`, `cardRendererRules`
+in board UI config), but the list below is the actual UI that exists today.
+
+### Implemented pane surfaces (current code)
+
+`MainBoard.jsx` mounts exactly three pane surfaces:
+
+| Implemented pane surface | Component | What it does |
+| --- | --- | --- |
+| Main Canvas / centre pane | `CentrePane` | The default board surface. In current wiring it uses `layoutStrategy="infinite-canvas"` and renders unmatched cards on `BoardCanvas`. |
+| Left rail ingest pane | `IngestPane` | A toggleable fixed left rail labelled `Board Manager`, showing one filtered card at a time with prev/next navigation. |
+| Right rail truthset pane | `TruthsetExplorePane` | A toggleable fixed right rail labelled `Truthset Explore`, showing one filtered card at a time with prev/next navigation. |
+
+In the current `MainBoard.jsx` wiring, the board UI config pane named `gandalf`
+feeds the **left rail ingest pane**, the pane named `truthset` feeds the **right
+rail truthset pane**, and cards excluded from both feed the **Main Canvas**.
+Those pane *names* come from config; the three pane *surfaces* above are what is
+actually implemented.
 
 ### Renderers (what each one renders — this is the truth)
 
@@ -186,14 +199,6 @@ rule wins; unmatched cards fall back to `default`.
 | --- | --- | --- |
 | `default` | `CardShell` | Standard card: header (title, status, actions) + the `view` body (§5). This is the fallback. |
 | `ingest` | `IngestCard` | A chat-only card — title header plus a compact `GandalfChatPane`; **no** `view` body. Used for conversational / ingest-style cards. |
-| `protected` (aliases: `passwd-protected`, `password-protected`) | `PasswdProtectedCardRendering` | A passphrase gate (`blocked` tone, "protected" pill). Reads the passphrase from card meta (`password` / `passwd` / `passphrase` / `accessPassword`); once the correct value is entered it renders the normal `CardShell`. If no passphrase is configured, it shows a "no passphrase configured" notice. |
-
-### Panes
-
-A pane is a named region of the layout (e.g. `gandalf`, `truthset`). A card is
-placed in a pane when it matches that pane's configured filter; cards matching no
-pane rule render on the **Main Canvas**. Pane membership only affects *where* a
-card is grouped — it does not change the renderer or the card body.
 
 ### Example match rules (illustrative only — NOT the contract)
 
@@ -210,7 +215,6 @@ gandalf   when  meta.gandalf = true
 truthset  when  meta.truthset = true
 
 # example renderer rules (top-down, first match wins)
-protected when  meta.highconfidential = true or meta.confidential = true
 ingest    when  meta.ingest = true or meta.gandalf = true
 default   (fallback)
 ```

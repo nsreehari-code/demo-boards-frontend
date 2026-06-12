@@ -1521,7 +1521,6 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           { pane: 'truthset', when: 'meta.truthset = true' },
         ],
         cardRendererRules: [
-          { renderer: 'protected', when: 'meta.confidential = true' },
           { renderer: 'ingest', when: 'meta.ingest = true' },
         ],
       };
@@ -1536,13 +1535,6 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         cardContent: {
           meta: {
             truthset: true,
-          },
-        },
-      };
-      const protectedCardState = {
-        cardContent: {
-          meta: {
-            confidential: true,
           },
         },
       };
@@ -1570,14 +1562,10 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       }
 
       const ingestRenderer = resolveCardRenderer(ingestCardState, rendererRules);
-      const protectedRenderer = resolveCardRenderer(protectedCardState, rendererRules);
       const plainRenderer = resolveCardRenderer(plainCardState, rendererRules);
 
       if (ingestRenderer !== 'ingest') {
         throw new Error(`expected ingest renderer, found ${ingestRenderer}`);
-      }
-      if (protectedRenderer !== 'protected') {
-        throw new Error(`expected protected renderer, found ${protectedRenderer}`);
       }
       if (plainRenderer !== 'default') {
         throw new Error(`expected default renderer fallback, found ${plainRenderer}`);

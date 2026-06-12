@@ -6,7 +6,6 @@ export const DEFAULT_PANE_RULES = [
 ];
 
 export const DEFAULT_CARD_RENDERER_RULES = [
-  { renderer: 'protected', when: 'meta.highconfidential = true or meta.confidential = true' },
   { renderer: 'ingest', when: 'meta.ingest = true or meta.gandalf = true' },
 ];
 
