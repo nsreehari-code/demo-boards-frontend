@@ -858,6 +858,71 @@ a {
   min-height: 0;
 }
 
+/* Path / lifecycle state — agent-authored annotation on the exploration path.
+   Header actions (inspect, refresh, chat) stay live; only the body content is
+   visually marked. The metaphor is striking through a post-it / clipping. */
+.board-card__content {
+  position: relative;
+}
+
+.board-card--path-suspended .board-card__content > :not(.board-card__path-overlay) {
+  opacity: 0.62;
+  filter: grayscale(0.45);
+}
+
+.board-card--path-dead_ended .board-card__content > :not(.board-card__path-overlay) {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+
+.board-card--path-wiped .board-card__content > :not(.board-card__path-overlay) {
+  opacity: 0.34;
+  filter: grayscale(1);
+}
+
+.board-card--path-dead_ended,
+.board-card--path-wiped {
+  border-color: color-mix(in srgb, var(--status-color, var(--status-fresh)) 32%, transparent);
+}
+
+.board-card__path-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 0.4rem;
+  pointer-events: none;
+  text-align: center;
+}
+
+.board-card__path-overlay--wiped {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--color-text-muted, #6e7d92) 12%, transparent) 0,
+    color-mix(in srgb, var(--color-text-muted, #6e7d92) 12%, transparent) 2px,
+    transparent 2px,
+    transparent 9px
+  );
+}
+
+.board-card__path-pill {
+  pointer-events: auto;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--status-color, var(--status-fresh)) 38%, transparent);
+  background: var(--status-color-soft, var(--status-fresh-soft));
+  color: var(--status-color, var(--status-fresh));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+
 .board-card-backface {
   --backface-surface: linear-gradient(180deg, rgba(8, 15, 27, 0.98), rgba(5, 11, 20, 0.98));
   --backface-surface-muted: rgba(12, 21, 36, 0.94);

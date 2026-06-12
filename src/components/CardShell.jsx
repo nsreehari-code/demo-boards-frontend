@@ -73,6 +73,38 @@ function getStatusTone(status) {
   }
 }
 
+// Agent-authored lifecycle state of the exploration path this card belongs to.
+// Annotation only — never changes graph evaluation; the body content is visually
+// marked while all header actions (inspect, refresh, chat) stay live.
+const PATH_STATE_DEFS = {
+  suspended: { label: 'Suspended', stamp: 'Suspended', tone: 'board-tone--blocked' },
+  dead_ended: { label: 'Dead-ended', stamp: 'Ruled out', tone: 'board-tone--failed' },
+  wiped: { label: 'Wiped', stamp: 'Wiped', tone: 'board-tone--secondary' },
+};
+
+function normalizePathState(meta) {
+  const raw = typeof meta?.path_state === 'string' ? meta.path_state.trim().toLowerCase() : '';
+  return Object.prototype.hasOwnProperty.call(PATH_STATE_DEFS, raw) ? raw : '';
+}
+
+function normalizePathStateRationale(meta) {
+  const raw = typeof meta?.path_state_rationale === 'string' ? meta.path_state_rationale.trim() : '';
+  return raw;
+}
+
+function PathStateOverlay({ pathState, rationale }) {
+  const def = PATH_STATE_DEFS[pathState];
+  if (!def) return null;
+  return (
+    <div
+      className={`board-card__path-overlay board-card__path-overlay--${pathState}`}
+      title={rationale || def.label}
+    >
+      <span className={`board-card__path-pill ${def.tone}`}>{def.stamp}</span>
+    </div>
+  );
+}
+
 function clampCardWidth(nextWidth) {
   const viewportMax = typeof window !== 'undefined'
     ? Math.max(MIN_CARD_WIDTH, Math.min(MAX_CARD_WIDTH, window.innerWidth - 48))
@@ -170,9 +202,12 @@ function CardShellInspectView({ boardId, cardId }) {
   const title = cardState.cardContent.meta?.title ?? cardId;
   const status = cardState.cardRuntime?.status ?? 'fresh';
   const statusTone = getStatusTone(status);
+  const pathState = normalizePathState(cardState.cardContent.meta);
+  const pathStateRationale = normalizePathStateRationale(cardState.cardContent.meta);
+  const pathStateClass = pathState ? ` board-card--path-${pathState}` : '';
   return (
     <ResizableCardShell boardId={boardId} cardId={cardId} className="board-card-shell--inspect">
-      <div className={`board-card ${statusTone}`}>
+      <div className={`board-card ${statusTone}${pathStateClass}`}>
         <div className="board-card__header">
           <div className="board-card__title-wrap">
             <div className="board-card__title-block">
@@ -184,7 +219,10 @@ function CardShellInspectView({ boardId, cardId }) {
           </div>
         </div>
         <div className="board-card__body">
-          <CardCore boardId={boardId} cardId={cardId} />
+          <div className="board-card__content">
+            <PathStateOverlay pathState={pathState} rationale={pathStateRationale} />
+            <CardCore boardId={boardId} cardId={cardId} />
+          </div>
         </div>
       </div>
     </ResizableCardShell>
@@ -214,6 +252,9 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
   const title = cardState.cardContent.meta?.title ?? cardId;
   const status = cardState.cardRuntime?.status ?? 'fresh';
   const statusTone = getStatusTone(status);
+  const pathState = normalizePathState(cardState.cardContent.meta);
+  const pathStateRationale = normalizePathStateRationale(cardState.cardContent.meta);
+  const pathStateClass = pathState ? ` board-card--path-${pathState}` : '';
   const inspectOpen = inspectedCardId === cardId;
   const refreshDisabled = cardState.cardRuntime?.status === 'running';
   const showRefresh = cardState.canRefresh === true;
@@ -221,7 +262,7 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
   return (
     <>
       <ResizableCardShell boardId={boardId} cardId={cardId} enabled={enableResize}>
-        <div className={`board-card ${statusTone}`}>
+        <div className={`board-card ${statusTone}${pathStateClass}`}>
           <div
             className="board-card__header"
             onDoubleClick={(event) => {
@@ -285,6 +326,7 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
               </div>
             ) : null}
             <div className="board-card__content">
+              <PathStateOverlay pathState={pathState} rationale={pathStateRationale} />
               <CardCore boardId={boardId} cardId={cardId} />
             </div>
           </div>
