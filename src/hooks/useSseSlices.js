@@ -412,7 +412,7 @@ export function useBoardCardIds(boardId) {
   const cardDefinitionsAndData = raw?.cardDefinitionsAndData ?? EMPTY_OBJECT;
 
   return useMemo(
-    () => Object.keys(cardDefinitionsAndData),
+    () => Object.keys(cardDefinitionsAndData).sort((left, right) => left.localeCompare(right)),
     [cardDefinitionsAndData],
   );
 }

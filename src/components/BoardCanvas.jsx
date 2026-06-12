@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import { buildDeterministicCanvasLayout } from '../lib/boardCanvasLayout.js';
 import { useBoardLayoutActions, useBoardLayoutState } from '../hooks/useCoordsState.jsx';
-import { CardShell } from './CardShell.jsx';
+import { CardRenderer } from './CardRenderer.jsx';
 
 const NODE_WIDTH = 360;
 const EDGE_CURVATURE_SUBTLE = 0.26;
@@ -153,6 +153,7 @@ function sameNodeView(left, right) {
     && left.data?.status === right.data?.status
     && left.data?.title === right.data?.title
     && left.data?.selectedToken === right.data?.selectedToken
+    && left.data?.rendererRules === right.data?.rendererRules
     && left.data?.isHighlighted === right.data?.isHighlighted
     && left.data?.isDimmed === right.data?.isDimmed
     && left.data?.onTokenToggle === right.data?.onTokenToggle
@@ -321,7 +322,7 @@ function FlowCardNode({ id, data }) {
         )) : null}
       </div>
       <div className="board-flow-node__card">
-        <CardShell boardId={data.boardId} cardId={id} enableResize />
+        <CardRenderer boardId={data.boardId} cardId={id} enableResize rendererRules={data.rendererRules} />
       </div>
       <div className="board-flow-node__tokens board-flow-node__tokens--bottom">
         {data.provides.length > 0 ? data.provides.map((token) => (
@@ -352,23 +353,24 @@ function getMiniMapNodeClassName(node) {
   return node?.data?.status === 'running' ? 'is-running' : '';
 }
 
-export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, boardUi = null, boardMetadata = null, boardLayout = null }) {
+export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, rendererRules = [] }) {
   const [selectedToken, setSelectedToken] = useState(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const layoutState = useBoardLayoutState();
-  const { setManyCoords, setWidth, setViewport } = useBoardLayoutActions();
-  const hasRestoredViewportRef = useRef(false);
+  const [isInitialBoardViewReady, setIsInitialBoardViewReady] = useState(() => !layoutState.viewport);
+  const { setManyCoords, setWidth, setViewport, scheduleAutosave } = useBoardLayoutActions();
+  const hasInitializedViewportRef = useRef(false);
+  const hasAppliedPersistedViewportRef = useRef(false);
   const previousSelectedTokenRef = useRef(null);
   const graph = useMemo(() => buildGraph(cardIds, cardContents, cardRuntimes, dataObjects), [cardIds, cardContents, cardRuntimes, dataObjects]);
   const baseLayout = useMemo(() => buildDeterministicCanvasLayout({
-    boardUi,
     cardIds,
     cardContents,
     incoming: graph.incoming,
     outgoing: graph.outgoing,
     storedPositions: layoutState.positions,
     storedWidths: layoutState.widths,
-  }), [boardUi, cardContents, cardIds, graph.incoming, graph.outgoing, layoutState.positions, layoutState.widths]);
+  }), [cardContents, cardIds, graph.incoming, graph.outgoing, layoutState.positions, layoutState.widths]);
   const availableTokens = useMemo(() => Object.keys(dataObjects ?? {}), [dataObjects]);
   const cardsWithNoCoords = useMemo(
     () => cardIds.filter((cardId) => !layoutState.positions?.[cardId]),
@@ -414,6 +416,7 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
     id: cardId,
     type: 'boardCard',
     position: resolveStoredPosition(cardId)
+      ?? baseLayout.get(cardId)
       ?? { x: 0, y: 0 },
     draggable: true,
     data: {
@@ -425,12 +428,13 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
       requires: graph.cards[cardId]?.requires ?? [],
       title: graph.cards[cardId]?.title ?? cardId,
       selectedToken,
+      rendererRules,
       onTokenToggle: handleTokenToggle,
       isHighlighted: !selectedToken || highlightedNodeIds.has(cardId),
       isDimmed: !!selectedToken && !highlightedNodeIds.has(cardId),
     },
     style: { width: resolveStoredWidth(cardId) ?? baseLayout.get(cardId)?.w ?? NODE_WIDTH },
-  })), [availableTokens, baseLayout, boardId, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, resolveStoredPosition, resolveStoredWidth, selectedToken]);
+  })), [availableTokens, baseLayout, boardId, cardIds, graph.cards, handleTokenToggle, highlightedNodeIds, rendererRules, resolveStoredPosition, resolveStoredWidth, selectedToken]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -498,17 +502,26 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
   }, [graph.edges, highlightedEdgeIds, selectedToken, setEdges]);
 
   useEffect(() => {
+    hasInitializedViewportRef.current = false;
+    hasAppliedPersistedViewportRef.current = false;
+    previousSelectedTokenRef.current = null;
+    setIsInitialBoardViewReady(!layoutState.viewport);
+  }, [boardId]);
+
+  useEffect(() => {
     if (!reactFlowInstance || nodes.length === 0) {
       return undefined;
     }
 
-    if (!hasRestoredViewportRef.current) {
-      hasRestoredViewportRef.current = true;
+    if (!hasInitializedViewportRef.current) {
+      hasInitializedViewportRef.current = true;
       previousSelectedTokenRef.current = selectedToken;
 
       const frameId = window.requestAnimationFrame(() => {
         if (layoutState.viewport) {
+          hasAppliedPersistedViewportRef.current = true;
           reactFlowInstance.setViewport(layoutState.viewport, { duration: 0 });
+          setIsInitialBoardViewReady(true);
           return;
         }
 
@@ -519,8 +532,18 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
           minZoom: 0.35,
           maxZoom: 1.08,
         });
+        setIsInitialBoardViewReady(true);
       });
 
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    if (!hasAppliedPersistedViewportRef.current && layoutState.viewport) {
+      const frameId = window.requestAnimationFrame(() => {
+        hasAppliedPersistedViewportRef.current = true;
+        reactFlowInstance.setViewport(layoutState.viewport, { duration: 0 });
+        setIsInitialBoardViewReady(true);
+      });
       return () => window.cancelAnimationFrame(frameId);
     }
 
@@ -617,6 +640,7 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
           );
           if (Object.keys(nextCoordsByCardId).length > 0) {
             setManyCoords(nextCoordsByCardId);
+            scheduleAutosave();
           }
         }}
         onEdgesChange={onEdgesChange}
@@ -628,15 +652,18 @@ export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, data
         }}
         proOptions={{ hideAttribution: true }}
         className="board-react-flow"
+        style={isInitialBoardViewReady ? undefined : { visibility: 'hidden' }}
         panOnScroll
         selectionOnDrag
         onInit={setReactFlowInstance}
         onMoveEnd={() => {
           setViewport(reactFlowInstance?.getViewport?.() ?? null);
+          scheduleAutosave();
         }}
         onNodeDragStop={(_, node) => {
           setManyCoords({ [node.id]: node.position });
           setViewport(reactFlowInstance?.getViewport?.() ?? null);
+          scheduleAutosave();
         }}
       >
         {selectedToken ? (

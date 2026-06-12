@@ -5,6 +5,71 @@ import {
   SERVER,
 } from '../lib/appConfig.js';
 import { normalizeRuntimeCanvasLayout } from '../lib/boardCanvasLayout.js';
+import { readCachedBoardLayout, writeCachedBoardLayout } from '../lib/boardLayoutCache.js';
+
+function stableStringify(value) {
+  if (value == null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  }
+
+  const keys = Object.keys(value).sort((left, right) => left.localeCompare(right));
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+}
+
+function normalizeUi(ui) {
+  return ui && typeof ui === 'object' && !Array.isArray(ui) ? ui : {};
+}
+
+function normalizeMetadata(metadata) {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
+}
+
+function normalizeLayout(layout) {
+  const normalized = normalizeRuntimeCanvasLayout(layout?.canvas ?? layout);
+  return normalized ? { canvas: normalized } : null;
+}
+
+function resolveNextManagedBoardConfig(current, candidate) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return current === null ? current : null;
+  }
+
+  const nextUiRaw = normalizeUi(candidate.ui);
+  const nextMetadataRaw = normalizeMetadata(candidate.metadata);
+  const nextLayoutRaw = normalizeLayout(candidate.layout);
+
+  const currentUiHash = stableStringify(current?.ui ?? {});
+  const nextUiHash = stableStringify(nextUiRaw);
+  const resolvedUi = current && currentUiHash === nextUiHash ? current.ui : nextUiRaw;
+
+  const currentMetadataHash = stableStringify(current?.metadata ?? {});
+  const nextMetadataHash = stableStringify(nextMetadataRaw);
+  const resolvedMetadata = current && currentMetadataHash === nextMetadataHash ? current.metadata : nextMetadataRaw;
+
+  const currentLayoutHash = stableStringify(current?.layout?.canvas ?? null);
+  const nextLayoutHash = stableStringify(nextLayoutRaw?.canvas ?? null);
+  const resolvedLayout = current && currentLayoutHash === nextLayoutHash ? current.layout : nextLayoutRaw;
+
+  if (current && currentLayoutHash === nextLayoutHash && current.ui === resolvedUi) {
+    // Strict no-op: same layout hash and same ui reference means no meaningful config change.
+    return current;
+  }
+
+  const resolvedBoard = current && stableStringify(current.board ?? null) === stableStringify(candidate.board ?? null)
+    ? current.board
+    : (candidate.board ?? null);
+
+  return {
+    ui: resolvedUi,
+    metadata: resolvedMetadata,
+    layout: resolvedLayout,
+    board: resolvedBoard,
+  };
+}
 
 async function fetchManagedBoardConfig(serverOrigin, boardId) {
   const origin = typeof serverOrigin === 'string' ? serverOrigin.trim().replace(/\/+$/, '') : '';
@@ -47,30 +112,66 @@ async function fetchManagedBoardConfig(serverOrigin, boardId) {
   const layout = layoutPayload?.data?.layout;
 
   return {
-    ui: board.ui && typeof board.ui === 'object' && !Array.isArray(board.ui) ? board.ui : {},
-    metadata: board.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata) ? board.metadata : {},
-    layout: normalizeRuntimeCanvasLayout(layout?.canvas) ? { canvas: normalizeRuntimeCanvasLayout(layout?.canvas) } : null,
+    ui: normalizeUi(board.ui),
+    metadata: normalizeMetadata(board.metadata),
+    layout: normalizeLayout(layout?.canvas),
     board,
   };
 }
 
 export function useManagedBoardConfig(boardId) {
-  const [managedBoardConfig, setManagedBoardConfig] = useState(null);
+  const [managedBoardConfig, setManagedBoardConfig] = useState(() => {
+    if (BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      return null;
+    }
+
+    const cachedLayout = readCachedBoardLayout(boardId);
+    if (!cachedLayout) {
+      return null;
+    }
+
+    return {
+      ui: {},
+      metadata: {},
+      layout: cachedLayout,
+      board: null,
+    };
+  });
+  const [loading, setLoading] = useState(BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_SERVER_URL);
 
   useEffect(() => {
     if (!boardId) return undefined;
-    if (BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) return undefined;
+    if (BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      setLoading(false);
+      return undefined;
+    }
+
+    const cachedLayout = readCachedBoardLayout(boardId);
+    if (cachedLayout) {
+      setManagedBoardConfig((current) => resolveNextManagedBoardConfig(current, {
+        ui: current?.ui ?? {},
+        metadata: current?.metadata ?? {},
+        layout: cachedLayout,
+        board: current?.board ?? null,
+      }));
+    }
 
     let cancelled = false;
+    setLoading(true);
     fetchManagedBoardConfig(SERVER, boardId)
       .then((config) => {
         if (!cancelled) {
-          setManagedBoardConfig(config);
+          if (config?.layout) {
+            writeCachedBoardLayout(boardId, config.layout);
+          }
+          setManagedBoardConfig((current) => resolveNextManagedBoardConfig(current, config));
+          setLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setManagedBoardConfig(null);
+          setLoading(false);
         }
       });
 
@@ -79,5 +180,8 @@ export function useManagedBoardConfig(boardId) {
     };
   }, [boardId]);
 
-  return managedBoardConfig;
+  return {
+    config: managedBoardConfig,
+    loading,
+  };
 }

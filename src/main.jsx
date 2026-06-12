@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import '@xyflow/react/dist/style.css';
-import 'yaml-flow/browser/compute-jsonata';
+import '../../yaml-flow/browser/compute-jsonata.js';
 import './theme.css';
 import { loadAppConfig } from './lib/appConfig.js';
 

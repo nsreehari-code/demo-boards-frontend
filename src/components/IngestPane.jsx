@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useBoardState } from '../hooks/useBoardState.js';
-import { IngestCard } from './IngestCard.jsx';
+import { CardRenderer } from './CardRenderer.jsx';
 
 const INGEST_PANE_LAYOUTS = {
   vertical: {
@@ -73,7 +73,7 @@ function IngestPaneNav({ cards, idx, onPrev, onNext }) {
   );
 }
 
-export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'vertical' }) {
+export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] }) {
   const board = useBoardState(boardId);
   const [visible, setVisible] = useState(false);
   const [idx, setIdx] = useState(0);
@@ -128,7 +128,7 @@ export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'ver
               onNext={() => setIdx((current) => Math.min(ingestCardIds.length - 1, current + 1))}
             />
             <div className="board-ingest-pane__body flex-grow-1 min-h-0">
-              {cardId ? <IngestCard boardId={boardId} cardId={cardId} /> : null}
+              {cardId ? <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} /> : null}
             </div>
           </div>
         </>

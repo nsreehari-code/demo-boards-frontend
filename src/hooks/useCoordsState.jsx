@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BOARD_TRANSPORT_MODE, BOARD_TRANSPORT_MODE_SERVER_URL, SERVER } from '../lib/appConfig.js';
 import { normalizeRuntimeCanvasLayout } from '../lib/boardCanvasLayout.js';
+import { writeCachedBoardLayout } from '../lib/boardLayoutCache.js';
 import { useManageBoards } from './useManageBoards.js';
 
 const EMPTY_LAYOUT_STATE = Object.freeze({
@@ -10,7 +11,37 @@ const EMPTY_LAYOUT_STATE = Object.freeze({
   viewport: null,
 });
 
+const DEFAULT_LAYOUT_AUTOSAVE_DELAY_MS = 30_000;
+
 const BoardCoordsContext = createContext(null);
+
+function isLayoutDebugEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (window.__DEMO_BOARD_LAYOUT_DEBUG__ === true) return true;
+    const storageValue = window.localStorage?.getItem('demo-board:layout-debug');
+    if (storageValue === '1' || storageValue === 'true') return true;
+  } catch {
+    // Ignore localStorage access failures.
+  }
+  return false;
+}
+
+function summarizeLayoutDebug(layout) {
+  const source = layout && typeof layout === 'object' && !Array.isArray(layout)
+    ? layout
+    : {};
+  return {
+    cardIds: Array.isArray(source.cardIds) ? source.cardIds.length : 0,
+    positions: source.positions && typeof source.positions === 'object'
+      ? Object.keys(source.positions).length
+      : 0,
+    widths: source.widths && typeof source.widths === 'object'
+      ? Object.keys(source.widths).length
+      : 0,
+    hasViewport: Boolean(source.viewport),
+  };
+}
 
 function cloneLayoutState(layoutState) {
   return {
@@ -44,19 +75,48 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
   const { manageBoardsActions } = useManageBoards(SERVER, { enabled: false });
   const [layoutState, setLayoutState] = useState(() => normalizeLayoutState(initialLayout));
   const activeBoardIdRef = useRef(boardId);
+  const hydratedFromInitialRef = useRef(false);
+  const firstHydrationLoggedRef = useRef(false);
+  const firstFlushLoggedRef = useRef(false);
+  const autosaveTimerRef = useRef(null);
   const layoutRef = useRef(layoutState);
   layoutRef.current = layoutState;
 
   useEffect(() => {
     const normalizedInitial = normalizeLayoutState(initialLayout);
     if (activeBoardIdRef.current !== boardId) {
+      if (autosaveTimerRef.current != null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
       activeBoardIdRef.current = boardId;
+      hydratedFromInitialRef.current = hasLayoutData(normalizedInitial);
+      firstHydrationLoggedRef.current = false;
+      firstFlushLoggedRef.current = false;
       setLayoutState(normalizedInitial);
+
+      if (!firstHydrationLoggedRef.current && isLayoutDebugEnabled()) {
+        console.debug('[board-layout] hydrate:board-switch', {
+          boardId,
+          fromInitial: hydratedFromInitialRef.current,
+          summary: summarizeLayoutDebug(normalizedInitial),
+        });
+        firstHydrationLoggedRef.current = true;
+      }
       return;
     }
 
-    if (!hasLayoutData(layoutRef.current) && hasLayoutData(normalizedInitial)) {
+    if (!hydratedFromInitialRef.current && hasLayoutData(normalizedInitial)) {
+      hydratedFromInitialRef.current = true;
       setLayoutState(normalizedInitial);
+
+      if (!firstHydrationLoggedRef.current && isLayoutDebugEnabled()) {
+        console.debug('[board-layout] hydrate:initial-arrived', {
+          boardId,
+          summary: summarizeLayoutDebug(normalizedInitial),
+        });
+        firstHydrationLoggedRef.current = true;
+      }
     }
   }, [boardId, initialLayout]);
 
@@ -187,10 +247,37 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
     if (!boardId || BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
       return;
     }
+
+    if (!firstFlushLoggedRef.current && isLayoutDebugEnabled()) {
+      console.debug('[board-layout] flush:first', {
+        boardId,
+        summary: summarizeLayoutDebug(layoutRef.current),
+      });
+      firstFlushLoggedRef.current = true;
+    }
+
     await manageBoardsActions.saveLayout(boardId, {
       canvas: layoutRef.current,
     });
+    writeCachedBoardLayout(boardId, {
+      canvas: layoutRef.current,
+    });
   }, [boardId, manageBoardsActions]);
+
+  const scheduleAutosave = useCallback(() => {
+    if (!boardId || BOARD_TRANSPORT_MODE !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      return;
+    }
+
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      void flushLayout();
+    }, DEFAULT_LAYOUT_AUTOSAVE_DELAY_MS);
+  }, [boardId, flushLayout]);
 
   useEffect(() => {
     const handler = () => {
@@ -199,6 +286,10 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
     window.addEventListener('demo-board:persist-canvas', handler);
     return () => {
       window.removeEventListener('demo-board:persist-canvas', handler);
+      if (autosaveTimerRef.current != null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
       void flushLayout();
     };
   }, [flushLayout]);
@@ -211,7 +302,8 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
     setWidth,
     setViewport,
     flushLayout,
-  }), [boardId, flushLayout, layoutState, setCoords, setManyCoords, setViewport, setWidth]);
+    scheduleAutosave,
+  }), [boardId, flushLayout, layoutState, scheduleAutosave, setCoords, setManyCoords, setViewport, setWidth]);
 
   return (
     <BoardCoordsContext.Provider value={value}>
@@ -236,6 +328,7 @@ export function useBoardLayoutActions() {
     setWidth: context?.setWidth ?? (() => {}),
     setViewport: context?.setViewport ?? (() => {}),
     flushLayout: context?.flushLayout ?? (async () => {}),
+    scheduleAutosave: context?.scheduleAutosave ?? (() => {}),
   };
 }
 

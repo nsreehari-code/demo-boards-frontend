@@ -8,6 +8,7 @@ import { useManageBoards } from '../hooks/useManageBoards.js';
 import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
 import { useCardChatViews } from '../hooks/useSseSlices.js';
 import { initBoard } from '../lib/client.js';
+import { compileRendererRules, resolveCardRenderer, resolvePaneFilters } from '../lib/cardPresentationConfig.js';
 
 const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';
@@ -385,6 +386,7 @@ const BASE_PORTFOLIO_VALUE_CARD = {
 
 const SMOKE_CASES = [
   { id: 'MB1', title: 'Ensure board registration', mode: 'run' },
+  { id: 'MB2', title: 'Resolver honors paneRules and cardRendererRules', mode: 'run' },
   { id: 'T0', title: 'Seed portfolio and wait for completion', mode: 'run' },
   { id: 'T1', title: 'Discovery and preflight coverage', mode: 'run' },
   {
@@ -1509,6 +1511,79 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       const boards = await ensureBoardRegistered();
       const ids = boards.map((entry) => String(entry?.id || ''));
       log(`board registry contains: ${jsonText(ids)}`);
+      return;
+    }
+
+    if (caseId === 'MB2') {
+      const uiConfig = {
+        paneRules: [
+          { pane: 'gandalf', when: 'meta.ingest = true' },
+          { pane: 'truthset', when: 'meta.truthset = true' },
+        ],
+        cardRendererRules: [
+          { renderer: 'protected', when: 'meta.confidential = true' },
+          { renderer: 'ingest', when: 'meta.ingest = true' },
+        ],
+      };
+      const ingestCardState = {
+        cardContent: {
+          meta: {
+            ingest: true,
+          },
+        },
+      };
+      const truthsetCardState = {
+        cardContent: {
+          meta: {
+            truthset: true,
+          },
+        },
+      };
+      const protectedCardState = {
+        cardContent: {
+          meta: {
+            confidential: true,
+          },
+        },
+      };
+      const plainCardState = {
+        cardContent: {
+          meta: {},
+        },
+      };
+
+      const ingestPaneFilters = resolvePaneFilters(uiConfig, 'gandalf');
+      const truthsetPaneFilters = resolvePaneFilters(uiConfig, 'truthset');
+      const rendererRules = compileRendererRules(uiConfig);
+
+      if (ingestPaneFilters.length !== 1) {
+        throw new Error(`expected exactly one gandalf paneRules rule, found ${ingestPaneFilters.length}`);
+      }
+      if (truthsetPaneFilters.length !== 1) {
+        throw new Error(`expected exactly one truthset paneRules rule, found ${truthsetPaneFilters.length}`);
+      }
+      if (ingestPaneFilters[0](ingestCardState) !== true || ingestPaneFilters[0](truthsetCardState) !== false) {
+        throw new Error('paneRules gandalf rule did not match the expected card states');
+      }
+      if (truthsetPaneFilters[0](truthsetCardState) !== true || truthsetPaneFilters[0](ingestCardState) !== false) {
+        throw new Error('paneRules truthset rule did not match the expected card states');
+      }
+
+      const ingestRenderer = resolveCardRenderer(ingestCardState, rendererRules);
+      const protectedRenderer = resolveCardRenderer(protectedCardState, rendererRules);
+      const plainRenderer = resolveCardRenderer(plainCardState, rendererRules);
+
+      if (ingestRenderer !== 'ingest') {
+        throw new Error(`expected ingest renderer, found ${ingestRenderer}`);
+      }
+      if (protectedRenderer !== 'protected') {
+        throw new Error(`expected protected renderer, found ${protectedRenderer}`);
+      }
+      if (plainRenderer !== 'default') {
+        throw new Error(`expected default renderer fallback, found ${plainRenderer}`);
+      }
+
+      log('paneRules and cardRendererRules resolver checks passed');
       return;
     }
 

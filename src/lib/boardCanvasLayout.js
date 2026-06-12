@@ -1,10 +1,4 @@
-const DEFAULT_CANVAS_LAYOUT = {
-  defaultCardWidth: 360,
-  defaultCardHeight: 240,
-  columnGap: 420,
-  rowGap: 280,
-  origin: { x: 40, y: 40 },
-};
+import { CANVAS_LAYOUT_CONFIG } from './appConfig.js';
 
 const FOOTPRINT_WIDTH = {
   compact: 300,
@@ -31,18 +25,18 @@ function normalizeObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
-function resolveBoardCanvasLayoutConfig(boardUi) {
-  const candidate = normalizeObject(boardUi?.canvasLayout);
+function resolveGlobalCanvasLayoutConfig() {
+  const candidate = normalizeObject(CANVAS_LAYOUT_CONFIG);
   const origin = normalizeObject(candidate?.origin);
 
   return {
-    defaultCardWidth: normalizeFiniteNumber(candidate?.defaultCardWidth) ?? DEFAULT_CANVAS_LAYOUT.defaultCardWidth,
-    defaultCardHeight: normalizeFiniteNumber(candidate?.defaultCardHeight) ?? DEFAULT_CANVAS_LAYOUT.defaultCardHeight,
-    columnGap: normalizeFiniteNumber(candidate?.columnGap) ?? DEFAULT_CANVAS_LAYOUT.columnGap,
-    rowGap: normalizeFiniteNumber(candidate?.rowGap) ?? DEFAULT_CANVAS_LAYOUT.rowGap,
+    defaultCardWidth: normalizeFiniteNumber(candidate?.defaultCardWidth) ?? 360,
+    defaultCardHeight: normalizeFiniteNumber(candidate?.defaultCardHeight) ?? 240,
+    columnGap: normalizeFiniteNumber(candidate?.columnGap) ?? 420,
+    rowGap: normalizeFiniteNumber(candidate?.rowGap) ?? 280,
     origin: {
-      x: normalizeFiniteNumber(origin?.x) ?? DEFAULT_CANVAS_LAYOUT.origin.x,
-      y: normalizeFiniteNumber(origin?.y) ?? DEFAULT_CANVAS_LAYOUT.origin.y,
+      x: normalizeFiniteNumber(origin?.x) ?? 40,
+      y: normalizeFiniteNumber(origin?.y) ?? 40,
     },
   };
 }
@@ -318,7 +312,6 @@ export function normalizeRuntimeCanvasLayout(layout) {
 }
 
 export function buildDeterministicCanvasLayout({
-  boardUi,
   cardIds,
   cardContents,
   incoming,
@@ -326,7 +319,7 @@ export function buildDeterministicCanvasLayout({
   storedPositions,
   storedWidths,
 }) {
-  const config = resolveBoardCanvasLayoutConfig(boardUi);
+  const config = resolveGlobalCanvasLayoutConfig();
   const placements = new Map();
   const occupiedRects = [];
   const positionedRectsById = new Map();

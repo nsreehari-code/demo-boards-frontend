@@ -1,7 +1,7 @@
 import React from 'react';
 import { useBoardState } from '../hooks/useBoardState.js';
 import { BoardCanvas } from './BoardCanvas.jsx';
-import { CardShell } from './CardShell.jsx';
+import { CardRenderer } from './CardRenderer.jsx';
 
 const CENTRE_PANE_LAYOUTS = {
   'flowing-cards': {
@@ -28,7 +28,7 @@ function resolveLayoutStrategy(layoutStrategy) {
   };
 }
 
-export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flowing-cards', boardUi = null, boardMetadata = null, boardLayout = null }) {
+export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flowing-cards', rendererRules = [] }) {
   const board = useBoardState(boardId);
 
   if (!board) return null;
@@ -45,9 +45,7 @@ export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flo
           cardContents={board.cardContents}
           cardRuntimes={board.cardRuntimes}
           dataObjects={board.dataObjects}
-          boardUi={boardUi}
-          boardMetadata={boardMetadata}
-          boardLayout={boardLayout}
+          rendererRules={rendererRules}
         />
       </div>
     );
@@ -58,7 +56,7 @@ export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flo
       <div className={layout.listClassName}>
         {visibleCardIds.map((cardId) => (
           <div key={cardId} className={layout.itemClassName}>
-            <CardShell boardId={boardId} cardId={cardId} />
+            <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} />
           </div>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useBoardState } from '../hooks/useBoardState.js';
-import { CardShell } from './CardShell.jsx';
+import { CardRenderer } from './CardRenderer.jsx';
 
 const TRUTHSET_PANE_LAYOUTS = {
   vertical: {
@@ -81,7 +81,7 @@ function TruthsetExploreEmptyState() {
   );
 }
 
-export function TruthsetExplorePane({ boardId, includeFilters = [], layoutStrategy = 'vertical' }) {
+export function TruthsetExplorePane({ boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] }) {
   const board = useBoardState(boardId);
   const [visible, setVisible] = useState(false);
   const [idx, setIdx] = useState(0);
@@ -140,7 +140,7 @@ export function TruthsetExplorePane({ boardId, includeFilters = [], layoutStrate
               onNext={() => setIdx((current) => Math.min(truthsetCardIds.length - 1, current + 1))}
             />
             <div className="board-ingest-pane__body flex-grow-1 min-h-0">
-              {cardId ? <CardShell boardId={boardId} cardId={cardId} /> : <TruthsetExploreEmptyState />}
+              {cardId ? <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} /> : <TruthsetExploreEmptyState />}
             </div>
           </div>
         </>

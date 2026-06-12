@@ -2,6 +2,13 @@ const DEFAULT_REFRESH_ALL_INTERVAL_SECONDS = 30 * 60;
 const DEFAULT_PAGE_SUBTITLE = 'Live operational intelligence for agent workflows';
 const APP_CONFIG_OVERRIDE_STORAGE_KEY = 'demo-boards.app-config.override';
 const APP_CONFIG_OVERRIDE_VERSION = 1;
+const DEFAULT_CANVAS_LAYOUT_CONFIG = Object.freeze({
+  defaultCardWidth: 360,
+  defaultCardHeight: 240,
+  columnGap: 420,
+  rowGap: 280,
+  origin: { x: 40, y: 40 },
+});
 
 import { normalizeBoardRefsConfig } from './board-refs.js';
 
@@ -82,6 +89,7 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   pageTitle: 'Live',
   pageSubtitle: DEFAULT_PAGE_SUBTITLE,
   refreshAllIntervalSeconds: DEFAULT_REFRESH_ALL_INTERVAL_SECONDS,
+  canvasLayout: DEFAULT_CANVAS_LAYOUT_CONFIG,
   transportMode: BOARD_TRANSPORT_MODE_SERVER_URL,
   serverOrigin: 'http://localhost:7799',
   storage: {
@@ -135,6 +143,37 @@ function normalizeServerOrigin(serverOrigin) {
   return FALLBACK_APP_CONFIG.serverOrigin;
 }
 
+function normalizeCanvasLayoutConfig(canvasLayout) {
+  const source = canvasLayout && typeof canvasLayout === 'object' ? canvasLayout : {};
+  const origin = source.origin && typeof source.origin === 'object' ? source.origin : {};
+
+  const defaultCardWidth = Number(source.defaultCardWidth);
+  const defaultCardHeight = Number(source.defaultCardHeight);
+  const columnGap = Number(source.columnGap);
+  const rowGap = Number(source.rowGap);
+  const originX = Number(origin.x);
+  const originY = Number(origin.y);
+
+  return {
+    defaultCardWidth: Number.isFinite(defaultCardWidth) && defaultCardWidth > 0
+      ? defaultCardWidth
+      : DEFAULT_CANVAS_LAYOUT_CONFIG.defaultCardWidth,
+    defaultCardHeight: Number.isFinite(defaultCardHeight) && defaultCardHeight > 0
+      ? defaultCardHeight
+      : DEFAULT_CANVAS_LAYOUT_CONFIG.defaultCardHeight,
+    columnGap: Number.isFinite(columnGap) && columnGap > 0
+      ? columnGap
+      : DEFAULT_CANVAS_LAYOUT_CONFIG.columnGap,
+    rowGap: Number.isFinite(rowGap) && rowGap > 0
+      ? rowGap
+      : DEFAULT_CANVAS_LAYOUT_CONFIG.rowGap,
+    origin: {
+      x: Number.isFinite(originX) ? originX : DEFAULT_CANVAS_LAYOUT_CONFIG.origin.x,
+      y: Number.isFinite(originY) ? originY : DEFAULT_CANVAS_LAYOUT_CONFIG.origin.y,
+    },
+  };
+}
+
 function normalizeAppConfig(config) {
   const defaultBoardId = typeof config?.defaultBoardId === 'string' && config.defaultBoardId.trim()
     ? config.defaultBoardId.trim()
@@ -166,6 +205,7 @@ function normalizeAppConfig(config) {
     pageTitle: defaultBoardLabel,
     pageSubtitle: defaultBoardSubtitle,
     refreshAllIntervalSeconds: resolvedRefreshAllIntervalSeconds,
+    canvasLayout: normalizeCanvasLayoutConfig(config?.canvasLayout),
     transportMode: normalizeTransportMode(config?.transportMode),
     serverOrigin: normalizeServerOrigin(config?.serverOrigin),
     storage: normalizeStorageConfig(config?.storage, config?.inBrowserFirestore),
@@ -180,6 +220,12 @@ function mergeAppConfig(baseConfig, overrideConfig = {}) {
   const overrideBoard = overrideConfig?.defaultBoard && typeof overrideConfig.defaultBoard === 'object'
     ? overrideConfig.defaultBoard
     : {};
+  const baseCanvasLayout = baseConfig?.canvasLayout && typeof baseConfig.canvasLayout === 'object'
+    ? baseConfig.canvasLayout
+    : {};
+  const overrideCanvasLayout = overrideConfig?.canvasLayout && typeof overrideConfig.canvasLayout === 'object'
+    ? overrideConfig.canvasLayout
+    : {};
 
   return {
     ...baseConfig,
@@ -187,6 +233,14 @@ function mergeAppConfig(baseConfig, overrideConfig = {}) {
     defaultBoard: {
       ...baseBoard,
       ...overrideBoard,
+    },
+    canvasLayout: {
+      ...baseCanvasLayout,
+      ...overrideCanvasLayout,
+      origin: {
+        ...(baseCanvasLayout.origin && typeof baseCanvasLayout.origin === 'object' ? baseCanvasLayout.origin : {}),
+        ...(overrideCanvasLayout.origin && typeof overrideCanvasLayout.origin === 'object' ? overrideCanvasLayout.origin : {}),
+      },
     },
   };
 }
@@ -254,6 +308,7 @@ export let DEFAULT_BOARD_LABEL = currentAppConfig.defaultBoard.label;
 export let PAGE_TITLE = currentAppConfig.pageTitle;
 export let PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
 export let REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
+export let CANVAS_LAYOUT_CONFIG = currentAppConfig.canvasLayout;
 export let BOARD_TRANSPORT_MODE = currentAppConfig.transportMode;
 export let SERVER = currentAppConfig.serverOrigin;
 export let STORAGE_CONFIG = currentAppConfig.storage;
@@ -269,6 +324,7 @@ function applyAppConfig(config) {
   PAGE_TITLE = currentAppConfig.pageTitle;
   PAGE_SUBTITLE = currentAppConfig.pageSubtitle;
   REFRESH_ALL_INTERVAL_SECONDS = currentAppConfig.refreshAllIntervalSeconds;
+  CANVAS_LAYOUT_CONFIG = currentAppConfig.canvasLayout;
   BOARD_TRANSPORT_MODE = currentAppConfig.transportMode;
   SERVER = currentAppConfig.serverOrigin;
   STORAGE_CONFIG = currentAppConfig.storage;
