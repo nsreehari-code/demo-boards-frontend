@@ -1,11 +1,11 @@
 import { compileCardFilter } from './cardFilterExpression.js';
 
-export const DEFAULT_PANE_PLACEMENT = [
+export const DEFAULT_PANE_RULES = [
   { pane: 'gandalf', when: 'meta.gandalf = true' },
   { pane: 'truthset', when: 'meta.truthset = true' },
 ];
 
-export const DEFAULT_CARD_RENDERERS = [
+export const DEFAULT_CARD_RENDERER_RULES = [
   { renderer: 'protected', when: 'meta.highconfidential = true or meta.confidential = true' },
   { renderer: 'ingest', when: 'meta.ingest = true or meta.gandalf = true' },
 ];
@@ -14,7 +14,7 @@ function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizePanePlacementRule(rule) {
+function normalizePaneRule(rule) {
   if (!rule || !isPlainObject(rule)) return null;
 
   const pane = typeof rule.pane === 'string'
@@ -31,60 +31,20 @@ function normalizePanePlacementRule(rule) {
   };
 }
 
-function resolveLegacyPanePlacementConfig(uiConfig) {
-  if (!isPlainObject(uiConfig)) return {};
-
-  const preferredRules = uiConfig.paneRules;
-  if (isPlainObject(preferredRules)) return preferredRules;
-
-  const preferredFilters = uiConfig.paneFilters;
-  if (isPlainObject(preferredFilters)) return preferredFilters;
-
-  const camelCase = uiConfig.panePlacement;
-  if (isPlainObject(camelCase)) return camelCase;
-
-  const lowercase = uiConfig.panefilters;
-  if (isPlainObject(lowercase)) return lowercase;
-
-  const underscored = uiConfig.pane_placement;
-  if (isPlainObject(underscored)) return underscored;
-
-  const legacy = uiConfig.filters;
-  if (isPlainObject(legacy)) return legacy;
-
-  return {};
-}
-
-export function resolvePanePlacementConfig(uiConfig) {
-  if (!isPlainObject(uiConfig)) return DEFAULT_PANE_PLACEMENT;
+export function resolvePaneRulesConfig(uiConfig) {
+  if (!isPlainObject(uiConfig)) return DEFAULT_PANE_RULES;
 
   const preferredRules = uiConfig.paneRules;
   if (Array.isArray(preferredRules)) {
-    const normalized = preferredRules.map(normalizePanePlacementRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_PANE_PLACEMENT;
+    const normalized = preferredRules.map(normalizePaneRule).filter(Boolean);
+    return normalized.length > 0 ? normalized : DEFAULT_PANE_RULES;
   }
 
-  const preferredPlacement = uiConfig.panePlacement;
-  if (Array.isArray(preferredPlacement)) {
-    const normalized = preferredPlacement.map(normalizePanePlacementRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_PANE_PLACEMENT;
-  }
-
-  const underscored = uiConfig.pane_placement;
-  if (Array.isArray(underscored)) {
-    const normalized = underscored.map(normalizePanePlacementRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_PANE_PLACEMENT;
-  }
-
-  const legacy = resolveLegacyPanePlacementConfig(uiConfig);
-  const normalized = Object.entries(legacy)
-    .map(([pane, when]) => normalizePanePlacementRule({ pane, when }))
-    .filter(Boolean);
-  return normalized.length > 0 ? normalized : DEFAULT_PANE_PLACEMENT;
+  return DEFAULT_PANE_RULES;
 }
 
 export function resolvePaneFilters(uiConfig, name) {
-  return resolvePanePlacementConfig(uiConfig)
+  return resolvePaneRulesConfig(uiConfig)
     .filter((rule) => rule.pane === name)
     .map((rule) => {
       const matcher = rule.when == null ? () => true : compileCardFilter(rule.when);
@@ -116,54 +76,26 @@ function normalizeRendererRule(rule) {
   };
 }
 
-export function resolveRendererConfig(uiConfig) {
+export function resolveCardRendererRulesConfig(uiConfig) {
   const preferredRules = uiConfig?.cardRendererRules;
 
   if (Array.isArray(preferredRules)) {
     const normalized = preferredRules.map(normalizeRendererRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
+    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERER_RULES;
   }
 
   if (isPlainObject(preferredRules)) {
     const normalized = Object.entries(preferredRules)
       .map(([renderer, when]) => normalizeRendererRule({ renderer, when }))
       .filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
+    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERER_RULES;
   }
 
-  const preferred = uiConfig?.cardRenderers;
-
-  if (Array.isArray(preferred)) {
-    const normalized = preferred.map(normalizeRendererRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
-  }
-
-  if (isPlainObject(preferred)) {
-    const normalized = Object.entries(preferred)
-      .map(([renderer, when]) => normalizeRendererRule({ renderer, when }))
-      .filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
-  }
-
-  const config = uiConfig?.renderers;
-
-  if (Array.isArray(config)) {
-    const normalized = config.map(normalizeRendererRule).filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
-  }
-
-  if (isPlainObject(config)) {
-    const normalized = Object.entries(config)
-      .map(([renderer, when]) => normalizeRendererRule({ renderer, when }))
-      .filter(Boolean);
-    return normalized.length > 0 ? normalized : DEFAULT_CARD_RENDERERS;
-  }
-
-  return DEFAULT_CARD_RENDERERS;
+  return DEFAULT_CARD_RENDERER_RULES;
 }
 
 export function compileRendererRules(uiConfig) {
-  return resolveRendererConfig(uiConfig)
+  return resolveCardRendererRulesConfig(uiConfig)
     .map((rule) => {
       const matcher = rule.when == null ? () => true : compileCardFilter(rule.when);
       if (typeof matcher !== 'function') return null;
