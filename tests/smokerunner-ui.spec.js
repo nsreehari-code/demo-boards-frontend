@@ -139,12 +139,11 @@ test('SmokeRunner can be launched from App Config and complete the full rendered
 
   const statusChip = page.getByTestId('smoke-runner-suite-status');
   const logPane = page.getByTestId('smoke-runner-log');
-  const mb1Status = page.getByTestId('smoke-runner-case-status-MB1');
   await expect(statusChip).toContainText('RUNNING', { timeout: 30_000 });
 
   await expect(logPane).toContainText('[warmup]', { timeout: 30_000 });
   await waitForWarmupOutcome(statusChip, logPane, 2 * 60_000);
-  await expect(mb1Status).toContainText('passed', { timeout: 2 * 60_000 });
+  await expect(page.getByTestId('smoke-runner-case-status-MB1')).toContainText('passed', { timeout: 2 * 60_000 });
 
   const finalLogText = await waitForSuiteOutcome(statusChip, logPane, 13 * 60_000);
   await expect(statusChip).toContainText('PASSED', { timeout: 30_000 });
