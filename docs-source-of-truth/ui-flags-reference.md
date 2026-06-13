@@ -304,7 +304,7 @@ card-scoped `log_id`. Two channels:
 | Channel | Carries |
 | --- | --- |
 | `agent-output` | The agent's stdout / model output stream for a turn. |
-| `agent-tools` | MCP tool invocations made during the turn. |
+| `agent-tools` | Structured MCP tool invocation events made during the turn. Native payload fields currently include `tool`, `action`, and when available `card_id`, `turn_id`, `file_idx`. |
 
 The backend source_def handlers
 (`copilot-source-handler.js`, `foundry-handler.js`) emit `agent-tools` only when

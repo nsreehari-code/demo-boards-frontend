@@ -7,6 +7,11 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
 } from '../lib/board-sse-state.js';
+import {
+  formatWatchpartyAgentToolPayload,
+  parseWatchpartyAgentToolPayload,
+  parseWatchpartyAgentToolPayloads,
+} from '../lib/watchpartyAgentTools.js';
 
 const boardStores = new Map();
 const boardUiStores = new Map();
@@ -297,7 +302,18 @@ function getCardChatWatchPartySnapshot(boardId, cardId) {
   const agentOutputEvent = agentOutputEvents.at(-1) ?? null;
   const agentToolsEvent = agentToolsEvents.at(-1) ?? null;
   const agentOutput = String(agentOutputEvent?.payload?.text ?? '');
-  const agentTools = String(agentToolsEvent?.payload?.text ?? '');
+  const agentToolPayloads = agentToolsEvents
+    .flatMap((event) => parseWatchpartyAgentToolPayloads(event?.payload));
+  const agentTools = agentToolsEvents
+    .map((event) => {
+      const structured = formatWatchpartyAgentToolPayload(event?.payload);
+      if (structured) {
+        return structured;
+      }
+      return String(event?.payload?.text ?? '').trim();
+    })
+    .filter(Boolean)
+    .join('\n');
 
   if (
     previousValue
@@ -313,6 +329,7 @@ function getCardChatWatchPartySnapshot(boardId, cardId) {
     agentOutput,
     agentOutputEvent,
     agentTools,
+    agentToolPayloads,
     agentToolsEvent,
   };
   store.cardChatWatchPartyCache.set(cardId, nextValue);

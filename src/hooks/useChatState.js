@@ -29,6 +29,7 @@ function useReducedWatchParty(boardId, cardId, boardSseClientId) {
   return useMemo(() => ({
     agentOutput: watchParty?.agentOutput ?? '',
     agentTools: watchParty?.agentTools ?? '',
+    agentToolPayloads: Array.isArray(watchParty?.agentToolPayloads) ? watchParty.agentToolPayloads : [],
   }), [watchParty]);
 }
 

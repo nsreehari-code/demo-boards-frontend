@@ -9,6 +9,7 @@ import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
 import { useCardChatViews } from '../hooks/useSseSlices.js';
 import { initBoard } from '../lib/client.js';
 import { compileRendererRules, resolveCardRenderer, resolvePaneFilters } from '../lib/cardPresentationConfig.js';
+import { WATCHPARTY_AGENT_TOOL_ACTIONS } from '../../../shared/watchparty-agent-tools.js';
 
 const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';
@@ -38,7 +39,7 @@ const TR_QUOTES_TOKEN = 'quotes_tr2_9201';
 const TR_HOLDINGS_TOKEN = 'holdings_tr_9200';
 const WARMUP_CHAT_CARD_ID = 'card-smoke-warmup-9099';
 const AI_RESPONSE_CASE_ORDER = ['T3', 'T3u', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
-const STAGE_AI_RESPONSE_TOOL_LABEL = "Invoking 'Stage Ai Response And Any Attachments'";
+const STAGE_AI_RESPONSE_TOOL_NAME = 'liveboards.stage-ai-response-and-any-attachments';
 const PORTFOLIO_CARD_VARIANTS = {
   [T0_PORTFOLIO_CARD_ID]: {
     caseLabel: 'T0',
@@ -1191,18 +1192,23 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     try {
       await waitUntil(() => {
         const watchParty = readWatchParty(cardId);
-        const agentToolsText = String(watchParty?.agentTools || '');
-        return agentToolsText.includes(STAGE_AI_RESPONSE_TOOL_LABEL)
-          ? { watchParty, agentToolsText }
+        const agentToolPayloads = Array.isArray(watchParty?.agentToolPayloads) ? watchParty.agentToolPayloads : [];
+        return agentToolPayloads.some((payload) => (
+          payload?.tool === STAGE_AI_RESPONSE_TOOL_NAME
+          && payload?.action === WATCHPARTY_AGENT_TOOL_ACTIONS.INVOKING
+        ))
+          ? { watchParty, agentToolPayloads }
           : false;
       }, timeoutMs, `${caseId} watchparty stage-ai-response tool for ${cardId}`);
     } catch {
       const watchParty = readWatchParty(cardId);
       throw createSmokeAssertionError(`${caseId} watchparty missing stage-ai-response invocation for ${cardId}`, {
         expected: {
-          agentToolsIncludes: STAGE_AI_RESPONSE_TOOL_LABEL,
+          tool: STAGE_AI_RESPONSE_TOOL_NAME,
+          action: WATCHPARTY_AGENT_TOOL_ACTIONS.INVOKING,
         },
         found: {
+          agentToolPayloads: Array.isArray(watchParty?.agentToolPayloads) ? watchParty.agentToolPayloads : [],
           agentTools: String(watchParty?.agentTools || ''),
         },
       });
