@@ -40,6 +40,7 @@ const TR_HOLDINGS_TOKEN = 'holdings_tr_9200';
 const WARMUP_CHAT_CARD_ID = 'card-smoke-warmup-9099';
 const AI_RESPONSE_CASE_ORDER = ['T3', 'T3u', 'T4', 'T8', 'T8F', 'T9', 'T9F'];
 const STAGE_AI_RESPONSE_TOOL_NAME = 'liveboards.stage-ai-response-and-any-attachments';
+const RUN_TESTS_PLACEHOLDER = 'MB1, T9, T9F';
 const PORTFOLIO_CARD_VARIANTS = {
   [T0_PORTFOLIO_CARD_ID]: {
     caseLabel: 'T0',
@@ -210,6 +211,31 @@ const TOOLBAR_STYLE = {
   gap: '0.5rem',
   flexWrap: 'wrap',
   marginBottom: '1rem',
+};
+
+const TEST_SELECTOR_STYLE = {
+  display: 'grid',
+  gap: '0.55rem',
+  minWidth: '100%',
+  marginBottom: '0.85rem',
+  padding: '0.8rem 0.9rem',
+  border: '1px solid color-mix(in srgb, var(--color-border-strong) 75%, transparent)',
+  borderRadius: '12px',
+  background: 'color-mix(in srgb, var(--color-surface) 94%, transparent)',
+};
+
+const TEST_CHECKBOX_GRID_STYLE = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(9.5rem, 1fr))',
+  gap: '0.45rem 0.75rem',
+};
+
+const TEST_CHECKBOX_LABEL_STYLE = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.45rem',
+  fontSize: '0.78rem',
+  color: 'var(--color-text)',
 };
 
 const BASE_PORTFOLIO_CARD = {
@@ -419,6 +445,10 @@ const SMOKE_CASES = [
   { id: 'TR', title: 'Card refresh lifecycle over SSE', mode: 'run' },
 ];
 
+const RUNNABLE_SMOKE_CASES = SMOKE_CASES.filter((entry) => entry.mode === 'run');
+
+const SMOKE_CASE_IDS = new Set(SMOKE_CASES.map((entry) => entry.id));
+
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -627,8 +657,8 @@ function readSmokeComparison(error) {
     : null;
 }
 
-function createInitialCaseState() {
-  return SMOKE_CASES.map((entry) => ({
+function createInitialCaseState(entries = SMOKE_CASES) {
+  return entries.map((entry) => ({
     id: entry.id,
     title: entry.title,
     mode: entry.mode,
@@ -639,6 +669,42 @@ function createInitialCaseState() {
     startedAt: 0,
     finishedAt: 0,
   }));
+}
+
+function parseRequestedSmokeCaseIds(value) {
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function resolveSelectedSmokeCases(value) {
+  const requestedIds = parseRequestedSmokeCaseIds(value);
+  const unknownIds = requestedIds.filter((caseId) => !SMOKE_CASE_IDS.has(caseId));
+  if (requestedIds.length === 0) {
+    return {
+      requestedIds,
+      unknownIds,
+      selectedCases: SMOKE_CASES,
+    };
+  }
+
+  const requestedIdSet = new Set(requestedIds);
+  return {
+    requestedIds,
+    unknownIds,
+    selectedCases: SMOKE_CASES.filter((entry) => requestedIdSet.has(entry.id)),
+  };
+}
+
+function formatSelectedSmokeCaseIds(caseIds) {
+  const normalizedIds = RUNNABLE_SMOKE_CASES
+    .map((entry) => entry.id)
+    .filter((caseId) => caseIds.has(caseId));
+  if (normalizedIds.length === RUNNABLE_SMOKE_CASES.length) {
+    return '';
+  }
+  return normalizedIds.join(', ');
 }
 
 function readErrorMessage(payload) {
@@ -815,6 +881,7 @@ function createLogEntry(caseId, message, kind = 'info') {
 
 export function SmokeRunner({ serverOrigin, onClose }) {
   const normalizedOrigin = useMemo(() => normalizeOrigin(serverOrigin), [serverOrigin]);
+  const [runTestsText, setRunTestsText] = useState('');
   const board = useBoardState(SMOKE_BOARD_ID);
   const t1PortfolioCardHook = useCardState(SMOKE_BOARD_ID, T1_PORTFOLIO_CARD_ID);
   const portfolioCardHook = useCardState(SMOKE_BOARD_ID, PORTFOLIO_CARD_ID);
@@ -861,7 +928,15 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const [suiteStatus, setSuiteStatus] = useState('idle');
   const [suiteError, setSuiteError] = useState('');
   const [activeCaseId, setActiveCaseId] = useState('');
-  const [caseStates, setCaseStates] = useState(() => createInitialCaseState());
+  const selectedCaseResolution = useMemo(() => resolveSelectedSmokeCases(runTestsText), [runTestsText]);
+  const selectedSmokeCases = selectedCaseResolution.selectedCases;
+  const selectedSmokeCaseIds = useMemo(() => new Set(selectedSmokeCases.map((entry) => entry.id)), [selectedSmokeCases]);
+  const selectedRunnableCaseIds = useMemo(() => (
+    selectedCaseResolution.requestedIds.length === 0
+      ? new Set(RUNNABLE_SMOKE_CASES.map((entry) => entry.id))
+      : new Set(selectedSmokeCases.filter((entry) => entry.mode === 'run').map((entry) => entry.id))
+  ), [selectedCaseResolution, selectedSmokeCases]);
+  const [caseStates, setCaseStates] = useState(() => createInitialCaseState(selectedSmokeCases));
   const [logs, setLogs] = useState([]);
   const [aiResponses, setAiResponses] = useState({});
   const [startedAt, setStartedAt] = useState(0);
@@ -1009,6 +1084,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
   const appendAiResponseSummary = useCallback(() => {
     const responseEntries = ['T3', 'T4', 'T8', 'T8F', 'T9', 'T9F']
+      .filter((caseId) => selectedSmokeCaseIds.has(caseId))
       .map((caseId) => [caseId, runtimeRef.current.aiResponsesByCaseId.get(caseId) || ''])
       .filter(([, responseText]) => responseText);
     if (responseEntries.length === 0) {
@@ -1018,7 +1094,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     for (const [caseId, responseText] of responseEntries) {
       appendLog('', `${caseId}: ${responseText}`);
     }
-  }, [appendLog]);
+  }, [appendLog, selectedSmokeCaseIds]);
 
   const markCase = useCallback((caseId, patch) => {
     startTransition(() => {
@@ -2202,7 +2278,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           text: 'What is two plus three plus four?',
         },
       },
-    ].filter((config) => SMOKE_CASES.some((entry) => entry.id === config.caseId && entry.mode === 'run'));
+    ].filter((config) => selectedSmokeCases.some((entry) => entry.id === config.caseId && entry.mode === 'run'));
 
     appendLog('', `Hosted chat smoke tests: running ${hostedConfigs.map((config) => config.caseId).join(', ')} in parallel on shared reduced state`);
     await reopenBoardSse();
@@ -2211,7 +2287,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     for (const config of hostedConfigs) {
       await unsubscribeCardChats(config.cardId);
     }
-  }, [appendLog, reopenBoardSse, runHostedAssistantSmoke, unsubscribeCardChats, waitForSseSummary]);
+  }, [appendLog, reopenBoardSse, runHostedAssistantSmoke, selectedSmokeCases, unsubscribeCardChats, waitForSseSummary]);
 
   const handleRun = useCallback(async () => {
     if (suiteStatus === 'running') {
@@ -2220,6 +2296,11 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     if (!normalizedOrigin) {
       setSuiteStatus('failed');
       setSuiteError('Server origin is required for smoke testing.');
+      return;
+    }
+    if (selectedCaseResolution.unknownIds.length > 0) {
+      setSuiteStatus('failed');
+      setSuiteError(`Unknown smoke test ids: ${selectedCaseResolution.unknownIds.join(', ')}`);
       return;
     }
 
@@ -2232,15 +2313,20 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     setSuiteStatus('running');
     setSuiteError('');
     setActiveCaseId('');
-    setCaseStates(createInitialCaseState());
+    setCaseStates(createInitialCaseState(selectedSmokeCases));
     setLogs([]);
     setAiResponses({});
     setStartedAt(Date.now());
     setFinishedAt(0);
     appendLog('', `Smoke runner targeting board '${SMOKE_BOARD_ID}' at ${normalizedOrigin}`);
+    if (selectedCaseResolution.requestedIds.length > 0) {
+      appendLog('', `Selected smoke cases: ${selectedSmokeCases.map((entry) => entry.id).join(', ')}`);
+    } else {
+      appendLog('', 'Selected smoke cases: all');
+    }
 
     try {
-      const mb1Entry = SMOKE_CASES.find((entry) => entry.id === 'MB1');
+      const mb1Entry = selectedSmokeCases.find((entry) => entry.id === 'MB1');
       if (mb1Entry && mb1Entry.mode === 'run') {
         ensureNotCancelled(cancelRef);
         setActiveCaseId(mb1Entry.id);
@@ -2269,7 +2355,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       await warmChatQueue();
       let computeChatParallelHandled = false;
       let hostedParallelHandled = false;
-      for (const entry of SMOKE_CASES) {
+      for (const entry of selectedSmokeCases) {
         if (entry.id === 'MB1') {
           continue;
         }
@@ -2292,7 +2378,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             continue;
           }
           computeChatParallelHandled = true;
-          const parallelEntries = SMOKE_CASES.filter((candidate) => ['T2', 'T3', 'T4'].includes(candidate.id) && candidate.mode === 'run');
+          const parallelEntries = selectedSmokeCases.filter((candidate) => ['T2', 'T3', 'T4'].includes(candidate.id) && candidate.mode === 'run');
           const startedAtValue = Date.now();
           for (const parallelEntry of parallelEntries) {
             markCase(parallelEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
@@ -2331,7 +2417,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             continue;
           }
           hostedParallelHandled = true;
-          const hostedEntries = SMOKE_CASES.filter((candidate) => ['T8', 'T9', 'T8F', 'T9F'].includes(candidate.id) && candidate.mode === 'run');
+          const hostedEntries = selectedSmokeCases.filter((candidate) => ['T8', 'T9', 'T8F', 'T9F'].includes(candidate.id) && candidate.mode === 'run');
           const startedAtValue = Date.now();
           for (const hostedEntry of hostedEntries) {
             markCase(hostedEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
@@ -2407,7 +2493,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
       await cleanup();
       setActiveCaseId('');
     }
-  }, [appendAiResponseSummary, appendLog, cleanup, clearSmokeCardsAtStart, markCase, normalizedOrigin, runCase, runHostedAssistantCasesInParallel, suiteStatus, warmChatQueue]);
+  }, [appendAiResponseSummary, appendLog, cleanup, clearSmokeCardsAtStart, markCase, normalizedOrigin, runCase, runHostedAssistantCasesInParallel, selectedCaseResolution, selectedSmokeCases, suiteStatus, warmChatQueue]);
 
   const handleStop = useCallback(() => {
     cancelRef.current = true;
@@ -2443,6 +2529,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
 
   const orderedAiResponses = useMemo(() => {
     return AI_RESPONSE_CASE_ORDER
+      .filter((caseId) => selectedSmokeCaseIds.has(caseId))
       .filter((caseId) => typeof deferredAiResponses[caseId] === 'string' && deferredAiResponses[caseId].trim())
       .map((caseId) => {
         const responseText = deferredAiResponses[caseId].trim();
@@ -2455,7 +2542,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
           statusMark: isMatch ? '✓' : '✗',
         };
       });
-  }, [deferredAiResponses]);
+  }, [deferredAiResponses, selectedSmokeCaseIds]);
 
   const renderedLogText = useMemo(() => (
     deferredLogs.length > 0
@@ -2466,6 +2553,18 @@ export function SmokeRunner({ serverOrigin, onClose }) {
   const durationText = startedAt
     ? `${Math.max(0, Math.round(((finishedAt || Date.now()) - startedAt) / 1000))}s`
     : '0s';
+
+  const handleToggleSmokeCase = useCallback((caseId, checked) => {
+    startTransition(() => {
+      const nextSelectedIds = new Set(selectedRunnableCaseIds);
+      if (checked) {
+        nextSelectedIds.add(caseId);
+      } else {
+        nextSelectedIds.delete(caseId);
+      }
+      setRunTestsText(formatSelectedSmokeCaseIds(nextSelectedIds));
+    });
+  }, [selectedRunnableCaseIds]);
 
   return (
     <GlobalModal
@@ -2511,8 +2610,53 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             </div>
           </div>
 
+          <div style={TEST_SELECTOR_STYLE}>
+            <div style={{ display: 'grid', gap: '0.3rem' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-soft)' }}>Run Tests</span>
+              <input
+                type="text"
+                value={runTestsText}
+                onChange={(event) => setRunTestsText(event.target.value)}
+                placeholder={RUN_TESTS_PLACEHOLDER}
+                disabled={suiteStatus === 'running'}
+                data-testid="smoke-runner-run-tests-input"
+                style={{
+                  minWidth: '18rem',
+                  border: '1px solid var(--color-border-strong)',
+                  borderRadius: '0.5rem',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-text)',
+                  padding: '0.5rem 0.65rem',
+                  fontSize: '0.82rem',
+                }}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-soft)' }}>
+                Leave empty to run all tests, or type a comma-separated subset. The checkboxes below stay in sync.
+              </div>
+            </div>
+            <div style={TEST_CHECKBOX_GRID_STYLE}>
+              {RUNNABLE_SMOKE_CASES.map((entry) => (
+                <label key={entry.id} style={TEST_CHECKBOX_LABEL_STYLE}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRunnableCaseIds.has(entry.id)}
+                    onChange={(event) => handleToggleSmokeCase(entry.id, event.target.checked)}
+                    disabled={suiteStatus === 'running'}
+                    data-testid={`smoke-runner-case-toggle-${entry.id}`}
+                  />
+                  <span>{entry.id}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="global-modal__section">
             <div className="global-modal__section-title">Summary</div>
+            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-soft)', marginBottom: '0.65rem' }}>
+              {selectedCaseResolution.requestedIds.length > 0
+                ? `Running selected cases in built-in order: ${selectedSmokeCases.map((entry) => entry.id).join(', ') || 'none'}`
+                : 'Running all smoke cases. Leave Run Tests empty to keep this default.'}
+            </div>
             <div className="global-modal__chips">
               {summaryChips.map((chip) => (
                 <div
