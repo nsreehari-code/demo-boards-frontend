@@ -63,6 +63,36 @@ function mergeLiveMessages(prev, incoming) {
   return order.map((key) => ({ key, msg: byKey.get(key) }));
 }
 
+function mergeMessageArrays(existingMessages, incomingMessages) {
+  const seeded = mergeLiveMessages([], existingMessages).map((entry) => ({ key: entry.key, msg: entry.msg }));
+  return mergeLiveMessages(seeded, incomingMessages).map((entry) => entry.msg);
+}
+
+function buildDisplayMessageEntries(historyMessages, liveMessages) {
+  return [
+    ...(Array.isArray(historyMessages) ? historyMessages : []).map((msg) => ({ msg, isHistory: true })),
+    ...(Array.isArray(liveMessages) ? liveMessages : []).map((msg) => ({ msg, isHistory: false })),
+  ];
+}
+
+function getMessageTurnId(msg) {
+  return typeof msg?.turn === 'string' ? msg.turn.trim() : '';
+}
+
+function getFirstTurnId(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((msg) => getMessageTurnId(msg))
+    .find(Boolean) || '';
+}
+
+function countDistinctTurns(messages) {
+  return new Set(
+    (Array.isArray(messages) ? messages : [])
+      .map((msg) => getMessageTurnId(msg))
+      .filter(Boolean),
+  ).size;
+}
+
 // Subscribe to chat SSE on mount so the server sends card_chats notifications
 function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
   useEffect(() => {
@@ -309,7 +339,7 @@ function SystemMessage({ msg, boardId, cardId }) {
   );
 }
 
-function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false, boardId, cardId }) {
+function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false, boardId, cardId, isHistory = false }) {
   const { role, text, files } = msg;
   const [isOverflowing, setIsOverflowing] = useState(false);
   if (role === 'system') {
@@ -317,6 +347,7 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
   }
   const isUser = role === 'user';
   const showFooter = isOverflowing || expanded;
+  const turnId = typeof msg?.turn === 'string' ? msg.turn.trim() : '';
   return (
     <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
       <div
@@ -343,6 +374,18 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
             ))}
           </div>
         </div>
+        {isUser && turnId ? (
+          <div
+            className="mt-1"
+            style={{
+              fontSize: '0.68rem',
+              color: 'rgba(0, 0, 0, 0.5)',
+              textAlign: 'right',
+            }}
+          >
+            {isHistory ? `${turnId} (h)` : turnId}
+          </div>
+        ) : null}
         {showFooter ? (
           <button
             type="button"
@@ -398,13 +441,16 @@ const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
   && prev.compact === next.compact
   && prev.boardId === next.boardId
   && prev.cardId === next.cardId
+  && prev.isHistory === next.isHistory
 ));
 
 const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId, openMsgId, onToggleExpand }) {
   return (
     <>
-      {messages.map((msg, i) => {
+      {messages.map((entry, i) => {
         const msgId = String(i);
+        const msg = entry?.msg ?? entry;
+        const isHistory = entry?.isHistory === true;
         return (
           <ChatBubble
             key={msgId}
@@ -415,12 +461,28 @@ const MessageList = React.memo(function MessageList({ messages, compact, boardId
             compact={compact}
             boardId={boardId}
             cardId={cardId}
+            isHistory={isHistory}
           />
         );
       })}
     </>
   );
 });
+
+function ChatTurnHistoryButton({ loading, disabled, onClick }) {
+  return (
+    <div className="board-chat-pane__history-row text-center my-1">
+      <button
+        type="button"
+        className="btn btn-link btn-sm p-0 text-decoration-none"
+        onClick={onClick}
+        disabled={disabled || loading}
+      >
+        {loading ? 'Loading previous messages…' : 'Show previous messages'}
+      </button>
+    </div>
+  );
+}
 
 function toChipPreview(text) {
   const source = String(text ?? '');
@@ -443,7 +505,7 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
     liveOutput ? { key: 'output', label: chipLabels.output, value: toChipPreview(liveOutput), fullText: liveOutput } : null,
     liveTools ? { key: 'tools', label: chipLabels.tools, value: toChipPreview(liveTools), fullText: liveTools } : null,
   ].filter(Boolean);
-  const activeChip = compact ? null : (chips.find((chip) => chip.key === activeChipKey) ?? null);
+  const activeChip = chips.find((chip) => chip.key === activeChipKey) ?? null;
 
   useEffect(() => {
     onLayoutChange?.();
@@ -488,9 +550,6 @@ function WorkingBubble({ boardId, cardId, compact = false, onLayoutChange }) {
                   overflow: 'hidden',
                 }}
                 onClick={() => {
-                  if (compact) {
-                    return;
-                  }
                   setActiveChipKey((prev) => (prev === chip.key ? '' : chip.key));
                 }}
               >
@@ -687,8 +746,9 @@ function ChatPaneBase({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [liveMessages, setLiveMessages] = useState([]);
+  const [historyAnchorTurnId, setHistoryAnchorTurnId] = useState('');
+  const [historyCursorTurnId, setHistoryCursorTurnId] = useState('');
   const liveKeyRef = useRef('');
-  const initialHistoryFetchKeyRef = useRef('');
   const handleToggleExpand = useCallback((msgId) => {
     setOpenMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
@@ -714,39 +774,49 @@ function ChatPaneBase({
   );
 
   const displayMessages = useMemo(
-    () => (historyEnabled && history.length > 0 ? [...history, ...liveForDisplay] : liveForDisplay),
+    () => (historyEnabled && history.length > 0
+      ? buildDisplayMessageEntries(history, liveForDisplay)
+      : liveForDisplay.map((msg) => ({ msg, isHistory: false }))),
     [historyEnabled, history, liveForDisplay],
   );
 
+  const firstLiveTurnId = useMemo(
+    () => getFirstTurnId(liveForDisplay),
+    [liveForDisplay],
+  );
+
+  useEffect(() => {
+    if (!historyEnabled || historyAnchorTurnId || !firstLiveTurnId) {
+      return;
+    }
+    setHistoryAnchorTurnId(firstLiveTurnId);
+    setHistoryCursorTurnId(firstLiveTurnId);
+    setHasMoreHistory(true);
+  }, [historyEnabled, historyAnchorTurnId, firstLiveTurnId]);
+
   const handleLoadPrevious = useCallback(async () => {
-    if (!boardId || !cardId || historyLoading) return;
-    const topTurnId = displayMessages
-      .map((msg) => (typeof msg?.turn === 'string' ? msg.turn.trim() : ''))
-      .find((turn) => turn) || '';
+    if (!boardId || !cardId || historyLoading || !historyCursorTurnId) return;
     setHistoryLoading(true);
     try {
-      const older = await fetchChatHistoryBeforeTurn(boardId, cardId, topTurnId, HISTORY_TURNS_PER_PAGE);
+      const older = await fetchChatHistoryBeforeTurn(boardId, cardId, historyCursorTurnId, HISTORY_TURNS_PER_PAGE);
       if (older.length === 0) {
         setHasMoreHistory(false);
         return;
       }
-      setHistory((prev) => [...older, ...prev]);
+      setHistory((prev) => mergeMessageArrays(older, prev));
+      const nextCursorTurnId = getFirstTurnId(older);
+      if (!nextCursorTurnId || nextCursorTurnId === historyCursorTurnId) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistoryCursorTurnId(nextCursorTurnId);
+      setHasMoreHistory(countDistinctTurns(older) >= HISTORY_TURNS_PER_PAGE);
     } catch {
       setHasMoreHistory(false);
     } finally {
       setHistoryLoading(false);
     }
-  }, [boardId, cardId, historyLoading, displayMessages]);
-
-  // On opening a history-enabled pane (and when the board/card changes), run a
-  // single initial "previous messages" fetch automatically.
-  useEffect(() => {
-    if (!historyEnabled || !boardId || !cardId) return;
-    const key = `${boardId}::${cardId}`;
-    if (initialHistoryFetchKeyRef.current === key) return;
-    initialHistoryFetchKeyRef.current = key;
-    handleLoadPrevious();
-  }, [historyEnabled, boardId, cardId, handleLoadPrevious]);
+  }, [boardId, cardId, historyLoading, historyCursorTurnId]);
 
   const scrollToBottom = (behavior = 'auto') => {
     const element = messagesRef.current;
@@ -815,6 +885,10 @@ function ChatPaneBase({
     setHistory([]);
     setHasMoreHistory(true);
     setHistoryLoading(false);
+    setLiveMessages([]);
+    setHistoryAnchorTurnId('');
+    setHistoryCursorTurnId('');
+    liveKeyRef.current = '';
   }, [boardId, cardId]);
 
   useEffect(() => {
@@ -881,17 +955,12 @@ function ChatPaneBase({
         ref={messagesRef}
         className="board-chat-pane__messages p-2"
       >
-        {historyEnabled && hasMoreHistory ? (
-          <div className="board-chat-pane__history-row text-center my-1">
-            <button
-              type="button"
-              className="btn btn-link btn-sm p-0 text-decoration-none"
-              onClick={handleLoadPrevious}
-              disabled={historyLoading}
-            >
-              {historyLoading ? 'Loading previous messages…' : 'Show previous messages'}
-            </button>
-          </div>
+        {historyEnabled && historyAnchorTurnId && hasMoreHistory ? (
+          <ChatTurnHistoryButton
+            loading={historyLoading}
+            disabled={!historyCursorTurnId}
+            onClick={handleLoadPrevious}
+          />
         ) : null}
         <MessageList
           messages={displayMessages}
