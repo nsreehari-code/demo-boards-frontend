@@ -35,7 +35,7 @@ function resolveLayoutStrategy(layoutStrategy) {
   };
 }
 
-function IngestPaneNav({ cards, idx, onPrev, onNext }) {
+function GandalfPaneNav({ cards, idx, onPrev, onNext }) {
   const card = cards[idx];
   const title = card?.meta?.title ?? card?.id ?? '—';
   const phase = card?.card_data?.phase ?? 'active';
@@ -73,7 +73,7 @@ function IngestPaneNav({ cards, idx, onPrev, onNext }) {
   );
 }
 
-export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] }) {
+export function GandalfPane({ boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] }) {
   const board = useBoardState(boardId);
   const [visible, setVisible] = useState(false);
   const [idx, setIdx] = useState(0);
@@ -121,7 +121,7 @@ export function IngestPane({ boardId, includeFilters = [], layoutStrategy = 'ver
               </div>
               <span className="board-ingest-pane__count">{`${ingestCardIds.length} cards`}</span>
             </div>
-            <IngestPaneNav
+            <GandalfPaneNav
               cards={cards}
               idx={safeIdx}
               onPrev={() => setIdx((current) => Math.max(0, current - 1))}

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { CentrePane } from './CentrePane.jsx';
-import { IngestPane } from './IngestPane.jsx';
+import { GandalfPane } from './GandalfPane.jsx';
 import { TruthsetExplorePane } from './TruthsetExplorePane.jsx';
 import { BoardCoordsProvider } from '../hooks/useCoordsState.jsx';
 import { useManagedBoardConfig } from '../hooks/useManagedBoardConfig.js';
@@ -28,7 +28,7 @@ export function MainBoard({ boardId }) {
 
   return (
     <>
-      <IngestPane boardId={boardId} includeFilters={ingestFilters} layoutStrategy="vertical" rendererRules={rendererRules} />
+      <GandalfPane boardId={boardId} includeFilters={ingestFilters} layoutStrategy="vertical" rendererRules={rendererRules} />
       <TruthsetExplorePane boardId={boardId} includeFilters={truthsetFilters} layoutStrategy="vertical" rendererRules={rendererRules} />
       {holdCanvasUntilManagedConfig ? null : (
         <BoardCoordsProvider boardId={boardId} initialLayout={boardLayout}>
