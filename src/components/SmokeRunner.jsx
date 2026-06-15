@@ -1599,17 +1599,36 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     if (caseId === 'MB2') {
       const uiConfig = {
         paneRules: [
-          { pane: 'gandalf', when: 'meta.ingest = true' },
+          { pane: 'gandalf', when: 'meta.gandalf = true' },
           { pane: 'truthset', when: 'meta.truthset = true' },
         ],
         cardRendererRules: [
-          { renderer: 'ingest', when: 'meta.ingest = true' },
+          { renderer: 'strategist', when: 'meta.card_renderer = "strategist"' },
+          { renderer: 'ingest', when: 'meta.card_renderer = "ingest"' },
+          { renderer: 'postbox', when: 'meta.card_renderer = "postbox"' },
         ],
+      };
+      const strategistCardState = {
+        cardContent: {
+          meta: {
+            gandalf: true,
+            card_renderer: 'strategist',
+          },
+        },
+      };
+      const postboxCardState = {
+        cardContent: {
+          meta: {
+            gandalf: true,
+            card_renderer: 'postbox',
+          },
+        },
       };
       const ingestCardState = {
         cardContent: {
           meta: {
-            ingest: true,
+            gandalf: true,
+            card_renderer: 'ingest',
           },
         },
       };
@@ -1626,28 +1645,36 @@ export function SmokeRunner({ serverOrigin, onClose }) {
         },
       };
 
-      const ingestPaneFilters = resolvePaneFilters(uiConfig, 'gandalf');
+      const gandalfPaneFilters = resolvePaneFilters(uiConfig, 'gandalf');
       const truthsetPaneFilters = resolvePaneFilters(uiConfig, 'truthset');
       const rendererRules = compileRendererRules(uiConfig);
 
-      if (ingestPaneFilters.length !== 1) {
-        throw new Error(`expected exactly one gandalf paneRules rule, found ${ingestPaneFilters.length}`);
+      if (gandalfPaneFilters.length !== 1) {
+        throw new Error(`expected exactly one gandalf paneRules rule, found ${gandalfPaneFilters.length}`);
       }
       if (truthsetPaneFilters.length !== 1) {
         throw new Error(`expected exactly one truthset paneRules rule, found ${truthsetPaneFilters.length}`);
       }
-      if (ingestPaneFilters[0](ingestCardState) !== true || ingestPaneFilters[0](truthsetCardState) !== false) {
+      if (gandalfPaneFilters[0](strategistCardState) !== true || gandalfPaneFilters[0](truthsetCardState) !== false) {
         throw new Error('paneRules gandalf rule did not match the expected card states');
       }
-      if (truthsetPaneFilters[0](truthsetCardState) !== true || truthsetPaneFilters[0](ingestCardState) !== false) {
+      if (truthsetPaneFilters[0](truthsetCardState) !== true || truthsetPaneFilters[0](strategistCardState) !== false) {
         throw new Error('paneRules truthset rule did not match the expected card states');
       }
 
+      const strategistRenderer = resolveCardRenderer(strategistCardState, rendererRules);
       const ingestRenderer = resolveCardRenderer(ingestCardState, rendererRules);
+      const postboxRenderer = resolveCardRenderer(postboxCardState, rendererRules);
       const plainRenderer = resolveCardRenderer(plainCardState, rendererRules);
 
+      if (strategistRenderer !== 'strategist') {
+        throw new Error(`expected strategist renderer, found ${strategistRenderer}`);
+      }
       if (ingestRenderer !== 'ingest') {
         throw new Error(`expected ingest renderer, found ${ingestRenderer}`);
+      }
+      if (postboxRenderer !== 'postbox') {
+        throw new Error(`expected postbox renderer, found ${postboxRenderer}`);
       }
       if (plainRenderer !== 'default') {
         throw new Error(`expected default renderer fallback, found ${plainRenderer}`);

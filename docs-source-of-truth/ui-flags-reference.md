@@ -47,7 +47,7 @@ board template. Each links to its detailed section below.
 
 | Flag | Read in | Purpose |
 | --- | --- | --- |
-| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `BoardCanvas.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
+| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `PostboxCard.jsx`, `StrategistCard.jsx`, `BoardCanvas.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
 | `meta.presentation.prominence` | `boardCanvasLayout.js` | Ordering weight (§1). |
 | `meta.presentation.footprint` | `boardCanvasLayout.js` | Card width (§1). |
 | `meta.presentation.resizable` | `CardShell.jsx` | Whether the user may resize at runtime (§1). |
@@ -198,16 +198,17 @@ rule wins; unmatched cards fall back to `default`.
 | Renderer name | Component | What it renders |
 | --- | --- | --- |
 | `default` | `CardShell` | Standard card: header (title, status, actions) + the `view` body (§5). This is the fallback. |
-| `ingest` | `IngestCard` | A chat-only card — title header plus a compact `GandalfChatPane`; **no** `view` body. Used for conversational / ingest-style cards. |
+| `ingest` | `IngestCard` | The current Evidence Intake / Gandalf-style chat card — title header plus a compact `GandalfChatPane`; **no** `view` body. |
+| `postbox` | `PostboxCard` | A chat-only card — title header plus a compact `GandalfChatPane`; **no** `view` body. Used for conversational / ingest-style cards. |
+| `strategist` | `StrategistCard` | A standard card body with its own shell implementation; keeps title/status/refresh but hides the header chat and inspect buttons. |
 
 ### Example match rules (illustrative only — NOT the contract)
 
 The built-in defaults in
 [src/lib/cardPresentationConfig.js](src/lib/cardPresentationConfig.js) happen to
-key off `meta.*` booleans, but a different board/template can use entirely
-different conditions (e.g. one template's "ingest" rule may be
-`meta.ingest = true`, another's `meta.louis = true`). Treat the following as
-sample wiring, not as flags you can rely on:
+key off `meta.card_renderer`, but a different board/template can use entirely
+different conditions. Treat the following as sample wiring, not as flags you
+can rely on:
 
 ```text
 # example pane rules
@@ -215,7 +216,9 @@ gandalf   when  meta.gandalf = true
 truthset  when  meta.truthset = true
 
 # example renderer rules (top-down, first match wins)
-ingest    when  meta.ingest = true or meta.gandalf = true
+strategist   when  meta.card_renderer = 'strategist'
+ingest   when  meta.card_renderer = 'ingest'
+postbox   when  meta.card_renderer = 'postbox'
 default   (fallback)
 ```
 

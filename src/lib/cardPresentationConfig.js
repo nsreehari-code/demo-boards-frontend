@@ -6,7 +6,9 @@ export const DEFAULT_PANE_RULES = [
 ];
 
 export const DEFAULT_CARD_RENDERER_RULES = [
-  { renderer: 'ingest', when: 'meta.ingest = true or meta.gandalf = true' },
+  { renderer: 'strategist', when: 'meta.card_renderer = "strategist"' },
+  { renderer: 'ingest', when: 'meta.card_renderer = "ingest"' },
+  { renderer: 'postbox', when: 'meta.card_renderer = "postbox"' },
 ];
 
 function isPlainObject(value) {

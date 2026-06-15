@@ -38,18 +38,13 @@ function resolveLayoutStrategy(layoutStrategy) {
 function GandalfPaneNav({ cards, idx, onPrev, onNext }) {
   const card = cards[idx];
   const title = card?.meta?.title ?? card?.id ?? '—';
-  const phase = card?.card_data?.phase ?? 'active';
   const total = cards.length;
-  const phaseTone = phase === 'done' ? 'board-tone--done' : 'board-tone--active';
 
   return (
     <div className="board-ingest-nav">
       <div className="min-w-0 flex-grow-1">
         <div className="board-ingest-nav__title text-truncate">{title}</div>
       </div>
-      <span className={`board-phase-pill ${phaseTone}`}>
-        {phase}
-      </span>
       <button
         type="button"
         className="board-icon-button"
