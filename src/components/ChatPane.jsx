@@ -68,13 +68,6 @@ function mergeMessageArrays(existingMessages, incomingMessages) {
   return mergeLiveMessages(seeded, incomingMessages).map((entry) => entry.msg);
 }
 
-function buildDisplayMessageEntries(historyMessages, liveMessages) {
-  return [
-    ...(Array.isArray(historyMessages) ? historyMessages : []).map((msg) => ({ msg, isHistory: true })),
-    ...(Array.isArray(liveMessages) ? liveMessages : []).map((msg) => ({ msg, isHistory: false })),
-  ];
-}
-
 function getMessageTurnId(msg) {
   return typeof msg?.turn === 'string' ? msg.turn.trim() : '';
 }
@@ -347,7 +340,6 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
   }
   const isUser = role === 'user';
   const showFooter = isOverflowing || expanded;
-  const turnId = typeof msg?.turn === 'string' ? msg.turn.trim() : '';
   return (
     <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
       <div
@@ -374,18 +366,6 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
             ))}
           </div>
         </div>
-        {isUser && turnId ? (
-          <div
-            className="mt-1"
-            style={{
-              fontSize: '0.68rem',
-              color: 'rgba(0, 0, 0, 0.5)',
-              textAlign: 'right',
-            }}
-          >
-            {isHistory ? `${turnId} (h)` : turnId}
-          </div>
-        ) : null}
         {showFooter ? (
           <button
             type="button"
@@ -444,13 +424,18 @@ const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
   && prev.isHistory === next.isHistory
 ));
 
-const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId, openMsgId, onToggleExpand }) {
+const MessageList = React.memo(function MessageList({ messages, compact, boardId, cardId, openMsgId, onToggleExpand, idPrefix = 'm' }) {
+  const occurrences = new Map();
   return (
     <>
-      {messages.map((entry, i) => {
-        const msgId = String(i);
+      {messages.map((entry) => {
         const msg = entry?.msg ?? entry;
         const isHistory = entry?.isHistory === true;
+        const turn = getMessageTurnId(msg) || 'noturn';
+        const base = `${idPrefix}:${turn}:${msg?.role ?? ''}`;
+        const occurrence = occurrences.get(base) ?? 0;
+        occurrences.set(base, occurrence + 1);
+        const msgId = `${base}:${occurrence}`;
         return (
           <ChatBubble
             key={msgId}
@@ -481,6 +466,85 @@ function ChatTurnHistoryButton({ loading, disabled, onClick }) {
         {loading ? 'Loading previous messages…' : 'Show previous messages'}
       </button>
     </div>
+  );
+}
+
+// Self-contained history surface. It owns its own backward-paged source built
+// strictly from messages BEFORE `beforeTurnId` (the chat pane's mount-time
+// anchor turn, which never changes for the life of the pane). Because the live
+// ChatPane only renders the anchor turn and everything after it, history and
+// live can never collide on the same turn.
+function ChatHistoryPane({ boardId, cardId, beforeTurnId, compact, openMsgId, onToggleExpand }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [cursorTurnId, setCursorTurnId] = useState(beforeTurnId);
+  const didInitialFetchRef = useRef(false);
+
+  const loadBefore = useCallback(async (turnId) => {
+    if (!boardId || !cardId || !turnId) return;
+    setLoading(true);
+    try {
+      const older = await fetchChatHistoryBeforeTurn(boardId, cardId, turnId, HISTORY_TURNS_PER_PAGE);
+      if (older.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      setHistory((prev) => mergeMessageArrays(older, prev));
+      const nextCursorTurnId = getFirstTurnId(older);
+      if (!nextCursorTurnId || nextCursorTurnId === turnId) {
+        setHasMore(false);
+        return;
+      }
+      setCursorTurnId(nextCursorTurnId);
+      setHasMore(countDistinctTurns(older) >= HISTORY_TURNS_PER_PAGE);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [boardId, cardId]);
+
+  // Exactly one automatic fetch on mount, anchored at the immutable turn id.
+  useEffect(() => {
+    if (didInitialFetchRef.current || !beforeTurnId) return;
+    didInitialFetchRef.current = true;
+    void loadBefore(beforeTurnId);
+  }, [beforeTurnId, loadBefore]);
+
+  const handleLoadPrevious = useCallback(() => {
+    if (loading) return;
+    void loadBefore(cursorTurnId);
+  }, [loading, cursorTurnId, loadBefore]);
+
+  const historyEntries = useMemo(
+    () => history.map((msg) => ({ msg, isHistory: true })),
+    [history],
+  );
+
+  if (history.length === 0 && !hasMore) {
+    return null;
+  }
+
+  return (
+    <>
+      {hasMore ? (
+        <ChatTurnHistoryButton
+          loading={loading}
+          disabled={!cursorTurnId || loading}
+          onClick={handleLoadPrevious}
+        />
+      ) : null}
+      <MessageList
+        messages={historyEntries}
+        compact={compact}
+        boardId={boardId}
+        cardId={cardId}
+        openMsgId={openMsgId}
+        onToggleExpand={onToggleExpand}
+        idPrefix="history"
+      />
+    </>
   );
 }
 
@@ -742,12 +806,8 @@ function ChatPaneBase({
   const scrollFrameRef = useRef(null);
   const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
   const [openMsgId, setOpenMsgId] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [liveMessages, setLiveMessages] = useState([]);
   const [historyAnchorTurnId, setHistoryAnchorTurnId] = useState('');
-  const [historyCursorTurnId, setHistoryCursorTurnId] = useState('');
   const liveKeyRef = useRef('');
   const handleToggleExpand = useCallback((msgId) => {
     setOpenMsgId((prev) => (prev === msgId ? null : msgId));
@@ -774,10 +834,8 @@ function ChatPaneBase({
   );
 
   const displayMessages = useMemo(
-    () => (historyEnabled && history.length > 0
-      ? buildDisplayMessageEntries(history, liveForDisplay)
-      : liveForDisplay.map((msg) => ({ msg, isHistory: false }))),
-    [historyEnabled, history, liveForDisplay],
+    () => liveForDisplay.map((msg) => ({ msg, isHistory: false })),
+    [liveForDisplay],
   );
 
   const firstLiveTurnId = useMemo(
@@ -785,38 +843,15 @@ function ChatPaneBase({
     [liveForDisplay],
   );
 
+  // Lock the history/live boundary once: the first turn id the live stream
+  // shows becomes the immutable anchor. History is everything strictly before
+  // it; the live forward stream owns this turn and everything after.
   useEffect(() => {
     if (!historyEnabled || historyAnchorTurnId || !firstLiveTurnId) {
       return;
     }
     setHistoryAnchorTurnId(firstLiveTurnId);
-    setHistoryCursorTurnId(firstLiveTurnId);
-    setHasMoreHistory(true);
   }, [historyEnabled, historyAnchorTurnId, firstLiveTurnId]);
-
-  const handleLoadPrevious = useCallback(async () => {
-    if (!boardId || !cardId || historyLoading || !historyCursorTurnId) return;
-    setHistoryLoading(true);
-    try {
-      const older = await fetchChatHistoryBeforeTurn(boardId, cardId, historyCursorTurnId, HISTORY_TURNS_PER_PAGE);
-      if (older.length === 0) {
-        setHasMoreHistory(false);
-        return;
-      }
-      setHistory((prev) => mergeMessageArrays(older, prev));
-      const nextCursorTurnId = getFirstTurnId(older);
-      if (!nextCursorTurnId || nextCursorTurnId === historyCursorTurnId) {
-        setHasMoreHistory(false);
-        return;
-      }
-      setHistoryCursorTurnId(nextCursorTurnId);
-      setHasMoreHistory(countDistinctTurns(older) >= HISTORY_TURNS_PER_PAGE);
-    } catch {
-      setHasMoreHistory(false);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [boardId, cardId, historyLoading, historyCursorTurnId]);
 
   const scrollToBottom = (behavior = 'auto') => {
     const element = messagesRef.current;
@@ -878,18 +913,6 @@ function ChatPaneBase({
     element.addEventListener('scroll', updateStickyState, { passive: true });
     return () => element.removeEventListener('scroll', updateStickyState);
   }, []);
-
-  useEffect(() => {
-    initialScrollDoneRef.current = false;
-    shouldStickToBottomRef.current = true;
-    setHistory([]);
-    setHasMoreHistory(true);
-    setHistoryLoading(false);
-    setLiveMessages([]);
-    setHistoryAnchorTurnId('');
-    setHistoryCursorTurnId('');
-    liveKeyRef.current = '';
-  }, [boardId, cardId]);
 
   useEffect(() => {
     if (initialScrollDoneRef.current) {
@@ -955,11 +978,14 @@ function ChatPaneBase({
         ref={messagesRef}
         className="board-chat-pane__messages p-2"
       >
-        {historyEnabled && historyAnchorTurnId && hasMoreHistory ? (
-          <ChatTurnHistoryButton
-            loading={historyLoading}
-            disabled={!historyCursorTurnId}
-            onClick={handleLoadPrevious}
+        {historyEnabled && historyAnchorTurnId ? (
+          <ChatHistoryPane
+            boardId={boardId}
+            cardId={cardId}
+            beforeTurnId={historyAnchorTurnId}
+            compact={compact}
+            openMsgId={openMsgId}
+            onToggleExpand={handleToggleExpand}
           />
         ) : null}
         <MessageList
@@ -969,6 +995,7 @@ function ChatPaneBase({
           cardId={cardId}
           openMsgId={openMsgId}
           onToggleExpand={handleToggleExpand}
+          idPrefix="live"
         />
         {processing && (
           <WorkingBubble
