@@ -2267,7 +2267,7 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     log(`final assistant reply: ${String(finalAssistant.text || '')}`);
   }, [appendLog, callAction, callControlplane, callMcp, pollChatMessages, pollChatProcessing, readChatMessages, subscribeCardChats, waitForCardStateData, waitForStageAiResponseWatchParty]);
 
-  const runHostedAssistantCasesInParallel = useCallback(async () => {
+  const runHostedAssistantCasesInParallel = useCallback(async ({ onCasePassed, onCaseFailed } = {}) => {
     const hostedConfigs = [
       {
         caseId: 'T8',
@@ -2310,9 +2310,32 @@ export function SmokeRunner({ serverOrigin, onClose }) {
     appendLog('', `Hosted chat smoke tests: running ${hostedConfigs.map((config) => config.caseId).join(', ')} in parallel on shared reduced state`);
     await reopenBoardSse();
     await waitForSseSummary('Hosted shared SSE summary', 15_000);
-    await Promise.all(hostedConfigs.map((config) => runHostedAssistantSmoke(config)));
+    // Settle every case (so each reports its own pass/fail as it completes) instead of
+    // short-circuiting on the first rejection. Per-case status is attributed by caseId
+    // via the callbacks rather than by parsing the aggregate error message.
+    const settled = await Promise.allSettled(hostedConfigs.map(async (config) => {
+      try {
+        await runHostedAssistantSmoke(config);
+        if (typeof onCasePassed === 'function') {
+          onCasePassed(config.caseId);
+        }
+      } catch (error) {
+        if (typeof onCaseFailed === 'function') {
+          onCaseFailed(config.caseId, error);
+        }
+        throw error;
+      }
+    }));
     for (const config of hostedConfigs) {
       await unsubscribeCardChats(config.cardId);
+    }
+    const failures = settled.filter((result) => result.status === 'rejected').map((result) => result.reason);
+    const cancelled = failures.find((error) => error?.code === 'CANCELLED');
+    if (cancelled) {
+      throw cancelled;
+    }
+    if (failures.length > 0) {
+      throw failures[0];
     }
   }, [appendLog, reopenBoardSse, runHostedAssistantSmoke, selectedSmokeCases, unsubscribeCardChats, waitForSseSummary]);
 
@@ -2411,30 +2434,36 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             markCase(parallelEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
             appendLog(parallelEntry.id, `Starting ${parallelEntry.id}: ${parallelEntry.title}`);
           }
-          try {
-            await Promise.all(parallelEntries.map((parallelEntry) => runCase(parallelEntry.id)));
-            const finishedAtValue = Date.now();
-            for (const parallelEntry of parallelEntries) {
-              markCase(parallelEntry.id, { status: 'passed', finishedAt: finishedAtValue, comparison: null });
+          // Run each case concurrently but settle (and reflect status) per case as it
+          // finishes, so a case that completes early is shown passed/failed immediately
+          // instead of staying "running" until the slowest sibling settles.
+          const parallelSettled = await Promise.allSettled(parallelEntries.map(async (parallelEntry) => {
+            try {
+              await runCase(parallelEntry.id);
+              markCase(parallelEntry.id, { status: 'passed', finishedAt: Date.now(), comparison: null });
               appendLog(parallelEntry.id, `${parallelEntry.id} passed`, 'success');
-            }
-          } catch (error) {
-            if (error?.code === 'CANCELLED') {
+            } catch (error) {
+              if (error?.code === 'CANCELLED') {
+                throw error;
+              }
+              const message = error instanceof Error ? error.message : String(error);
+              markCase(parallelEntry.id, {
+                status: 'failed',
+                finishedAt: Date.now(),
+                detail: message,
+                comparison: readSmokeComparison(error),
+              });
+              appendLog(parallelEntry.id, message, 'error');
               throw error;
             }
-            const message = error instanceof Error ? error.message : String(error);
-            const failedCaseId = parallelEntries.find((parallelEntry) => message.includes(parallelEntry.id))?.id || entry.id;
-            const finishedAtValue = Date.now();
-            for (const parallelEntry of parallelEntries) {
-              markCase(parallelEntry.id, {
-                status: parallelEntry.id === failedCaseId ? 'failed' : 'pending',
-                finishedAt: finishedAtValue,
-                detail: parallelEntry.id === failedCaseId ? message : 'Skipped after parallel group failure.',
-                comparison: parallelEntry.id === failedCaseId ? readSmokeComparison(error) : null,
-              });
-            }
-            appendLog(failedCaseId, message, 'error');
-            throw error;
+          }));
+          const parallelFailures = parallelSettled.filter((result) => result.status === 'rejected').map((result) => result.reason);
+          const parallelCancelled = parallelFailures.find((error) => error?.code === 'CANCELLED');
+          if (parallelCancelled) {
+            throw parallelCancelled;
+          }
+          if (parallelFailures.length > 0) {
+            throw parallelFailures[0];
           }
           continue;
         }
@@ -2450,31 +2479,28 @@ export function SmokeRunner({ serverOrigin, onClose }) {
             markCase(hostedEntry.id, { status: 'running', startedAt: startedAtValue, finishedAt: 0, detail: 'Running in parallel…', comparison: null });
             appendLog(hostedEntry.id, `Starting ${hostedEntry.id}: ${hostedEntry.title}`);
           }
-          try {
-            await runHostedAssistantCasesInParallel();
-            const finishedAtValue = Date.now();
-            for (const hostedEntry of hostedEntries) {
-              markCase(hostedEntry.id, { status: 'passed', finishedAt: finishedAtValue, comparison: null });
-              appendLog(hostedEntry.id, `${hostedEntry.id} passed`, 'success');
-            }
-          } catch (error) {
-            if (error?.code === 'CANCELLED') {
-              throw error;
-            }
-            const message = error instanceof Error ? error.message : String(error);
-            const failedCaseId = hostedEntries.find((hostedEntry) => message.includes(hostedEntry.id))?.id || entry.id;
-            const finishedAtValue = Date.now();
-            for (const hostedEntry of hostedEntries) {
-              markCase(hostedEntry.id, {
-                status: hostedEntry.id === failedCaseId ? 'failed' : 'pending',
-                finishedAt: finishedAtValue,
-                detail: hostedEntry.id === failedCaseId ? message : 'Skipped after parallel group failure.',
-                comparison: hostedEntry.id === failedCaseId ? readSmokeComparison(error) : null,
+          // Reflect each hosted case's outcome the moment it settles (attributed by
+          // caseId, not by substring-matching the error message) so an early finisher
+          // is not stuck "running" and a sibling's failure is not misattributed.
+          await runHostedAssistantCasesInParallel({
+            onCasePassed: (caseId) => {
+              markCase(caseId, { status: 'passed', finishedAt: Date.now(), comparison: null });
+              appendLog(caseId, `${caseId} passed`, 'success');
+            },
+            onCaseFailed: (caseId, error) => {
+              if (error?.code === 'CANCELLED') {
+                return;
+              }
+              const message = error instanceof Error ? error.message : String(error);
+              markCase(caseId, {
+                status: 'failed',
+                finishedAt: Date.now(),
+                detail: message,
+                comparison: readSmokeComparison(error),
               });
-            }
-            appendLog(failedCaseId, message, 'error');
-            throw error;
-          }
+              appendLog(caseId, message, 'error');
+            },
+          });
           continue;
         }
 
