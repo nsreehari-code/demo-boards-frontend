@@ -57,24 +57,16 @@ function normalizeStorageConfig(config, legacyInBrowserFirestore) {
     ? legacyInBrowserFirestore
     : null;
 
-  // Pick adapter explicitly, otherwise infer firestore when legacy config is present.
-  const adapter = normalizeStorageAdapter(
-    source.adapter ?? (legacy ? STORAGE_ADAPTER_FIRESTORE : STORAGE_ADAPTER_FIRESTORE),
-  );
+  const adapter = normalizeStorageAdapter(source.adapter);
 
   const firestoreSource = source.firestore ?? legacy ?? {};
   const localstorageSource = source.localstorage ?? {};
 
-  const seedCardsUrl = typeof source.seedCardsUrl === 'string' && source.seedCardsUrl.trim()
-    ? source.seedCardsUrl.trim()
-    : (typeof legacy?.seedCardsUrl === 'string' && legacy.seedCardsUrl.trim()
-      ? legacy.seedCardsUrl.trim()
-      : '');
+  const seedCardsUrl = typeof source.seedCardsUrl === 'string' ? source.seedCardsUrl.trim() : '';
 
   return {
     adapter,
     seedCardsUrl,
-    firestore: normalizeFirestoreStorageConfig(firestoreSource),
     localstorage: normalizeLocalStorageStorageConfig(localstorageSource),
   };
 }
