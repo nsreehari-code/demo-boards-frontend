@@ -9,7 +9,7 @@ import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
 import { useCardChatViews } from '../hooks/useSseSlices.js';
 import { initBoard } from '../lib/client.js';
 import { compileRendererRules, resolveCardRenderer, resolvePaneFilters } from '../lib/cardPresentationConfig.js';
-import { WATCHPARTY_AGENT_TOOL_ACTIONS } from '../../../shared/watchparty-agent-tools.js';
+import { WATCHPARTY_AGENT_TOOL_ACTIONS } from '../lib/watchparty-agent-tools.js';
 
 const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';

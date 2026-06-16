@@ -2,7 +2,7 @@ import {
   parseWatchpartyAgentToolPayloads,
   parseWatchpartyAgentToolPayload,
   WATCHPARTY_AGENT_TOOL_ACTIONS,
-} from '../../../shared/watchparty-agent-tools.js';
+} from './watchparty-agent-tools.js';
 
 function titleCase(text) {
   return String(text || '')
