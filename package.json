@@ -15,6 +15,7 @@
     "test:smokestrategist:headed": "playwright test -c playwright.smokestrategist.config.js smokestrategist-ui.spec.js --headed",
     "test:smokestrategist:fresh": "playwright test -c playwright.smokestrategist.config.js smokestrategist-fresh-ui.spec.js",
     "test:smokestrategist:fresh:headed": "playwright test -c playwright.smokestrategist.config.js smokestrategist-fresh-ui.spec.js --headed",
+    "test:golden": "node --test tests/board-sse-state.golden.test.js",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.mjs"
   },
