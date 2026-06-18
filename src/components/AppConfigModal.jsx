@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  BOARD_TRANSPORT_MODE_INBROWSER,
   BOARD_TRANSPORT_MODE_SERVER_URL,
-  STORAGE_ADAPTER_FIRESTORE,
   STORAGE_ADAPTER_LOCALSTORAGE,
   clearStoredAppConfigOverride,
   getAppConfig,
@@ -454,7 +452,7 @@ function toFormState(config) {
     refreshAllIntervalMinutes: String(Math.max(1, Math.round(Number(config?.refreshAllIntervalSeconds ?? 0) / 60)) || 30),
     transportMode: config?.transportMode ?? BOARD_TRANSPORT_MODE_SERVER_URL,
     serverOrigin: config?.serverOrigin ?? '',
-    storageAdapter: config?.storage?.adapter ?? STORAGE_ADAPTER_FIRESTORE,
+    storageAdapter: config?.storage?.adapter ?? STORAGE_ADAPTER_LOCALSTORAGE,
   };
 }
 
@@ -507,9 +505,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
   const serverOriginHasError = serverUnreachable && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL;
-  const runtimeAlertBadge = formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
-    ? 'Runtime storage init failed'
-    : 'Server unreachable';
+  const runtimeAlertBadge = 'Server unreachable';
   const {
     managedBoards: boardOptions,
     loadingManagedBoards: loadingBoardOptions,
@@ -970,41 +966,9 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                     {runtimeAlertBadge}
                   </span>
                   <span className="board-settings-alert__message">
-                    {serverUnreachableMessage || (formState.transportMode === BOARD_TRANSPORT_MODE_INBROWSER
-                      ? 'The configured runtime storage adapter failed to initialize.'
-                      : 'Configured server origin is unreachable.')}
+                    {serverUnreachableMessage || 'Configured server origin is unreachable.'}
                   </span>
                 </div>
-              ) : null}
-
-              {false ? (
-                <>
-                  <label className="board-settings-field">
-                    <span>Transport mode</span>
-                    <select className="board-input" value={formState.transportMode} onChange={updateField('transportMode')}>
-                      <option value={BOARD_TRANSPORT_MODE_SERVER_URL}>serverUrl</option>
-                      <option value={BOARD_TRANSPORT_MODE_INBROWSER}>inbrowser</option>
-                    </select>
-                  </label>
-
-                  <label className="board-settings-field">
-                    <span>Storage adapter</span>
-                    <select
-                      className="board-input"
-                      value={formState.storageAdapter}
-                      onChange={updateField('storageAdapter')}
-                      disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER}
-                    >
-                      <option value={STORAGE_ADAPTER_FIRESTORE}>firestore</option>
-                      <option value={STORAGE_ADAPTER_LOCALSTORAGE}>localstorage</option>
-                    </select>
-                    {formState.transportMode !== BOARD_TRANSPORT_MODE_INBROWSER ? (
-                      <div className="board-settings-form__hint">
-                        Storage adapter is only used in inbrowser transport mode.
-                      </div>
-                    ) : null}
-                  </label>
-                </>
               ) : null}
 
               <div className="board-settings-io-section">

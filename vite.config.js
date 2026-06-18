@@ -54,8 +54,7 @@ function manualChunks(id) {
   if (id.includes('/node_modules/recharts/')) return 'recharts';
   if (id.includes('/node_modules/@xyflow/react/')) return 'xyflow';
   if (id.includes('/node_modules/react-markdown/') || id.includes('/node_modules/remark-gfm/')) return 'markdown';
-  if (id.includes('/node_modules/firebase/') || id.includes('/node_modules/@firebase/')) return 'firebase';
-  if (id.includes('/yaml-flow/browser/') || id.includes('/src/lib/client-board-host.js')) return 'browser-runtime';
+  if (id.includes('/yaml-flow/browser/')) return 'browser-runtime';
   return undefined;
 }
 

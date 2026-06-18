@@ -259,9 +259,7 @@ export default function App() {
               <p className="mb-0">
                 {usesServerUrlTransport && serverReachability.checking
                   ? 'Checking configured server origin…'
-                  : BOARD_TRANSPORT_MODE === 'inbrowser'
-                    ? 'Connecting to in-browser board runtime…'
-                    : 'Connecting to live board state…'}
+                  : 'Connecting to live board state…'}
               </p>
             </div>
           )

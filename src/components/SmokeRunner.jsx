@@ -439,9 +439,19 @@ const SMOKE_CASES = [
     reason: 'Frontend smoke runner validates reduced state only; raw SSE chronology is covered elsewhere.',
   },
   { id: 'T8', title: 'Hosted assistant chat via copilot probe', mode: 'run' },
-  { id: 'T9', title: 'Hosted assistant chat via foundry probe', mode: 'run' },
+  {
+    id: 'T9',
+    title: 'Hosted assistant chat via foundry probe',
+    mode: 'skip',
+    reason: 'Requires a configured Azure AI Foundry endpoint (foundryAgents.endpoint).',
+  },
   { id: 'T8F', title: 'Hosted assistant attachment chat via copilot probe', mode: 'run' },
-  { id: 'T9F', title: 'Hosted assistant attachment chat via foundry probe', mode: 'run' },
+  {
+    id: 'T9F',
+    title: 'Hosted assistant attachment chat via foundry probe',
+    mode: 'skip',
+    reason: 'Requires a configured Azure AI Foundry endpoint (foundryAgents.endpoint).',
+  },
   { id: 'TR', title: 'Card refresh lifecycle over SSE', mode: 'run' },
 ];
 
