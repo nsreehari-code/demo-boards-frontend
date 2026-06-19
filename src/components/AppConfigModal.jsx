@@ -14,6 +14,7 @@ import { useManageBoards } from '../hooks/useManageBoards.js';
 import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
 import { GlobalModal } from './GlobalModal.jsx';
 import { SmokeRunner } from './SmokeRunner.jsx';
+import { SmokeStrategist } from './SmokeStrategist.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
 const FORWARD_ICON_SVG = (
@@ -503,6 +504,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [addBoardSubmitting, setAddBoardSubmitting] = useState(false);
   const [addBoardError, setAddBoardError] = useState('');
   const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
+  const [smokeStrategistOpen, setSmokeStrategistOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // 'runtime-import' | 'config' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
@@ -841,6 +843,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     ? 'Run the in-app smoke suite against the live-test-frontend board'
     : 'Smoke suite is only available when the selected board id is live-test-frontend';
 
+  const smokeStrategistEnabled = formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
+    && formState.defaultBoardId === 'live-test-journey-frontend';
+  const smokeStrategistTitle = smokeStrategistEnabled
+    ? 'Run the strategist smoke suite against the live-test-journey-frontend board'
+    : 'Strategist smoke suite is only available when the selected board id is live-test-journey-frontend';
+
   return (
     <>
       <button
@@ -961,6 +969,17 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 >
                   <i className="bi bi-flask" aria-hidden="true" />
                   Run Tests
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1"
+                  onClick={() => setSmokeStrategistOpen(true)}
+                  disabled={!smokeStrategistEnabled}
+                  title={smokeStrategistTitle}
+                  data-testid="board-settings-smoke-strategist-button"
+                >
+                  <i className="bi bi-compass" aria-hidden="true" />
+                  Run Strategist
                 </button>
               </div>
               {serverUnreachable ? (
@@ -1181,6 +1200,12 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             <SmokeRunner
               serverOrigin={formState.serverOrigin}
               onClose={() => setSmokeRunnerOpen(false)}
+            />
+          ) : null}
+          {smokeStrategistOpen ? (
+            <SmokeStrategist
+              serverOrigin={formState.serverOrigin}
+              onClose={() => setSmokeStrategistOpen(false)}
             />
           ) : null}
         </div>

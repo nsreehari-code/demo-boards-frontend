@@ -11,6 +11,10 @@
     "test:smoke:headed": "playwright test -c playwright.smokerunner.config.js --headed",
     "test:smokerunner": "playwright test -c playwright.smokerunner.config.js",
     "test:smokerunner:headed": "playwright test -c playwright.smokerunner.config.js --headed",
+    "test:smokestrategist": "playwright test -c playwright.smokestrategist.config.js smokestrategist-ui.spec.js",
+    "test:smokestrategist:headed": "playwright test -c playwright.smokestrategist.config.js smokestrategist-ui.spec.js --headed",
+    "test:smokestrategist:fresh": "playwright test -c playwright.smokestrategist.config.js smokestrategist-fresh-ui.spec.js",
+    "test:smokestrategist:fresh:headed": "playwright test -c playwright.smokestrategist.config.js smokestrategist-fresh-ui.spec.js --headed",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.mjs"
   },
