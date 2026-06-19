@@ -4,27 +4,10 @@
  */
 export { SERVER } from './appConfig.js';
 import { SERVER } from './appConfig.js';
-import {
-  BOARD_TRANSPORT_MODE,
-  BOARD_TRANSPORT_MODE_INBROWSER,
-  STORAGE_CONFIG,
-} from './appConfig.js';
-import { createInBrowserBoardTransport } from './client-board-host.js';
 
 const normalizeOrigin = (serverOrigin = SERVER) => (typeof serverOrigin === 'string'
   ? serverOrigin.trim().replace(/\/+$/, '')
   : '');
-
-/**
- * Build the in-browser storage adapter from the full storage config so the
- * host can mix ref kinds across backends.
- */
-function pickStorageAdapterFactory() {
-  return async (boardId, config, runtimeHooks) => {
-    const mod = await import('./storage-hybrid-adapter.js');
-    return mod.createStorageAdapter(boardId, config, runtimeHooks);
-  };
-}
 
 const base = (boardId) => `${SERVER}/api/boards/${boardId}`;
 
@@ -94,14 +77,7 @@ const createHttpBoardTransport = () => {
   };
 };
 
-const boardTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_INBROWSER
-  ? createInBrowserBoardTransport({
-    createStorageAdapter: pickStorageAdapterFactory(),
-    storageConfig: STORAGE_CONFIG,
-    seedCardsUrl: STORAGE_CONFIG.seedCardsUrl,
-    transportName: `inbrowser+${STORAGE_CONFIG.adapter}`,
-  })
-  : createHttpBoardTransport();
+const boardTransport = createHttpBoardTransport();
 
 async function postControlfaceMcpExtras(serverOrigin, tool, args = {}) {
   const normalizedOrigin = normalizeOrigin(serverOrigin);

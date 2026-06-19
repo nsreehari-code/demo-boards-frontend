@@ -13,33 +13,11 @@ const DEFAULT_CANVAS_LAYOUT_CONFIG = Object.freeze({
 import { normalizeBoardRefsConfig } from './board-refs.js';
 
 export const BOARD_TRANSPORT_MODE_SERVER_URL = 'server-url';
-export const BOARD_TRANSPORT_MODE_INBROWSER = 'inbrowser';
-// Back-compat alias: 'inbrowser-firestore' now means 'inbrowser' with the
-// firestore storage adapter; kept exported for older callers.
-export const BOARD_TRANSPORT_MODE_INBROWSER_FIRESTORE = BOARD_TRANSPORT_MODE_INBROWSER;
 
-export const STORAGE_ADAPTER_FIRESTORE = 'firestore';
 export const STORAGE_ADAPTER_LOCALSTORAGE = 'localstorage';
 
-function normalizeStorageAdapter(adapter) {
-  const raw = typeof adapter === 'string' ? adapter.trim().toLowerCase() : '';
-  if (raw === STORAGE_ADAPTER_LOCALSTORAGE) return STORAGE_ADAPTER_LOCALSTORAGE;
-  return STORAGE_ADAPTER_FIRESTORE;
-}
-
-function normalizeFirestoreStorageConfig(config) {
-  const source = config && typeof config === 'object' ? config : {};
-  const firebaseConfig = source.firebaseConfig && typeof source.firebaseConfig === 'object'
-    ? { ...source.firebaseConfig }
-    : {};
-  const appName = typeof source.appName === 'string' && source.appName.trim()
-    ? source.appName.trim()
-    : '';
-  return {
-    firebaseConfig,
-    appName,
-    refs: normalizeBoardRefsConfig(source.refs),
-  };
+function normalizeStorageAdapter() {
+  return STORAGE_ADAPTER_LOCALSTORAGE;
 }
 
 function normalizeLocalStorageStorageConfig(config) {
@@ -51,15 +29,11 @@ function normalizeLocalStorageStorageConfig(config) {
   };
 }
 
-function normalizeStorageConfig(config, legacyInBrowserFirestore) {
+function normalizeStorageConfig(config) {
   const source = config && typeof config === 'object' ? config : {};
-  const legacy = legacyInBrowserFirestore && typeof legacyInBrowserFirestore === 'object'
-    ? legacyInBrowserFirestore
-    : null;
 
   const adapter = normalizeStorageAdapter(source.adapter);
 
-  const firestoreSource = source.firestore ?? legacy ?? {};
   const localstorageSource = source.localstorage ?? {};
 
   const seedCardsUrl = typeof source.seedCardsUrl === 'string' ? source.seedCardsUrl.trim() : '';
@@ -85,9 +59,8 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   transportMode: BOARD_TRANSPORT_MODE_SERVER_URL,
   serverOrigin: 'http://localhost:7799',
   storage: {
-    adapter: STORAGE_ADAPTER_FIRESTORE,
+    adapter: STORAGE_ADAPTER_LOCALSTORAGE,
     seedCardsUrl: '',
-    firestore: { firebaseConfig: {}, appName: '', refs: {} },
     localstorage: { refs: {} },
   },
   boardServerConstants: {
@@ -98,15 +71,6 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
 
 function normalizeTransportMode(transportMode) {
   const raw = typeof transportMode === 'string' ? transportMode.trim().toLowerCase() : '';
-  if (
-    raw === 'inbrowser'
-    || raw === 'in-browser'
-    || raw === 'inbrowser+firestore'
-    || raw === 'inbrowser-firestore'
-    || raw === 'inbrowser_firestore'
-  ) {
-    return BOARD_TRANSPORT_MODE_INBROWSER;
-  }
   if (raw === 'serverurl' || raw === 'server-url' || raw === 'server_url') {
     return BOARD_TRANSPORT_MODE_SERVER_URL;
   }
@@ -200,7 +164,7 @@ function normalizeAppConfig(config) {
     canvasLayout: normalizeCanvasLayoutConfig(config?.canvasLayout),
     transportMode: normalizeTransportMode(config?.transportMode),
     serverOrigin: normalizeServerOrigin(config?.serverOrigin),
-    storage: normalizeStorageConfig(config?.storage, config?.inBrowserFirestore),
+    storage: normalizeStorageConfig(config?.storage),
     boardServerConstants: normalizeBoardServerConstants(config?.boardServerConstants),
   };
 }
