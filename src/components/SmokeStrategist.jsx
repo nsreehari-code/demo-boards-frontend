@@ -20,7 +20,7 @@ import { initBoard, refreshCard, removeRuntimeCard, upsertRuntimeCard } from '..
 const STRATEGIST_BOARD_ID = 'live-test-journey-frontend';
 const STRATEGIST_CARD_ID = 'journey-strategist';
 const SEED_CARD_ID = 'card-journey-seed';
-const ADMIN_CARD_IDS = new Set(['gandalf-intake', 'journey-strategist']);
+const ADMIN_CARD_IDS = new Set(['gandalf-intake', 'journey-strategist', 'card-journey-observatory']);
 
 const STATUS_VALUES = ['advancing', 'waiting', 'aligned'];
 const MOVE_VALUES = ['deepen', 'broaden', 'clarify', 'decide', 'reconcile', 'hold'];
