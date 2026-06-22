@@ -357,7 +357,7 @@ function FlattenedFilesView({ files }) {
   );
 }
 
-function PostboxCardComponent({ boardId, cardId }) {
+function PostboxCardComponent({ boardId, cardId, variant = 'standard' }) {
   const cardState = useCardState(boardId, cardId);
   const filesUploaded = useCardStateFilesData(boardId, cardId);
   const chat = useChatState(boardId, cardId);
@@ -486,7 +486,8 @@ function PostboxCardComponent({ boardId, cardId }) {
     element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
   }, [submissions.length, viewMode]);
 
-  const canSubmit = selectedFiles.length > 0 && !submitting;
+  const allowMessageOnly = variant === 'universal';
+  const canSubmit = (selectedFiles.length > 0 || (allowMessageOnly && commentText.trim().length > 0)) && !submitting;
 
   const addFiles = useCallback((incomingFiles) => {
     const nextFiles = Array.from(incomingFiles || []).filter(Boolean);
@@ -623,7 +624,9 @@ function PostboxCardComponent({ boardId, cardId }) {
 
             {submissions.length === 0 ? (
               <div className="h-100 d-flex align-items-center justify-content-center text-center text-muted small px-4">
-                Drag files anywhere in this pane or use the composer below to submit the first evidence bundle.
+                {allowMessageOnly
+                  ? 'Write a message or drop files using the composer below to get started.'
+                  : 'Drag files anywhere in this pane or use the composer below to submit the first evidence bundle.'}
               </div>
             ) : (
               <div className="d-flex flex-column gap-3">
@@ -704,7 +707,7 @@ function PostboxCardComponent({ boardId, cardId }) {
             type="text"
             className="form-control form-control-sm"
             value={commentText}
-            placeholder="Add comment (optional)"
+            placeholder={allowMessageOnly ? 'Write a message, attach files, or both' : 'Add comment (optional)'}
             onChange={(event) => setCommentText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && canSubmit) {
@@ -719,7 +722,9 @@ function PostboxCardComponent({ boardId, cardId }) {
             onClick={() => void handleSubmit()}
             disabled={!canSubmit}
           >
-            {submitting ? 'Uploading…' : 'Upload'}
+            {submitting
+              ? (allowMessageOnly ? 'Sending…' : 'Uploading…')
+              : (allowMessageOnly ? 'Send' : 'Upload')}
           </button>
         </div>
       </div>
@@ -728,3 +733,5 @@ function PostboxCardComponent({ boardId, cardId }) {
 }
 
 export const PostboxCard = memo(PostboxCardComponent);
+
+export const UniversalPostboxCard = (props) => <PostboxCard {...props} variant="universal" />;
