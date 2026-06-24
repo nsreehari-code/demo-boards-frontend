@@ -1659,101 +1659,9 @@ a {
   background: linear-gradient(180deg, rgba(219, 230, 239, 0.98), rgba(196, 210, 223, 0.98));
 }
 
-.board-settings-toggle {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  width: 3rem;
-  height: 3rem;
-  z-index: 1200;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(18, 29, 47, 0.98), rgba(13, 22, 37, 0.98));
-  color: var(--color-accent-strong);
-  box-shadow: 0 18px 34px rgba(62, 86, 112, 0.24);
-  opacity: 0.75;
-}
-
-.board-app-shell[data-theme='mist-ops'] .board-settings-toggle {
-  background: linear-gradient(180deg, rgba(208, 220, 231, 0.99), rgba(186, 201, 215, 0.99));
-  border-color: rgba(64, 96, 131, 0.34);
-}
-
-.board-settings-toggle:hover,
-.board-settings-toggle:focus-visible {
-  opacity: 0.85;
-  color: #f4fbff;
-  border-color: rgba(125, 199, 255, 0.44);
-  background: linear-gradient(180deg, rgba(27, 40, 64, 0.98), rgba(16, 28, 46, 0.98));
-}
-
-.board-app-shell[data-theme='mist-ops'] .board-settings-toggle:hover,
-.board-app-shell[data-theme='mist-ops'] .board-settings-toggle:focus-visible {
-  color: var(--color-accent-strong);
-  background: linear-gradient(180deg, rgba(219, 230, 239, 0.98), rgba(196, 210, 223, 0.98));
-}
-
-.board-settings-toggle--open {
-  z-index: 1220;
-  opacity: 0.95;
-}
-
-.board-settings-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 1210;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 1rem 1rem 5rem;
-}
-
-.board-settings-backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(8, 15, 24, 0.44);
-}
-
-.board-settings-modal {
-  position: relative;
-  margin-left: auto;
-  margin-right: 4rem;
-  width: min(28rem, calc(100vw - 6rem));
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-color: rgba(59, 91, 126, 0.18);
-  box-shadow: 0 26px 58px rgba(73, 97, 123, 0.28), 0 4px 14px rgba(73, 97, 123, 0.12);
-  color: var(--color-text);
-}
-
-.board-app-shell[data-theme='mist-ops'] .board-settings-modal {
-  border-color: rgba(64, 96, 131, 0.24);
-  background: linear-gradient(180deg, rgba(226, 234, 241, 0.995), rgba(214, 223, 232, 0.995));
-}
-
-.board-settings-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.9rem 1rem 0.8rem;
-  border-bottom: 1px solid rgba(15, 27, 43, 0.72);
-  background: linear-gradient(180deg, rgba(27, 43, 67, 0.98), rgba(18, 30, 48, 0.95));
-  color: rgba(244, 248, 252, 0.96);
-}
-
 .board-settings-modal__header-content {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.board-app-shell[data-theme='mist-ops'] .board-settings-modal__header {
-  border-bottom: 1px solid rgba(20, 34, 51, 0.62);
-  background: linear-gradient(180deg, rgba(58, 78, 103, 0.98), rgba(40, 58, 80, 0.95));
-  color: rgba(246, 249, 252, 0.96);
 }
 
 .board-settings-modal__eyebrow {
@@ -1762,21 +1670,6 @@ a {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-}
-
-.board-settings-modal__title {
-  margin: 0.2rem 0 0;
-  color: var(--color-text);
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.board-settings-modal__close {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  margin-left: auto;
-  flex: 0 0 auto;
 }
 
 .board-settings-form {
@@ -1976,27 +1869,6 @@ a {
   width: 100%;
 }
 
-/* Normalize control heights across the settings modal */
-.board-settings-modal {
-  --board-control-height: calc(1.5em + 0.75rem + 2px);
-}
-
-.board-settings-modal .board-input,
-.board-settings-modal select.board-input,
-.board-settings-modal .board-settings-field > input,
-.board-settings-modal .board-button {
-  height: var(--board-control-height);
-  min-height: var(--board-control-height);
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.board-settings-modal .board-settings-field > input,
-.board-settings-modal .board-input {
-  padding-left: 0.8rem;
-  padding-right: 0.8rem;
-}
-
 .board-settings-board-select {
   flex: 1 1 auto;
   width: 100%;
@@ -2065,18 +1937,6 @@ a {
   background: linear-gradient(180deg, rgba(161, 214, 255, 0.98), rgba(105, 170, 238, 0.96));
   border-color: rgba(208, 235, 255, 0.72);
   color: #0a1727;
-}
-
-.board-settings-modal .board-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.board-settings-modal .board-button--icon {
-  width: var(--board-control-height);
-  min-width: var(--board-control-height);
-  padding: 0;
 }
 
 .board-settings-io-section {

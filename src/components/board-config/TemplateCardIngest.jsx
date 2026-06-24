@@ -1,4 +1,6 @@
 import React from 'react';
+import { BoardConfigButton } from './BoardConfigButton.jsx';
+import { SelectControl } from '../shared/Select.jsx';
 
 export function TemplateCardIngest({
   entries = [],
@@ -18,31 +20,24 @@ export function TemplateCardIngest({
       <div className="board-settings-io-card__title">Template Card Ingest</div>
 
       <div className="d-flex align-items-center gap-2 flex-wrap">
-        <select
+        <SelectControl
           className="board-input board-settings-sample-select"
           value={selectedKey}
-          onChange={(event) => onSelect?.(event.target.value)}
+          options={hasEntries ? entries.map((entry) => ({ value: entry.key, label: entry.label })) : []}
+          allowEmpty={!hasEntries}
+          emptyLabel={loading ? 'Loading seed boards…' : 'No seed boards available'}
           disabled={loading || ingesting || preparing || !hasEntries}
+          ariaLabel="Select a bundled sample board file"
           title={errorMessage || 'Select a bundled sample board file'}
-        >
-          {!hasEntries ? (
-            <option value="">{loading ? 'Loading seed boards…' : 'No seed boards available'}</option>
-          ) : null}
-          {entries.map((entry) => (
-            <option key={entry.key} value={entry.key}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="btn btn-outline-secondary board-button"
+          onChange={(next) => onSelect?.(next)}
+        />
+        <BoardConfigButton
           onClick={onIngest}
           disabled={ingesting || preparing || disabled || !selectedKey || loading || !hasEntries}
           title="Preview cards that will be added or replaced from the selected template"
         >
           {preparing ? 'Preparing…' : ingesting ? 'Ingesting…' : 'Ingest Cards from Template'}
-        </button>
+        </BoardConfigButton>
       </div>
     </div>
   );
@@ -125,12 +120,12 @@ export function TemplateIngestPreview({
         )}
       </div>
       <div className="d-flex justify-content-end gap-2">
-        <button type="button" className="btn btn-outline-secondary board-button" onClick={onCancel} disabled={ingesting}>
+        <BoardConfigButton onClick={onCancel} disabled={ingesting}>
           Discard
-        </button>
-        <button type="button" className="btn btn-primary board-button" onClick={onConfirm} disabled={ingesting || hasInvalidCards}>
+        </BoardConfigButton>
+        <BoardConfigButton variant="primary" onClick={onConfirm} disabled={ingesting || hasInvalidCards}>
           {hasInvalidCards ? 'Fix Invalid Cards First' : (ingesting ? 'Ingesting…' : 'Go Ahead')}
-        </button>
+        </BoardConfigButton>
       </div>
     </div>
   );

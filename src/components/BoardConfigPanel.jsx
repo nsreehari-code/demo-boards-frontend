@@ -10,17 +10,25 @@ import {
 import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
 import { AddBoard } from './board-config/AddBoard.jsx';
+import { BoardConfigButton } from './board-config/BoardConfigButton.jsx';
 import { BoardImportExport } from './board-config/BoardImportExport.jsx';
 import { BoardSwitcher } from './board-config/BoardSwitcher.jsx';
 import { ConfigSubPane } from './board-config/ConfigSubPane.jsx';
 import { EditPageDetails, toPageDetailsDraft } from './board-config/EditPageDetails.jsx';
 import { TemplateCardIngest, TemplateIngestPreview } from './board-config/TemplateCardIngest.jsx';
 import { ChallengeConfirmModal } from './shared/ChallengeConfirmModal.jsx';
-import { FloatingCircularButton } from './shared/FloatingCircularButton.jsx';
+import { PanelVertical } from './shared/PanelVertical.jsx';
 import { SmokeRunner } from './test/SmokeRunner.jsx';
 import { SmokeStrategist } from './test/SmokeStrategist.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
+
+const LAYOUT_KIND_CANVAS = 'infinite-canvas';
+const LAYOUT_KIND_CARDS = 'flowing-cards';
+
+function normalizeLayoutKind(kind) {
+  return kind === LAYOUT_KIND_CARDS ? LAYOUT_KIND_CARDS : LAYOUT_KIND_CANVAS;
+}
 
 const PLUS_ICON_SVG = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -101,7 +109,7 @@ function normalizeFormState(formState, currentConfig) {
   };
 }
 
-export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
+export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
   const [open, setOpen] = useState(false);
   const [openedByAuto, setOpenedByAuto] = useState(false);
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
@@ -119,6 +127,8 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
   const [addBoardError, setAddBoardError] = useState('');
   const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
   const [smokeStrategistOpen, setSmokeStrategistOpen] = useState(false);
+  const [layoutKind, setLayoutKind] = useState(null);
+  const [togglingLayout, setTogglingLayout] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // 'runtime-import' | 'config' | null
   const importFileInputRef = useRef(null);
   const overrideActive = hasStoredAppConfigOverride();
@@ -288,6 +298,56 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
     };
   }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
+  useEffect(() => {
+    if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
+      setLayoutKind(null);
+      return undefined;
+    }
+    let cancelled = false;
+
+    const loadLayoutKind = async () => {
+      try {
+        const layout = await manageBoardsActions.getLayout(formState.defaultBoardId);
+        if (cancelled) return;
+        setLayoutKind(normalizeLayoutKind(layout?.kind));
+      } catch {
+        if (!cancelled) setLayoutKind(null);
+      }
+    };
+
+    void loadLayoutKind();
+    return () => {
+      cancelled = true;
+    };
+  }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
+
+  const handleToggleLayout = useCallback(async () => {
+    if (
+      formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL
+      || !formState.defaultBoardId
+      || togglingLayout
+    ) {
+      return;
+    }
+    const nextKind = layoutKind === LAYOUT_KIND_CARDS ? LAYOUT_KIND_CANVAS : LAYOUT_KIND_CARDS;
+    setTogglingLayout(true);
+    try {
+      await manageBoardsActions.saveLayout(
+        formState.defaultBoardId,
+        { kind: nextKind },
+        { mode: 'shallow-merge' },
+      );
+      setLayoutKind(nextKind);
+      if (formState.defaultBoardId === boardId) {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('[BoardConfigPanel] Failed to toggle layout', error);
+    } finally {
+      setTogglingLayout(false);
+    }
+  }, [boardId, formState.defaultBoardId, formState.transportMode, layoutKind, manageBoardsActions, togglingLayout]);
+
   const submitAndReload = useCallback(() => {
     saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));
     window.location.reload();
@@ -345,7 +405,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       }
       return true;
     } catch (error) {
-      console.error('[AppConfigModal] Failed to import runtime dump', error);
+      console.error('[BoardConfigPanel] Failed to import runtime dump', error);
       return false;
     } finally {
       setResettingSeeds(false);
@@ -384,7 +444,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         invalidCards: Array.isArray(preview?.invalidCards) ? preview.invalidCards : [],
       });
     } catch (error) {
-      console.error('[AppConfigModal] Failed to prepare template ingest', error);
+      console.error('[BoardConfigPanel] Failed to prepare template ingest', error);
     } finally {
       setPreparingTemplateIngest(false);
     }
@@ -419,7 +479,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         cards: [],
       });
     } catch (error) {
-      console.error('[AppConfigModal] Failed to export runtime dump', error);
+      console.error('[BoardConfigPanel] Failed to export runtime dump', error);
     } finally {
       setSavingSeeds(false);
     }
@@ -432,7 +492,7 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
       await manageBoardsActions.refreshBoard(boardId);
       window.location.reload();
     } catch (error) {
-      console.error('[AppConfigModal] Failed to refresh workspace bootstrap', error);
+      console.error('[BoardConfigPanel] Failed to refresh workspace bootstrap', error);
     } finally {
       setRefreshingWorkspaceBootstrap(false);
     }
@@ -469,26 +529,6 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   return (
     <>
-      <FloatingCircularButton
-        toggled={open}
-        icon="bi-gear-fill"
-        iconToggled="bi-x-lg"
-        onClick={() => {
-          setOpenedByAuto(false);
-          setOpen(true);
-        }}
-        onClickToggled={() => {
-          setOpenedByAuto(false);
-          setOpen(false);
-        }}
-        className="board-settings-toggle"
-        classNameToggled="board-settings-toggle--open"
-        title={open ? 'Close board settings' : 'Board settings'}
-        aria-label={open ? 'Close board settings' : 'Open board settings'}
-        aria-pressed={open}
-        data-testid="open-board-settings"
-      />
-
       <input
         ref={importFileInputRef}
         type="file"
@@ -502,50 +542,48 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
         }}
       />
 
-      {open ? (
-        <div className="board-settings-layer" role="presentation">
-          <button
-            type="button"
-            className="board-settings-backdrop"
-            aria-label="Close board settings"
-            onClick={() => {
-              setOpenedByAuto(false);
-              setOpen(false);
-            }}
-          />
-
-          <section
-            className="board-settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Board settings"
-          >
-            {addBoardOpen ? (
-              <ConfigSubPane title="Add board" onBack={closeAddBoard}>
-                <AddBoard
-                  onClose={closeAddBoard}
-                  onSubmit={handleAddBoard}
-                  templateOptions={seedManifestEntries}
-                  loadingTemplates={loadingSeedManifest}
-                  submitting={addBoardSubmitting}
-                  errorMessage={addBoardError}
-                />
-              </ConfigSubPane>
-            ) : templateIngestPreview ? (
-              <ConfigSubPane title="Ingest Cards from Template" onBack={() => setTemplateIngestPreview(null)}>
-                <TemplateIngestPreview
-                  templateLabel={templateIngestPreview.templateLabel}
-                  cardsToReplace={templateIngestPreview.cardsToReplace}
-                  cardsToAdd={templateIngestPreview.cardsToAdd}
-                  invalidCards={templateIngestPreview.invalidCards}
-                  ingesting={resettingSeeds}
-                  onConfirm={() => { void handleConfirmTemplateIngest(); }}
-                  onCancel={() => setTemplateIngestPreview(null)}
-                />
-              </ConfigSubPane>
-            ) : (
-              <>
-            <div className="board-settings-modal__header">
+      <PanelVertical
+        fabPosition="bottom-right"
+        expanded={open}
+        onToggle={() => {
+          setOpenedByAuto(false);
+          setOpen((current) => !current);
+        }}
+        ariaLabel="Board settings"
+        title={open ? 'Close board settings' : 'Board settings'}
+        icon="bi-gear-fill"
+        iconToggled="bi-x-lg"
+        fabProps={{
+          'data-testid': 'open-board-settings',
+          'aria-label': open ? 'Close board settings' : 'Open board settings',
+        }}
+      >
+        {addBoardOpen ? (
+          <ConfigSubPane title="Add board" onBack={closeAddBoard}>
+            <AddBoard
+              onClose={closeAddBoard}
+              onSubmit={handleAddBoard}
+              templateOptions={seedManifestEntries}
+              loadingTemplates={loadingSeedManifest}
+              submitting={addBoardSubmitting}
+              errorMessage={addBoardError}
+            />
+          </ConfigSubPane>
+        ) : templateIngestPreview ? (
+          <ConfigSubPane title="Ingest Cards from Template" onBack={() => setTemplateIngestPreview(null)}>
+            <TemplateIngestPreview
+              templateLabel={templateIngestPreview.templateLabel}
+              cardsToReplace={templateIngestPreview.cardsToReplace}
+              cardsToAdd={templateIngestPreview.cardsToAdd}
+              invalidCards={templateIngestPreview.invalidCards}
+              ingesting={resettingSeeds}
+              onConfirm={() => { void handleConfirmTemplateIngest(); }}
+              onCancel={() => setTemplateIngestPreview(null)}
+            />
+          </ConfigSubPane>
+        ) : (
+          <>
+            <div className="board-ingest-pane__header">
               <BoardSwitcher
                 value={formState.defaultBoardId}
                 options={boardSelectOptions}
@@ -554,25 +592,17 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 onSwitch={submitAndReload}
                 selectDisabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
                 loading={loadingBoardOptions}
+                layoutKind={layoutKind}
+                onToggleLayout={() => { void handleToggleLayout(); }}
+                layoutToggleDisabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !formState.defaultBoardId}
+                togglingLayout={togglingLayout}
               />
-              <button
-                type="button"
-                className="board-settings-modal__close board-ingest-pane__count board-ingest-pane__count-button d-inline-flex align-items-center justify-content-center align-self-start"
-                aria-label="Close board settings"
-                onClick={() => {
-                  setOpenedByAuto(false);
-                  setOpen(false);
-                }}
-              >
-                <i className="bi bi-x-lg" />
-              </button>
             </div>
 
-            <div className="board-settings-form">
+            <div className="board-settings-form flex-grow-1 min-h-0">
               <div className="d-flex align-items-center justify-content-between gap-2 mb-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1"
+                <BoardConfigButton
+                  iconNode={PLUS_ICON_SVG}
                   onClick={() => {
                     setAddBoardError('');
                     setAddBoardOpen(true);
@@ -580,31 +610,27 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
                   title="New board"
                 >
-                  {PLUS_ICON_SVG}
                   New Board
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary board-button ms-auto d-inline-flex align-items-center gap-1"
+                </BoardConfigButton>
+                <BoardConfigButton
+                  icon="bi-flask"
+                  className="ms-auto"
                   onClick={() => setSmokeRunnerOpen(true)}
                   disabled={!smokeRunnerEnabled}
                   title={smokeRunnerTitle}
                   data-testid="board-settings-smoke-test-button"
                 >
-                  <i className="bi bi-flask" aria-hidden="true" />
                   Run Tests
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary board-button d-inline-flex align-items-center gap-1"
+                </BoardConfigButton>
+                <BoardConfigButton
+                  icon="bi-compass"
                   onClick={() => setSmokeStrategistOpen(true)}
                   disabled={!smokeStrategistEnabled}
                   title={smokeStrategistTitle}
                   data-testid="board-settings-smoke-strategist-button"
                 >
-                  <i className="bi bi-compass" aria-hidden="true" />
                   Run Strategist
-                </button>
+                </BoardConfigButton>
               </div>
               {serverUnreachable ? (
                 <div className="board-settings-alert" role="alert" aria-live="assertive">
@@ -632,13 +658,9 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                   <div className="d-flex align-items-center justify-content-between gap-2">
                     <div className="board-settings-io-card__title">Server</div>
                     <div className="d-flex align-items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary board-button"
-                        onClick={() => setPendingAction('config')}
-                      >
+                      <BoardConfigButton onClick={() => setPendingAction('config')}>
                         Reset Server
-                      </button>
+                      </BoardConfigButton>
                     </div>
                   </div>
 
@@ -691,49 +713,44 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
                 />
               </div>
 
-              <div className="board-settings-form__actions justify-content-end">
-                <button type="button" className="btn btn-outline-secondary board-button" onClick={() => setOpen(false)}>Close</button>
-              </div>
               {seedManifestError ? (
                 <div className="board-settings-form__hint text-danger">
                   Seed board manifest error: {seedManifestError}
                 </div>
               ) : null}
             </div>
-              </>
-            )}
-          </section>
+          </>
+        )}
+      </PanelVertical>
 
-          {pendingAction === 'runtime-import' ? (
-            <ChallengeConfirmModal
-              message="This will overwrite the current runtime card state from a local dump file. Cards not present in the file will be removed."
-              onConfirm={() => {
-                setPendingAction(null);
-                importFileInputRef.current?.click();
-              }}
-              onCancel={() => setPendingAction(null)}
-            />
-          ) : null}
-          {pendingAction === 'config' ? (
-            <ChallengeConfirmModal
-              message="This will clear all stored config overrides and reload with the shipped defaults."
-              onConfirm={() => { setPendingAction(null); handleReset(); }}
-              onCancel={() => setPendingAction(null)}
-            />
-          ) : null}
-          {smokeRunnerOpen ? (
-            <SmokeRunner
-              serverOrigin={formState.serverOrigin}
-              onClose={() => setSmokeRunnerOpen(false)}
-            />
-          ) : null}
-          {smokeStrategistOpen ? (
-            <SmokeStrategist
-              serverOrigin={formState.serverOrigin}
-              onClose={() => setSmokeStrategistOpen(false)}
-            />
-          ) : null}
-        </div>
+      {open && pendingAction === 'runtime-import' ? (
+        <ChallengeConfirmModal
+          message="This will overwrite the current runtime card state from a local dump file. Cards not present in the file will be removed."
+          onConfirm={() => {
+            setPendingAction(null);
+            importFileInputRef.current?.click();
+          }}
+          onCancel={() => setPendingAction(null)}
+        />
+      ) : null}
+      {open && pendingAction === 'config' ? (
+        <ChallengeConfirmModal
+          message="This will clear all stored config overrides and reload with the shipped defaults."
+          onConfirm={() => { setPendingAction(null); handleReset(); }}
+          onCancel={() => setPendingAction(null)}
+        />
+      ) : null}
+      {open && smokeRunnerOpen ? (
+        <SmokeRunner
+          serverOrigin={formState.serverOrigin}
+          onClose={() => setSmokeRunnerOpen(false)}
+        />
+      ) : null}
+      {open && smokeStrategistOpen ? (
+        <SmokeStrategist
+          serverOrigin={formState.serverOrigin}
+          onClose={() => setSmokeStrategistOpen(false)}
+        />
       ) : null}
     </>
   );

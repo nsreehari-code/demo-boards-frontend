@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useBoardState } from './hooks/useBoardState.js';
-import { AppConfigModal } from './components/AppConfigModal.jsx';
+import { BoardConfigPanel } from './components/BoardConfigPanel.jsx';
 import { TimerButton } from './components/shared/TimerButton.jsx';
 import {
   BOARD_TRANSPORT_MODE,
@@ -138,7 +138,7 @@ export default function App() {
 
   return (
     <div className="board-app-shell" data-theme={DEFAULT_THEME}>
-      <AppConfigModal
+      <BoardConfigPanel
         boardId={BOARD_ID}
         autoOpen={runtimeUnavailable}
         serverUnreachable={runtimeUnavailable}

@@ -66,7 +66,7 @@ export function useResolvedOptions(options, getOptions) {
  * renders a leading empty option.
  *
  * Props:
- *   id, className, value, required, disabled, ariaLabel
+ *   id, className, value, required, disabled, ariaLabel, title
  *   options    – static array of scalars or { value/id/label/title } objects
  *   getOptions – array | () => array | () => Promise<array>; takes precedence
  *   allowEmpty – render a leading empty option
@@ -84,6 +84,7 @@ export function SelectControl({
   required = false,
   disabled = false,
   ariaLabel,
+  title,
   onChange,
 }) {
   const { options: resolvedOptions, loading } = useResolvedOptions(options, getOptions);
@@ -96,6 +97,7 @@ export function SelectControl({
       required={required}
       disabled={disabled || loading}
       aria-label={ariaLabel}
+      title={title}
       aria-busy={loading || undefined}
       onChange={(event) => onChange?.(event.target.value)}
     >

@@ -1,40 +1,7 @@
 import React from 'react';
 import { usePaneState } from '../../../hooks/usePaneState.js';
 import { CardRenderer } from '../../renderers/CardRenderer.jsx';
-import { FloatingCircularButton } from '../../shared/FloatingCircularButton.jsx';
-
-const TRUTHSET_PANE_LAYOUTS = {
-  vertical: {
-    asideStyle: {
-      position: 'fixed',
-      top: 'calc(var(--nav-height) + 0.5rem)',
-      right: '12px',
-      height: 'calc(100dvh - var(--nav-height) - 1rem)',
-      zIndex: 1040,
-      display: 'flex',
-      alignItems: 'flex-start',
-      pointerEvents: 'none',
-    },
-    railStyle: {
-      pointerEvents: 'auto',
-      width: 'min(30rem, calc(100vw - 4.5rem))',
-      height: '100%',
-      overflow: 'hidden',
-    },
-  },
-};
-
-function resolveLayoutStrategy(layoutStrategy) {
-  if (!layoutStrategy) return TRUTHSET_PANE_LAYOUTS.vertical;
-  if (typeof layoutStrategy === 'string') {
-    return TRUTHSET_PANE_LAYOUTS[layoutStrategy] ?? TRUTHSET_PANE_LAYOUTS.vertical;
-  }
-
-  return {
-    ...TRUTHSET_PANE_LAYOUTS.vertical,
-    ...layoutStrategy,
-  };
-}
+import { PanelVertical } from '../../shared/PanelVertical.jsx';
 
 function TruthsetExploreNav({ cards, idx, onPrev, onNext }) {
   const card = cards[idx];
@@ -83,49 +50,34 @@ function TruthsetExploreEmptyState() {
 }
 
 export function TruthsetExplorePane({ spec = {} }) {
-  const { boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] } = spec;
-  const layout = resolveLayoutStrategy(layoutStrategy);
+  const { boardId, includeFilters = [], rendererRules = [] } = spec;
   const { cardIds, idx, activeCardId, cards, expanded, toggleExpanded, goPrev, goNext } = usePaneState(boardId, { includeFilters });
 
   return (
-    <aside
-      aria-label="Truthset Explore pane"
-      className={`board-ingest-layer board-ingest-layer--right${expanded ? ' is-open' : ''}`}
-      style={layout.asideStyle}
+    <PanelVertical
+      fabPosition="top-right"
+      expanded={expanded}
+      onToggle={toggleExpanded}
+      ariaLabel="Truthset Explore pane"
+      title={expanded ? 'Hide Truthset Explore pane' : 'Show Truthset Explore pane'}
+      icon="bi-chevron-left"
+      iconToggled="bi-chevron-right"
     >
-      <FloatingCircularButton
-        toggled={expanded}
-        icon="bi-chevron-left"
-        iconToggled="bi-chevron-right"
-        onClick={toggleExpanded}
-        className="board-ingest-toggle board-ingest-toggle--right"
-        classNameToggled="is-open"
-        aria-pressed={expanded}
-        title={expanded ? 'Hide Truthset Explore pane' : 'Show Truthset Explore pane'}
+      <div className="board-ingest-pane__header">
+        <div>
+          <div className="board-ingest-pane__eyebrow">Truthset Explore</div>
+        </div>
+        <span className="board-ingest-pane__count">{`${cardIds.length} cards`}</span>
+      </div>
+      <TruthsetExploreNav
+        cards={cards}
+        idx={idx}
+        onPrev={goPrev}
+        onNext={goNext}
       />
-
-      {expanded ? (
-        <>
-          <div className="board-ingest-backdrop board-ingest-backdrop--right" aria-hidden="true" />
-          <div className="board-ingest-pane d-flex flex-column" style={layout.railStyle}>
-            <div className="board-ingest-pane__header">
-              <div>
-                <div className="board-ingest-pane__eyebrow">Truthset Explore</div>
-              </div>
-              <span className="board-ingest-pane__count">{`${cardIds.length} cards`}</span>
-            </div>
-            <TruthsetExploreNav
-              cards={cards}
-              idx={idx}
-              onPrev={goPrev}
-              onNext={goNext}
-            />
-            <div className="board-ingest-pane__body flex-grow-1 min-h-0">
-              {activeCardId ? <CardRenderer boardId={boardId} cardId={activeCardId} rendererRules={rendererRules} chrome="bare" /> : <TruthsetExploreEmptyState />}
-            </div>
-          </div>
-        </>
-      ) : null}
-    </aside>
+      <div className="board-ingest-pane__body flex-grow-1 min-h-0">
+        {activeCardId ? <CardRenderer boardId={boardId} cardId={activeCardId} rendererRules={rendererRules} chrome="bare" /> : <TruthsetExploreEmptyState />}
+      </div>
+    </PanelVertical>
   );
 }
