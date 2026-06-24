@@ -28,9 +28,21 @@ function normalizeMetadata(metadata) {
   return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
 }
 
+// The layout payload describes the centre pane: its kind (canvas vs flowing
+// cards) alongside its card coordinates. `kind` is therefore the centre pane's
+// layout kind, not a board-level kind. Boards without an explicit kind default
+// to the infinite-canvas pane.
+export const DEFAULT_PANE_KIND = 'infinite-canvas';
+
+function normalizePaneKind(kind) {
+  return typeof kind === 'string' && kind.trim() ? kind.trim() : DEFAULT_PANE_KIND;
+}
+
 function normalizeLayout(layout) {
-  const normalized = normalizeRuntimeCanvasLayout(layout?.canvas ?? layout);
-  return normalized ? { canvas: normalized } : null;
+  if (!layout || typeof layout !== 'object' || Array.isArray(layout)) return null;
+  const kind = normalizePaneKind(layout.kind);
+  const normalizedCanvas = normalizeRuntimeCanvasLayout(layout.canvas ?? layout);
+  return { kind, canvas: normalizedCanvas ?? null };
 }
 
 function resolveNextManagedBoardConfig(current, candidate) {
@@ -50,8 +62,8 @@ function resolveNextManagedBoardConfig(current, candidate) {
   const nextMetadataHash = stableStringify(nextMetadataRaw);
   const resolvedMetadata = current && currentMetadataHash === nextMetadataHash ? current.metadata : nextMetadataRaw;
 
-  const currentLayoutHash = stableStringify(current?.layout?.canvas ?? null);
-  const nextLayoutHash = stableStringify(nextLayoutRaw?.canvas ?? null);
+  const currentLayoutHash = stableStringify(current?.layout ?? null);
+  const nextLayoutHash = stableStringify(nextLayoutRaw ?? null);
   const resolvedLayout = current && currentLayoutHash === nextLayoutHash ? current.layout : nextLayoutRaw;
 
   if (current && currentLayoutHash === nextLayoutHash && current.ui === resolvedUi) {
@@ -114,7 +126,7 @@ async function fetchManagedBoardConfig(serverOrigin, boardId) {
   return {
     ui: normalizeUi(board.ui),
     metadata: normalizeMetadata(board.metadata),
-    layout: normalizeLayout(layout?.canvas),
+    layout: normalizeLayout(layout),
     board,
   };
 }
