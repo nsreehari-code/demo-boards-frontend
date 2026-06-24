@@ -11,6 +11,7 @@ import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
 import { AddBoard } from './board-config/AddBoard.jsx';
 import { BoardImportExport } from './board-config/BoardImportExport.jsx';
+import { BoardSwitcher } from './board-config/BoardSwitcher.jsx';
 import { ConfigSubPane } from './board-config/ConfigSubPane.jsx';
 import { EditPageDetails, toPageDetailsDraft } from './board-config/EditPageDetails.jsx';
 import { TemplateCardIngest, TemplateIngestPreview } from './board-config/TemplateCardIngest.jsx';
@@ -20,23 +21,6 @@ import { SmokeRunner } from './test/SmokeRunner.jsx';
 import { SmokeStrategist } from './test/SmokeStrategist.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
-const FORWARD_ICON_SVG = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5 12h12"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-    />
-    <path
-      d="M13 6l6 6-6 6"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 const PLUS_ICON_SVG = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -562,40 +546,15 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
             ) : (
               <>
             <div className="board-settings-modal__header">
-              <div className="board-settings-modal__header-content">
-                <div className="board-settings-modal__eyebrow mb-2">Board</div>
-                <div className="d-flex align-items-center gap-2 board-settings-board-row">
-                  <select
-                    className="board-input board-settings-sample-select board-settings-board-select"
-                    value={formState.defaultBoardId}
-                    onChange={handleBoardSelectionChange}
-                    disabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
-                    data-testid="board-settings-board-select"
-                  >
-                    {boardSelectOptions.length === 0 ? (
-                      <option value="">
-                        {loadingBoardOptions ? 'Loading boards…' : 'No boards available'}
-                      </option>
-                    ) : null}
-                    {boardSelectOptions.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.label}{entry.id === boardId ? ' (current)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn btn-primary board-button board-settings-go-button d-inline-flex align-items-center gap-1"
-                    onClick={submitAndReload}
-                    disabled={formState.defaultBoardId === boardId}
-                    title="Switch board"
-                    aria-label="Switch board"
-                  >
-                    {FORWARD_ICON_SVG}
-                    Switch
-                  </button>
-                </div>
-              </div>
+              <BoardSwitcher
+                value={formState.defaultBoardId}
+                options={boardSelectOptions}
+                currentBoardId={boardId}
+                onChange={handleBoardSelectionChange}
+                onSwitch={submitAndReload}
+                selectDisabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || loadingBoardOptions}
+                loading={loadingBoardOptions}
+              />
               <button
                 type="button"
                 className="board-settings-modal__close board-ingest-pane__count board-ingest-pane__count-button d-inline-flex align-items-center justify-content-center align-self-start"

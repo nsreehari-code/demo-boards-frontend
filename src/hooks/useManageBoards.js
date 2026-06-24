@@ -158,7 +158,7 @@ export function useManageBoards(serverOrigin, options = {}) {
     return data?.layout ?? null;
   }, [normalizedOrigin]);
 
-  const saveLayout = useCallback(async (boardId, layout) => {
+  const saveLayout = useCallback(async (boardId, layout, options = {}) => {
     const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
     if (!normalizedBoardId) {
       throw new Error('Board id is required');
@@ -167,11 +167,13 @@ export function useManageBoards(serverOrigin, options = {}) {
       throw new Error('Layout is required');
     }
 
+    const mode = typeof options?.mode === 'string' ? options.mode.trim() : '';
     const data = await postManageBoards(normalizedOrigin, {
       subcommand: 'save-layout',
       args: {
         boardId: normalizedBoardId,
         layout,
+        ...(mode ? { mode } : {}),
       },
     });
     return data?.layout ?? null;

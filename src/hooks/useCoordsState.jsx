@@ -258,7 +258,7 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
 
     await manageBoardsActions.saveLayout(boardId, {
       canvas: layoutRef.current,
-    });
+    }, { mode: 'shallow-merge' });
     writeCachedBoardLayout(boardId, {
       canvas: layoutRef.current,
     });
