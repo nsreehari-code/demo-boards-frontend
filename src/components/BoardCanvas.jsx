@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import { buildDeterministicCanvasLayout } from '../lib/boardCanvasLayout.js';
 import { useBoardLayoutActions, useBoardLayoutState } from '../hooks/useCoordsState.jsx';
-import { CardRenderer } from './CardRenderer.jsx';
+import { CardRenderer } from './registry/card/index.jsx';
 
 const NODE_WIDTH = 360;
 const EDGE_CURVATURE_SUBTLE = 0.26;
@@ -322,7 +322,7 @@ function FlowCardNode({ id, data }) {
         )) : null}
       </div>
       <div className="board-flow-node__card">
-        <CardRenderer boardId={data.boardId} cardId={id} enableResize rendererRules={data.rendererRules} />
+        <CardRenderer boardId={data.boardId} cardId={id} enableResize rendererRules={data.rendererRules} chrome="full" />
       </div>
       <div className="board-flow-node__tokens board-flow-node__tokens--bottom">
         {data.provides.length > 0 ? data.provides.map((token) => (

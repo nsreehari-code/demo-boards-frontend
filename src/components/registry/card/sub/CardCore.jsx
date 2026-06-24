@@ -1,41 +1,10 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
-import { useCardState } from '../hooks/useCardState.js';
-import { CardCoreView } from './CardCoreView.jsx';
-
-function pathParts(path) {
-  if (!path || typeof path !== 'string') return [];
-  return path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
-}
-
-function deepGet(source, path) {
-  if (!path || !source) return undefined;
-  let current = source;
-  for (const part of pathParts(path)) {
-    if (current == null) return undefined;
-    current = current[part];
-  }
-  return current;
-}
-
-function deepSet(target, path, value) {
-  const parts = pathParts(path);
-  if (!parts.length) return target;
-  const next = Array.isArray(target) ? [...target] : { ...(target ?? {}) };
-  let current = next;
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const part = parts[index];
-    const existing = current[part];
-    current[part] = Array.isArray(existing) ? [...existing] : { ...(existing ?? {}) };
-    current = current[part];
-  }
-  current[parts[parts.length - 1]] = value;
-  return next;
-}
-
-function deepEqual(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
+import { ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
+import { useCardState } from '../../../../hooks/useCardState.js';
+import { NodeRenderer } from '../../engine/NodeRenderer.jsx';
+import { deepSet } from '../../lib/path.js';
+import { resolveBind } from '../../lib/bind.js';
+import { deepEqual } from '../../lib/coerce.js';
 
 function buildNamespaces(boardId, cardState) {
   return {
@@ -54,18 +23,6 @@ function buildUpstreamSignature(cardState) {
     cardContent: cardState.cardContent ?? null,
     cardRuntime: cardState.cardRuntime ?? null,
   });
-}
-
-function resolveBind(namespaces, bind) {
-  if (!bind || typeof bind !== 'string') return undefined;
-  const parts = pathParts(bind);
-  if (!parts.length) return undefined;
-
-  const root = parts[0];
-  const rest = parts.slice(1).join('.');
-
-  if (!(root in namespaces)) return undefined;
-  return rest ? deepGet(namespaces[root], rest) : namespaces[root];
 }
 
 function resolveRefKind(namespaces, element, initialData) {
@@ -112,21 +69,37 @@ function normalizeElement(namespaces, element) {
   };
 }
 
-function normalizeLayoutElement(namespaces, element, index) {
-  const normalizedElement = normalizeElement(namespaces, element);
-  const bindKey = normalizedElement.renderDef?.data?.bind ?? normalizedElement.renderDef?.data?.writeTo ?? null;
-  const reactKey = normalizedElement.renderDef?.id
-    ?? bindKey
-    ?? normalizedElement.renderDef?.label
-    ?? `${normalizedElement.kind}-${element?.className ?? 'col-12'}-${index}`;
+function buildLayoutNode(namespaces, element, index) {
+  const normalized = normalizeElement(namespaces, element);
+  const mergedData = normalized.renderDef?.data ?? {};
+
+  // spec is the component's own (open) vocabulary; bind/writeTo are engine wiring
+  // and live at the node top level, so strip them out of spec.
+  const spec = { ...mergedData };
+  delete spec.bind;
+  delete spec.writeTo;
+
+  const bind = mergedData.bind ?? null;
+  const writeTo = mergedData.writeTo ?? null;
+  const reactKey = element?.id
+    ?? bind
+    ?? writeTo
+    ?? element?.label
+    ?? `${normalized.kind}-${element?.className ?? 'col-12'}-${index}`;
 
   return {
     reactKey,
     containerClassName: element?.className ?? 'col-12',
     containerStyle: element?.containerStyle ?? null,
-    kind: normalizedElement.kind,
-    renderDef: normalizedElement.renderDef,
-    data: normalizedElement.data,
+    node: {
+      kind: normalized.kind,
+      id: element?.id,
+      label: element?.label,
+      spec,
+      bind,
+      writeTo,
+      data: normalized.data,
+    },
   };
 }
 
@@ -184,12 +157,12 @@ function CardCoreComponent({ boardId, cardId }) {
     cardState.cardRuntime,
   ]);
 
-  const layoutElements = useMemo(() => view.elements
+  const layoutNodes = useMemo(() => view.elements
     .filter((element) => {
       if (!element.visible) return true;
       return !!resolveBind(namespaces, element.visible);
     })
-    .map((element, index) => normalizeLayoutElement(namespaces, element, index)), [namespaces, view.elements]);
+    .map((element, index) => buildLayoutNode(namespaces, element, index)), [namespaces, view.elements]);
 
   const fileUrlForIndex = useCallback((index, file) => {
     const href = buildFileUrl(boardId, cardId, index, file);
@@ -202,6 +175,8 @@ function CardCoreComponent({ boardId, cardId }) {
     }
     return href;
   }, [boardId, cardId, fileUrlVersion]);
+
+  const services = useMemo(() => ({ fileUrlForIndex }), [fileUrlForIndex]);
 
   useEffect(() => {
     if (!saving) return;
@@ -249,8 +224,7 @@ function CardCoreComponent({ boardId, cardId }) {
         return;
       }
 
-      const currentValue = meta.renderDef?.resolvedWriteValue ?? cardFieldValues;
-      if (deepEqual(currentValue, value)) return;
+      if (deepEqual(cardFieldValues, value)) return;
 
       beginSaving();
       await cardActions.patch({ fieldValues: value });
@@ -261,36 +235,23 @@ function CardCoreComponent({ boardId, cardId }) {
     }
   }, [beginSaving, cardActions, cardData, cardFieldValues, saving]);
 
-  const decoratedLayoutElements = useMemo(() => layoutElements.map(({ renderDef, ...layoutElement }) => ({
-    ...layoutElement,
-    renderDef: {
-      ...renderDef,
-      resolvedWriteValue: renderDef.data?.writeTo ? resolveBind(namespaces, renderDef.data.writeTo) : undefined,
-      fileUrlForIndex,
-    },
-  })), [fileUrlForIndex, layoutElements, namespaces]);
-
   return (
     <div className="board-card-core position-relative" aria-busy={saving}>
       <div className="row g-2 align-content-start">
-        {decoratedLayoutElements.map(({ reactKey, containerClassName, containerStyle, kind, renderDef, data }) => {
-          return (
-            <div
-              key={reactKey}
-              className={containerClassName}
-              style={containerStyle ?? undefined}
-            >
-              <div className="w-100">
-                <CardCoreView
-                  kind={kind}
-                  renderDef={renderDef}
-                  data={data}
-                  onSave={handleSave}
-                />
-              </div>
-            </div>
-          );
-        })}
+        {layoutNodes.map(({ reactKey, containerClassName, containerStyle, node }) => (
+          <div
+            key={reactKey}
+            className={containerClassName}
+            style={containerStyle ?? undefined}
+          >
+            <NodeRenderer
+              node={node}
+              namespaces={namespaces}
+              services={services}
+              onSave={handleSave}
+            />
+          </div>
+        ))}
       </div>
       {saving ? (
         <div className="board-card-core__overlay" aria-hidden="true">

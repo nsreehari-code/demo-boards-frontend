@@ -1,11 +1,8 @@
 import React, { useMemo } from 'react';
-import { CentrePane } from './CentrePane.jsx';
-import { GandalfPane } from './GandalfPane.jsx';
-import { TruthsetExplorePane } from './TruthsetExplorePane.jsx';
-import { BoardCoordsProvider } from '../hooks/useCoordsState.jsx';
 import { useManagedBoardConfig, DEFAULT_PANE_KIND } from '../hooks/useManagedBoardConfig.js';
 import { compileRendererRules, resolvePaneFilters } from '../lib/cardPresentationConfig.js';
 import { BOARD_TRANSPORT_MODE, BOARD_TRANSPORT_MODE_SERVER_URL } from '../lib/appConfig.js';
+import { NodeRenderer } from './registry/engine/NodeRenderer.jsx';
 
 export function MainBoard({ boardId }) {
   const { config: managedBoardConfig, loading: managedBoardConfigLoading } = useManagedBoardConfig(boardId);
@@ -27,20 +24,24 @@ export function MainBoard({ boardId }) {
     };
   }, [uiConfig]);
 
-  return (
-    <>
-      <GandalfPane boardId={boardId} includeFilters={ingestFilters} layoutStrategy="vertical" rendererRules={rendererRules} />
-      <TruthsetExplorePane boardId={boardId} includeFilters={truthsetFilters} layoutStrategy="vertical" rendererRules={rendererRules} />
-      {holdCanvasUntilManagedConfig ? null : (
-        <BoardCoordsProvider boardId={boardId} initialLayout={boardLayout}>
-          <CentrePane
-            boardId={boardId}
-            excludeFilters={centreExcludeFilters}
-            layoutStrategy={centrePaneKind}
-            rendererRules={rendererRules}
-          />
-        </BoardCoordsProvider>
-      )}
-    </>
-  );
+  // Host-level composition: derive the pane node set, then let the engine
+  // render the board (a board entry is just a childResolver over spec.panes).
+  const panes = [
+    { kind: 'pane:gandalf', spec: { boardId, includeFilters: ingestFilters, layoutStrategy: 'vertical', rendererRules } },
+    { kind: 'pane:truthset', spec: { boardId, includeFilters: truthsetFilters, layoutStrategy: 'vertical', rendererRules } },
+  ];
+  if (!holdCanvasUntilManagedConfig) {
+    panes.push({
+      kind: 'pane:centre',
+      spec: {
+        boardId,
+        excludeFilters: centreExcludeFilters,
+        layoutStrategy: centrePaneKind,
+        rendererRules,
+        initialLayout: boardLayout,
+      },
+    });
+  }
+
+  return <NodeRenderer node={{ kind: 'board:default', spec: { boardId, panes } }} />;
 }

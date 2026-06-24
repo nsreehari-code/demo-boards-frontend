@@ -1,12 +1,21 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { useCardWidthState } from '../hooks/useCoordsState.jsx';
-import { useCardState } from '../hooks/useCardState.js';
-import { useChatStateAIWorking } from '../hooks/useChatState.js';
-import { useBoardInspectState } from '../hooks/useBoardState.js';
-import { CardCore } from './CardCore.jsx';
-import { ChatPane, MiniChatPane } from './ChatPane.jsx';
-import { GlobalModal } from './GlobalModal.jsx';
+import { useCardWidthState } from '../../../../hooks/useCoordsState.jsx';
+import { useCardState } from '../../../../hooks/useCardState.js';
+import { useChatStateAIWorking } from '../../../../hooks/useChatState.js';
+import { useBoardInspectState } from '../../../../hooks/useBoardState.js';
+import { ChatPane, MiniChatPane } from '../../../ChatPane.jsx';
+import { GlobalModal } from '../../../GlobalModal.jsx';
 import { InspectCard } from './InspectCard.jsx';
+
+// CardChrome is the single owner of all card-tier chrome: the resizable shell,
+// the header (title + status + inspect / refresh / chat actions), the path-state
+// overlay, the mini-chat + chat modal, and the inspect modal. Every card kind
+// (default, strategist, postbox, ingest, ...) renders its body as `children`
+// inside this chrome, so chrome behaviour is defined once and is identical
+// everywhere. Presentation context is the `chrome` prop, supplied by the pane:
+//   full    — board card with the full header (centre pane / canvas)
+//   bare    — no header; a floating refresh remains for refreshable cards (rails)
+//   inspect — read-only preview frame used inside the inspect modal
 
 const MIN_CARD_WIDTH = 280;
 const MAX_CARD_WIDTH = 960;
@@ -88,8 +97,7 @@ function normalizePathState(meta) {
 }
 
 function normalizePathStateRationale(meta) {
-  const raw = typeof meta?.path_state_rationale === 'string' ? meta.path_state_rationale.trim() : '';
-  return raw;
+  return typeof meta?.path_state_rationale === 'string' ? meta.path_state_rationale.trim() : '';
 }
 
 function PathStateOverlay({ pathState, rationale }) {
@@ -118,7 +126,7 @@ const CARD_RESIZE_HANDLE_SVG = (
   </svg>
 );
 
-function ResizableCardShell({ boardId, cardId, className = '', enabled = false, children }) {
+function ResizableCardShell({ cardId, className = '', enabled = false, children }) {
   const [width, setWidth] = useCardWidthState(cardId);
   const dragStateRef = useRef(null);
 
@@ -150,7 +158,7 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
         document.body.style.cursor = '';
       }
     };
-  }, [boardId, cardId, enabled, width]);
+  }, [enabled, setWidth]);
 
   const handleResizeStart = useCallback((event) => {
     if (!enabled) return;
@@ -189,14 +197,7 @@ function ResizableCardShell({ boardId, cardId, className = '', enabled = false, 
   );
 }
 
-function CardShellComponent({ boardId, cardId, renderInInspect = false, enableResize = false }) {
-  if (renderInInspect) {
-    return <CardShellInspectView boardId={boardId} cardId={cardId} />;
-  }
-  return <CardShellBoardView boardId={boardId} cardId={cardId} enableResize={enableResize} />;
-}
-
-function CardShellInspectView({ boardId, cardId }) {
+function CardChromeInspectView({ boardId, cardId, children }) {
   const cardState = useCardState(boardId, cardId);
   if (!cardState?.cardContent) return null;
   const title = cardState.cardContent.meta?.title ?? cardId;
@@ -206,7 +207,7 @@ function CardShellInspectView({ boardId, cardId }) {
   const pathStateRationale = normalizePathStateRationale(cardState.cardContent.meta);
   const pathStateClass = pathState ? ` board-card--path-${pathState}` : '';
   return (
-    <ResizableCardShell boardId={boardId} cardId={cardId} className="board-card-shell--inspect">
+    <ResizableCardShell cardId={cardId} className="board-card-shell--inspect">
       <div className={`board-card ${statusTone}${pathStateClass}`}>
         <div className="board-card__header">
           <div className="board-card__title-wrap">
@@ -221,7 +222,7 @@ function CardShellInspectView({ boardId, cardId }) {
         <div className="board-card__body">
           <div className="board-card__content">
             <PathStateOverlay pathState={pathState} rationale={pathStateRationale} />
-            <CardCore boardId={boardId} cardId={cardId} />
+            {children}
           </div>
         </div>
       </div>
@@ -229,7 +230,7 @@ function CardShellInspectView({ boardId, cardId }) {
   );
 }
 
-function CardShellBoardView({ boardId, cardId, enableResize = false }) {
+function CardChromeBoardView({ boardId, cardId, enableResize, chrome, children }) {
   const cardState = useCardState(boardId, cardId);
   const { inspectedCardId, setInspectedCardId } = useBoardInspectState(boardId);
   const [chatOpen, setChatOpen] = useState(false);
@@ -258,46 +259,80 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
   const inspectOpen = inspectedCardId === cardId;
   const refreshDisabled = cardState.cardRuntime?.status === 'running';
   const showRefresh = cardState.canRefresh === true;
+  const showHeader = chrome === 'full';
 
   return (
     <>
-      <ResizableCardShell boardId={boardId} cardId={cardId} enabled={enableResize}>
+      <ResizableCardShell cardId={cardId} enabled={enableResize}>
         <div className={`board-card ${statusTone}${pathStateClass}`}>
-          <div
-            className="board-card__header"
-            onDoubleClick={(event) => {
-              if (event.target.closest('button')) return;
-              event.stopPropagation();
-              window.dispatchEvent(new CustomEvent('demo-board:toggle-card-focus', {
-                detail: { boardId, cardId },
-              }));
-            }}
-          >
-            <div className="board-card__title-wrap">
-              <div className="board-card__title-block">
-                <div className="board-card__title text-truncate">{title}</div>
-                <div className="board-card__meta">
-                  {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+          {showHeader ? (
+            <div
+              className="board-card__header"
+              onDoubleClick={(event) => {
+                if (event.target.closest('button')) return;
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent('demo-board:toggle-card-focus', {
+                  detail: { boardId, cardId },
+                }));
+              }}
+            >
+              <div className="board-card__title-wrap">
+                <div className="board-card__title-block">
+                  <div className="board-card__title text-truncate">{title}</div>
+                  <div className="board-card__meta">
+                    {status !== 'completed' ? <span className={`board-status-pill ${statusTone}`}>{status}</span> : null}
+                  </div>
                 </div>
               </div>
+              <div className="board-card__actions">
+                <button
+                  type="button"
+                  className="board-icon-button"
+                  onClick={() => setInspectedCardId((current) => (current === cardId ? null : cardId))}
+                  title={inspectOpen ? 'Close inspect view' : 'Show source information'}
+                  aria-label={inspectOpen ? 'Close inspect view' : 'Show source information'}
+                >
+                  {inspectOpen ? CLOSE_DETAILS_SVG : <i className="bi bi-sliders2" aria-hidden="true" style={{ fontSize: '0.95rem' }} />}
+                </button>
+                {showRefresh ? (
+                  refreshDisabled ? (
+                    <span
+                      className="board-icon-button disabled"
+                      aria-label="Refreshing"
+                      title="Refreshing"
+                    >
+                      <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="board-icon-button"
+                      onClick={() => cardState.cardActions?.refresh()}
+                      title="Refresh"
+                    >
+                      <i className="bi bi-arrow-clockwise" />
+                    </button>
+                  )
+                ) : null}
+                <ChatHeaderButton
+                  boardId={boardId}
+                  cardId={cardId}
+                  chatOpen={chatOpen}
+                  onToggleChat={handleToggleChat}
+                />
+              </div>
             </div>
-            <div className="board-card__actions">
-              <button
-                type="button"
-                className="board-icon-button"
-                onClick={() => setInspectedCardId((current) => (current === cardId ? null : cardId))}
-                title={inspectOpen ? 'Close inspect view' : 'Show source information'}
-                aria-label={inspectOpen ? 'Close inspect view' : 'Show source information'}
-              >
-                {inspectOpen ? CLOSE_DETAILS_SVG : <i className="bi bi-sliders2" aria-hidden="true" style={{ fontSize: '0.95rem' }} />}
-              </button>
-              {showRefresh ? (
-                refreshDisabled ? (
-                  <span
-                    className="board-icon-button disabled"
-                    aria-label="Refreshing"
-                    title="Refreshing"
-                  >
+          ) : null}
+          <div className={`board-card__body${chatOpen ? ' board-card__body--with-mini-chat' : ''}`}>
+            {chatOpen ? (
+              <div className="board-card__mini-chat">
+                <MiniChatPane boardId={boardId} cardId={cardId} onPopout={handleOpenChatModal} />
+              </div>
+            ) : null}
+            {!showHeader && showRefresh ? (
+              <div className="board-card__body-actions">
+                {refreshDisabled ? (
+                  <span className="board-icon-button disabled" aria-label="Refreshing" title="Refreshing">
                     <span className="spinner-border spinner-border-sm" aria-hidden="true" />
                   </span>
                 ) : (
@@ -309,25 +344,12 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
                   >
                     <i className="bi bi-arrow-clockwise" />
                   </button>
-                )
-              ) : null}
-              <ChatHeaderButton
-                boardId={boardId}
-                cardId={cardId}
-                chatOpen={chatOpen}
-                onToggleChat={handleToggleChat}
-              />
-            </div>
-          </div>
-          <div className={`board-card__body${chatOpen ? ' board-card__body--with-mini-chat' : ''}`}>
-            {chatOpen ? (
-              <div className="board-card__mini-chat">
-                <MiniChatPane boardId={boardId} cardId={cardId} onPopout={handleOpenChatModal} />
+                )}
               </div>
             ) : null}
             <div className="board-card__content">
               <PathStateOverlay pathState={pathState} rationale={pathStateRationale} />
-              <CardCore boardId={boardId} cardId={cardId} />
+              {children}
             </div>
           </div>
         </div>
@@ -359,4 +381,19 @@ function CardShellBoardView({ boardId, cardId, enableResize = false }) {
   );
 }
 
-export const CardShell = memo(CardShellComponent);
+function CardChromeComponent({ boardId, cardId, chrome = 'full', enableResize = false, children }) {
+  if (chrome === 'inspect') {
+    return (
+      <CardChromeInspectView boardId={boardId} cardId={cardId}>
+        {children}
+      </CardChromeInspectView>
+    );
+  }
+  return (
+    <CardChromeBoardView boardId={boardId} cardId={cardId} enableResize={enableResize} chrome={chrome}>
+      {children}
+    </CardChromeBoardView>
+  );
+}
+
+export const CardChrome = memo(CardChromeComponent);

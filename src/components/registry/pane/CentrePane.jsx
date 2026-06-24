@@ -1,7 +1,8 @@
 import React from 'react';
-import { useBoardState } from '../hooks/useBoardState.js';
-import { BoardCanvas } from './BoardCanvas.jsx';
-import { CardRenderer } from './CardRenderer.jsx';
+import { useBoardState } from '../../../hooks/useBoardState.js';
+import { BoardCanvas } from '../../BoardCanvas.jsx';
+import { CardRenderer } from '../card/index.jsx';
+import { BoardCoordsProvider } from '../../../hooks/useCoordsState.jsx';
 
 const CENTRE_PANE_LAYOUTS = {
   'flowing-cards': {
@@ -28,7 +29,14 @@ function resolveLayoutStrategy(layoutStrategy) {
   };
 }
 
-export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flowing-cards', rendererRules = [] }) {
+export function CentrePane({ spec = {} }) {
+  const {
+    boardId,
+    excludeFilters = [],
+    layoutStrategy = 'flowing-cards',
+    rendererRules = [],
+    initialLayout = null,
+  } = spec;
   const board = useBoardState(boardId);
 
   if (!board) return null;
@@ -36,30 +44,32 @@ export function CentrePane({ boardId, excludeFilters = [], layoutStrategy = 'flo
   const layout = resolveLayoutStrategy(layoutStrategy);
   const visibleCardIds = [...board.excludedCards(excludeFilters)];
 
-  if (layoutStrategy === 'infinite-canvas') {
-    return (
-      <div className={layout.containerClassName}>
-        <BoardCanvas
-          boardId={boardId}
-          cardIds={visibleCardIds}
-          cardContents={board.cardContents}
-          cardRuntimes={board.cardRuntimes}
-          dataObjects={board.dataObjects}
-          rendererRules={rendererRules}
-        />
-      </div>
-    );
-  }
-
-  return (
+  const content = layoutStrategy === 'infinite-canvas' ? (
+    <div className={layout.containerClassName}>
+      <BoardCanvas
+        boardId={boardId}
+        cardIds={visibleCardIds}
+        cardContents={board.cardContents}
+        cardRuntimes={board.cardRuntimes}
+        dataObjects={board.dataObjects}
+        rendererRules={rendererRules}
+      />
+    </div>
+  ) : (
     <div className={layout.containerClassName}>
       <div className={layout.listClassName}>
         {visibleCardIds.map((cardId) => (
           <div key={cardId} className={layout.itemClassName}>
-            <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} />
+            <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} chrome="full" />
           </div>
         ))}
       </div>
     </div>
+  );
+
+  return (
+    <BoardCoordsProvider boardId={boardId} initialLayout={initialLayout}>
+      {content}
+    </BoardCoordsProvider>
   );
 }

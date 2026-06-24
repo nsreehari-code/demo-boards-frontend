@@ -1,7 +1,8 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useCardState, useCardStateFilesData } from '../hooks/useCardState.js';
-import { useChatState } from '../hooks/useChatState.js';
-import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
+import { CardChrome } from './sub/CardChrome.jsx';
+import { useCardState, useCardStateFilesData } from '../../../hooks/useCardState.js';
+import { useChatState } from '../../../hooks/useChatState.js';
+import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../lib/client.js';
 
 const HISTORY_TURNS_PER_PAGE = 8;
 
@@ -357,7 +358,8 @@ function FlattenedFilesView({ files }) {
   );
 }
 
-function PostboxCardComponent({ boardId, cardId, variant = 'standard' }) {
+function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
+  const { boardId, cardId, chrome = 'full', enableResize = false } = spec;
   const cardState = useCardState(boardId, cardId);
   const filesUploaded = useCardStateFilesData(boardId, cardId);
   const chat = useChatState(boardId, cardId);
@@ -541,17 +543,13 @@ function PostboxCardComponent({ boardId, cardId, variant = 'standard' }) {
 
   if (!cardState?.cardContent || !chat) return null;
 
-  const title = cardState.cardContent.meta?.title ?? cardId;
   const historyBeforeTurnId = historyMessages.length > 0
     ? getFirstTurnId(historyMessages)
     : historyAnchorTurnId;
 
   return (
+    <CardChrome boardId={boardId} cardId={cardId} chrome={chrome} enableResize={enableResize}>
     <div className="board-postbox-card h-100 d-flex flex-column overflow-hidden">
-      <div className="board-ingest-card__header d-none align-items-center justify-content-between gap-2 px-2 py-2 border-bottom">
-        <div className="fw-semibold text-truncate flex-grow-1 min-w-0">{title}</div>
-      </div>
-
       <div
         ref={messagesRef}
         className={`flex-grow-1 overflow-auto p-3 ${dragActive ? 'border border-primary border-2' : ''}`}
@@ -729,9 +727,8 @@ function PostboxCardComponent({ boardId, cardId, variant = 'standard' }) {
         </div>
       </div>
     </div>
+    </CardChrome>
   );
 }
 
 export const PostboxCard = memo(PostboxCardComponent);
-
-export const UniversalPostboxCard = (props) => <PostboxCard {...props} variant="universal" />;

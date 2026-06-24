@@ -139,8 +139,10 @@ child. Neither path restricts the child's `kind`.
 ```js
 {
   kind: 'chart',
+  id?: 'trend-1',                  // instance identity (stable React/save key)
+  label?: 'Trend',                 // instance caption (engine framing + meta.label)
   variant?: 'pie',                 // explicit override (wins over resolveVariant)
-  spec: { chartType, height, columns, label, ... },   // the values
+  spec: { chartType, height, columns, ... },          // the values
   bind?:    'computed_values.trend',                  // read path  (resolved → data)
   writeTo?: 'card_data.choice',                       // write path (→ onSave target)
   visible?: 'card_data.editable',                     // gate
@@ -148,14 +150,36 @@ child. Neither path restricts the child's `kind`.
 }
 ```
 
+### Flat vs nested — the placement rule
+
+A field's placement on the node is decided by one question: **does the engine
+know what this key means for *every* kind?**
+
+- **Yes → top-level (closed grammar).** `kind`, `id`, `label`, `variant`, `bind`,
+  `writeTo`, `visible`, `children` are a finite, universal vocabulary the engine
+  interprets (`bind`→data, `writeTo`→currentValue, `label`→framing, `id`→key).
+  Same keys for every kind; authored flat.
+- **No → inside `spec` (open namespace).** `spec` keys (`chartType`, `thresholds`,
+  `fields`, `buttons`, …) are defined by the *component*, not the engine, which
+  forwards the bag opaquely. Namespacing the open vocabulary keeps it from
+  colliding with — or being mistaken for — the engine's reserved grammar.
+
+This is why `spec` is nested while `id`/`label` are not: the component owns
+`spec`'s vocabulary (open → namespace it); the engine owns the rest (closed →
+grammar). The runtime `meta` **prop** (§4) is a third, separate concern — it
+groups instance fields to keep the *component prop signature* from accreting
+one-offs, not because they are opaque.
+
 ## 4. Runtime — injected by the resolver each render
 
 ```jsx
 <Component
-  spec={node.spec}
+  spec={node.spec}                     // Type: the component's values/config
+  meta={{ label, id }}                 // Instance: one object, never one-off props
   variant={resolvedVariant}
   data={resolvedData}                  // bind resolved over namespaces
   currentValue={resolvedWriteValue}    // for controlled-commit inputs
+  writeTo={node.writeTo}               // echoed back through onSave meta
   onSave={(value, meta) => ...}        // meta carries { writeTo, kind, buttonId, elemId }
   status={{ isLoading, isError }}      // ephemeral, owned one tier up
   services={{ fileUrlForIndex, ... }}  // injected capabilities, not data
@@ -163,6 +187,10 @@ child. Neither path restricts the child's `kind`.
   {children}                           {/* container tiers only */}
 </Component>
 ```
+
+Instance-level metadata travels as a single `meta` object (`{ label, id, ... }`) so
+the prop contract never accretes one-off props. This `meta` (Instance lifetime) is
+distinct from a registry **entry**'s `meta` (Type-level flags like `showLabel`).
 
 ## 5. Resolver responsibilities (`CardCore` / `NodeRenderer`)
 
