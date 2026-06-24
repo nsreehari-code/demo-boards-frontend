@@ -1,0 +1,1186 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nsreehari.github.io/boards/live-cards.schema.json",
+  "definitions": {
+    "bind_ref": {
+      "description": "A card data path reference, e.g. 'card_data.raw_quotes' or 'requires.upstream'",
+      "type": "string",
+      "pattern": "^(card_data|requires|fetched_sources|computed_values)(\\.|$)"
+    },
+    "compute_expr": {
+      "description": "A declarative JSON compute expression",
+      "type": "object",
+      "required": [
+        "fn"
+      ],
+      "properties": {
+        "fn": {
+          "type": "string",
+          "description": "Function name from the built-in vocabulary",
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "first",
+            "last",
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "round",
+            "abs",
+            "mod",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "eq",
+            "neq",
+            "if",
+            "and",
+            "or",
+            "not",
+            "concat",
+            "upper",
+            "lower",
+            "template",
+            "filter",
+            "pluck",
+            "map",
+            "sort",
+            "slice",
+            "flat",
+            "unique",
+            "group",
+            "get",
+            "default",
+            "now",
+            "diff_days",
+            "format_date"
+          ]
+        },
+        "input": {
+          "description": "card_data.path, literal, array of inputs, or nested compute_expr",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array"
+            },
+            {
+              "$ref": "#/definitions/compute_expr"
+            }
+          ]
+        },
+        "field": {
+          "type": "string",
+          "description": "For pluck/sum/group — the object key to extract"
+        },
+        "where": {
+          "$ref": "#/definitions/compute_expr",
+          "description": "For filter — predicate expression ($ = current item)"
+        },
+        "cond": {
+          "$ref": "#/definitions/compute_expr",
+          "description": "For if — condition expression"
+        },
+        "then": {
+          "description": "For if — value when cond is truthy"
+        },
+        "else": {
+          "description": "For if — value when cond is falsy"
+        },
+        "format": {
+          "type": "string",
+          "description": "For format_date — date format string"
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "presentation": {
+          "type": "object",
+          "description": "Semantic presentation hints authored on the card, expressed from the user's perception of the card on the Main Canvas. Content shape is inferred from view.elements[].kind; runtime placement and live drag/resize coordinates are frontend-managed and must not be authored into card JSON.",
+          "properties": {
+            "prominence": {
+              "type": "string",
+              "default": "standard",
+              "description": "How much the user should care about this card / how much attention it earns. Default: standard; omit unless a non-standard value is needed.",
+              "enum": [
+                "glance",
+                "standard",
+                "feature",
+                "spotlight"
+              ]
+            },
+            "footprint": {
+              "type": "string",
+              "default": "standard",
+              "description": "How much room the card wants to render well, independent of attention. Default: standard; omit unless a non-standard value is needed.",
+              "enum": [
+                "compact",
+                "standard",
+                "wide",
+                "large"
+              ]
+            },
+            "resizable": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether the user may resize this card at runtime. Default: true; omit unless it must be false."
+            }
+          },
+          "additionalProperties": true
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "__private": {
+      "description": "Control-plane-owned private state. Stripped entirely from all regular /mcp read responses. Writable only via 'setstate.card-private' and 'manage.admin-upsert-card'. Agents must never author this field. Keys inside use plain names (no leading underscores).",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs of upstream nodes this node depends on"
+    },
+    "provides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "bindTo",
+          "ref"
+        ],
+        "properties": {
+          "bindTo": {
+            "type": "string",
+            "description": "Token name published downstream"
+          },
+          "ref": {
+            "type": "string",
+            "description": "Path to read value from (card_data.*, requires.*, fetched_sources.*, computed_values.*)"
+          }
+        }
+      },
+      "description": "Explicit bindings exposing computed or card_data values downstream as named tokens"
+    },
+    "compute_step": {
+      "description": "A single ordered compute step: reads card_data.*/requires.*/computed_values.*, writes to computed_values[bindTo]",
+      "type": "object",
+      "required": [
+        "bindTo",
+        "expr"
+      ],
+      "properties": {
+        "bindTo": {
+          "type": "string",
+          "description": "Key in computed_values to write result"
+        },
+        "expr": {
+          "type": "string",
+          "description": "JSONata expression evaluated against { card_data, requires, fetched_sources, computed_values }"
+        }
+      }
+    },
+    "source_def": {
+      "description": "One source entry. The engine requires 'bindTo' (compute namespace key) and 'outputFile' (delivery signal path). bindTo and outputFile must be unique across all source_defs in a card. Every other property is yours — add whatever your task-executor needs: kind, url, headers, mailbox, channel, model, query, etc. The full object is passed verbatim as the --in JSON to the executor.",
+      "type": "object",
+      "required": [
+        "bindTo",
+        "outputFile"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "bindTo": {
+          "type": "string",
+          "description": "Key under fetched_sources.* available in compute expressions"
+        },
+        "outputFile": {
+          "type": "string",
+          "description": "Board-relative path the executor writes its JSON result to. Presence of this file signals delivery."
+        },
+        "projections": {
+          "type": "object",
+          "description": "Named data projections from card_data or requires, evaluated before the executor is called. Each key is a ref name; each value is a JSONata expression rooted at card_data or requires. The resolved values are passed to the executor as _projections. fetched_sources, computed_values, and source_defs are not accessible here — sources run before those exist.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "skip_when": {
+          "type": "string",
+          "description": "JSONata over card_data/requires. Truthy skips this source."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 120000,
+          "description": "Executor/script timeout in ms. Default: 120 000 (2 min)."
+        },
+        "script": {
+          "type": "string",
+          "description": "Legacy direct-run: shell command executed when no .task-executor is registered. stdout is captured as the result."
+        }
+      }
+    },
+    "render_element": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "metric",
+            "table",
+            "editable-table",
+            "chart",
+            "form",
+            "list",
+            "notes",
+            "todo",
+            "alert",
+            "narrative",
+            "badge",
+            "text",
+            "markdown",
+            "markup",
+            "selection",
+            "searchbox",
+            "query",
+            "ref",
+            "custom",
+            "actions"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Optional element ID for targeted updates and action routing"
+        },
+        "label": {
+          "type": "string",
+          "description": "Heading above this element (also the metric/alert title)"
+        },
+        "className": {
+          "type": "string",
+          "description": "Bootstrap grid class, e.g. 'col-12 col-md-6'"
+        },
+        "containerStyle": {
+          "type": "object",
+          "description": "Inline style applied to the element container"
+        },
+        "visible": {
+          "type": "string",
+          "description": "card_data/requires/fetched_sources/computed_values path — element shown only if truthy"
+        },
+        "data": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/value_source"
+            }
+          ],
+          "description": "The element value: { bind } (dynamic) or { value } (static literal)"
+        },
+        "writeTo": {
+          "$ref": "#/definitions/write_ref"
+        },
+        "spec": {
+          "type": "object",
+          "description": "Per-kind static configuration (constrained per kind below)"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "metric"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "table"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_table"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "list"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_table"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "chart"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_chart"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "alert"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_alert"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "badge"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_badge"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "narrative"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_text"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "markdown"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "markup"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              },
+              "writeTo": false
+            },
+            "required": [
+              "data"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "actions"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_actions"
+              },
+              "data": false,
+              "writeTo": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "selection"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_single_field"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "searchbox"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_searchbox"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "query"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_searchbox"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "form"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_form"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "notes"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "todo"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_empty"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "editable-table"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_editable_table"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "ref"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec": {
+                "$ref": "#/definitions/spec_ref"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "view": {
+      "type": "object",
+      "required": [
+        "elements"
+      ],
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/render_element"
+          }
+        }
+      }
+    },
+    "value_source": {
+      "description": "Element value source. Exactly one of `bind` (dynamic path) or `value` (static inline literal).",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "bind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "bind": {
+              "$ref": "#/definitions/bind_ref",
+              "description": "card_data/requires/fetched_sources/computed_values path to read the value from"
+            }
+          }
+        },
+        {
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "description": "Static inline literal value (no binding)."
+            }
+          }
+        }
+      ]
+    },
+    "write_ref": {
+      "type": "string",
+      "pattern": "^card_data(\\.|$)",
+      "description": "card_data path the element writes user input to (input kinds only)"
+    },
+    "spec_empty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "spec_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Visible columns, in order"
+        },
+        "maxRows": {
+          "type": "integer",
+          "description": "Max rows to display"
+        },
+        "sortable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable click-to-sort"
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Empty-state message"
+        }
+      }
+    },
+    "spec_chart": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chartType": {
+          "enum": [
+            "bar",
+            "line",
+            "area",
+            "scatter",
+            "pie",
+            "doughnut"
+          ],
+          "description": "Explicit chart type (else auto-detected)"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "First column is the label/x axis; rest are series"
+        },
+        "labelKey": {
+          "type": "string",
+          "description": "Row key to use as the category/x label"
+        },
+        "xKey": {
+          "type": "string",
+          "description": "Row key to use as the x axis (line charts)"
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Row keys to plot as series"
+        },
+        "stacked": {
+          "type": "boolean",
+          "description": "Stack bar/area series"
+        },
+        "legend": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the legend"
+        },
+        "grid": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the cartesian grid"
+        },
+        "height": {
+          "type": "integer",
+          "default": 220,
+          "description": "Chart height in pixels"
+        }
+      }
+    },
+    "spec_alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "green": {
+              "type": "string",
+              "description": "Comparison expr, e.g. '>=80'"
+            },
+            "amber": {
+              "type": "string",
+              "description": "Comparison expr, e.g. '>=50'"
+            }
+          }
+        }
+      }
+    },
+    "spec_badge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "colorMap": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "value → tone/Bootstrap color"
+        }
+      }
+    },
+    "spec_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "default",
+            "file-links"
+          ],
+          "description": "'file-links' renders the bound file array as download links"
+        },
+        "style": {
+          "enum": [
+            "default",
+            "muted",
+            "muted-italic",
+            "heading"
+          ],
+          "description": "Display style"
+        },
+        "hideIfEmpty": {
+          "type": "boolean",
+          "description": "Render nothing when the value is empty"
+        }
+      }
+    },
+    "spec_actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buttons"
+      ],
+      "properties": {
+        "buttons": {
+          "type": "array",
+          "description": "Button definitions; clicks emit an action save keyed by element id + button id",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "style": {
+                "type": "string",
+                "description": "Bootstrap button variant, e.g. 'success', 'outline-danger'"
+              },
+              "size": {
+                "type": "string",
+                "default": "sm"
+              },
+              "disabled": {
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "description": "card_data/requires/fetched_sources/computed_values path — truthy = disabled"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "spec_form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "JSON-Schema-ish { properties, required } describing the form fields"
+        },
+        "discardLabel": {
+          "type": "string"
+        },
+        "saveLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "spec_single_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Single-property JSON-Schema-ish { properties, required } for the control"
+        }
+      }
+    },
+    "spec_searchbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Single-property JSON-Schema-ish { properties, required } for the query field"
+        },
+        "actionLabel": {
+          "type": "string",
+          "description": "Submit button label (default 'Search')"
+        }
+      }
+    },
+    "spec_editable_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "type": "object",
+          "description": "JSON-Schema-ish { properties } describing per-column cell types"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Explicit column order"
+        },
+        "addRow": {
+          "type": "boolean",
+          "default": true
+        },
+        "deleteRow": {
+          "type": "boolean",
+          "default": true
+        },
+        "placeholder": {
+          "type": "string"
+        }
+      }
+    },
+    "spec_ref": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "viewBind"
+      ],
+      "properties": {
+        "viewBind": {
+          "$ref": "#/definitions/bind_ref",
+          "description": "Path to a computed view descriptor { kind, data?, spec? } selecting the effective kind at runtime"
+        },
+        "fallbackKind": {
+          "enum": [
+            "metric",
+            "table",
+            "editable-table",
+            "chart",
+            "form",
+            "list",
+            "notes",
+            "todo",
+            "alert",
+            "narrative",
+            "badge",
+            "text",
+            "markdown",
+            "markup",
+            "selection",
+            "searchbox",
+            "query",
+            "ref",
+            "custom",
+            "actions"
+          ],
+          "description": "Kind to use when viewBind is absent/unresolved"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Columns to forward to the resolved table/list view"
+        }
+      }
+    }
+  },
+  "title": "LiveCard",
+  "description": "A unified card node. Behavior depends on which sections are present (source_defs, compute, view, etc.)",
+  "type": "object",
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "requires": {
+      "$ref": "#/definitions/requires"
+    },
+    "provides": {
+      "$ref": "#/definitions/provides"
+    },
+    "meta": {
+      "$ref": "#/definitions/meta"
+    },
+    "__private": {
+      "$ref": "#/definitions/__private"
+    },
+    "view": {
+      "$ref": "#/definitions/view"
+    },
+    "card_data": {
+      "type": "object",
+      "description": "User editable data on card. Includes uploaded-file metadata maintained by host handlers. Not to be used for card static content.",
+      "properties": {
+        "files": {
+          "type": "array",
+          "description": "Optional uploaded-file metadata maintained by host handlers. Stored name is normalized and serial-prefixed (for example 001-my_file.pdf).",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "stored_name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stored_name": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 32,
+                "pattern": "^[0-9]{3,}-[a-z0-9._-]+$"
+              },
+              "size": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^[^\\s]+/files/[0-9]{3,}-[a-z0-9._-]+$"
+              },
+              "uploaded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "chat": {
+                "type": "boolean",
+                "description": "Whether this file entry is associated with a chat interaction"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "source_defs": {
+      "type": "array",
+      "description": "Source entries. Each entry is passed verbatim to the board's .task-executor (registered via init --task-executor) as the --in JSON file. The executor fetches/generates the data and writes JSON to --out. If no executor is registered, the built-in executor runs the entry's 'cli' command directly. Sources gate completion.",
+      "items": {
+        "$ref": "#/definitions/source_def"
+      }
+    },
+    "compute": {
+      "type": "array",
+      "description": "Ordered array of compute steps. Each reads card_data.*/requires.*/fetched_sources.*/computed_values.* and writes to ephemeral computed_values[bindTo].",
+      "items": {
+        "$ref": "#/definitions/compute_step"
+      }
+    }
+  }
+}

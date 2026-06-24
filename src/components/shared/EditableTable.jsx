@@ -1,25 +1,36 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { deepEqual } from '../lib/coerce.js';
-import { getObjectColumns, mergeRows } from '../lib/fieldConfig.js';
+import React, { useCallback, useMemo } from 'react';
+import { getObjectColumns, mergeRows } from '../registry/lib/fieldConfig.js';
+import { useDraftState } from '../../hooks/useDraftState.js';
 
-export function EditableTable({ spec = {}, data, writeTo, onSave }) {
+/**
+ * Reusable, self-contained editable table.
+ *
+ * Owns its own draft state (via `useDraftState`), column derivation, row
+ * add/edit/delete behaviour, and the dirty-driven Discard / Save buttons (plus
+ * the optional "Add row" button).
+ *
+ * Callers supply the schema (`spec`), the externally owned base rows
+ * (`baseRows`, memoize in the caller), and an `onSave` handler that decides
+ * where the committed rows go.
+ *
+ * Props:
+ *   spec     – { schema: { properties }, columns?, addRow?, deleteRow?, placeholder? }
+ *   baseRows – externally owned rows array the draft is layered on top of
+ *   onSave   – (rows) => void, called on save with the merged draft rows
+ */
+export function EditableTable({ spec = {}, baseRows = [], onSave }) {
   const schemaProps = spec.schema?.properties ?? {};
   const canAdd = spec.addRow !== false;
   const canDelete = spec.deleteRow !== false;
-  const baseRows = useMemo(() => mergeRows(data), [data]);
-  const [journalRows, setJournalRows] = useState(null);
+  const base = useMemo(() => ({ rows: mergeRows(baseRows) }), [baseRows]);
+  const { values, dirty, setField, discard: handleDiscard } = useDraftState(base);
 
-  useEffect(() => {
-    setJournalRows((current) => (Array.isArray(current) && deepEqual(current, baseRows) ? null : current));
-  }, [baseRows]);
-
-  const dirty = Array.isArray(journalRows);
-  const effectiveRows = dirty ? mergeRows(journalRows) : mergeRows(baseRows);
+  const effectiveRows = mergeRows(values.rows);
   const columns = getObjectColumns(effectiveRows, spec.columns);
 
   const updateRows = useCallback((nextRows) => {
-    setJournalRows(deepEqual(nextRows, baseRows) ? null : mergeRows(nextRows));
-  }, [baseRows]);
+    setField('rows', mergeRows(nextRows));
+  }, [setField]);
 
   const handleAddRow = useCallback(() => {
     const nextRow = {};
@@ -29,13 +40,9 @@ export function EditableTable({ spec = {}, data, writeTo, onSave }) {
     updateRows([...effectiveRows, nextRow]);
   }, [columns, effectiveRows, updateRows]);
 
-  const handleDiscard = useCallback(() => {
-    setJournalRows(null);
-  }, []);
-
   const handleSave = useCallback(() => {
-    onSave?.(effectiveRows, { kind: 'editable-table', writeTo });
-  }, [effectiveRows, onSave, writeTo]);
+    onSave?.(effectiveRows);
+  }, [effectiveRows, onSave]);
 
   return (
     <div className="h-100 d-flex flex-column min-h-0">
@@ -127,9 +134,3 @@ export function EditableTable({ spec = {}, data, writeTo, onSave }) {
     </div>
   );
 }
-
-export const entry = {
-  kind: 'editable-table',
-  renderComponentFn: EditableTable,
-  meta: { showLabel: true, controlled: 'commit' },
-};

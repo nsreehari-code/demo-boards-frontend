@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { getObjectColumns } from '../lib/fieldConfig.js';
+import { getObjectColumns } from '../registry/lib/fieldConfig.js';
 
-export function Table({ spec = {}, data }) {
+/**
+ * Reusable, read-only data table with click-to-sort columns.
+ *
+ * Props:
+ *   data        – array of row objects
+ *   columns     – optional explicit column list (else derived from data)
+ *   maxRows     – cap on rendered rows (default 200)
+ *   sortable    – enable column sorting (default true)
+ *   placeholder – text shown when data is empty
+ */
+export function Table({ data, columns: columnsSpec, maxRows = 200, sortable = true, placeholder = 'No data' }) {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -11,12 +21,11 @@ export function Table({ spec = {}, data }) {
   }, [data]);
 
   if (!Array.isArray(data) || !data.length) {
-    return <p className="board-text-muted small mb-0">{spec.placeholder ?? 'No data'}</p>;
+    return <p className="board-text-muted small mb-0">{placeholder}</p>;
   }
 
-  const limit = Math.min(data.length, spec.maxRows ?? 200);
-  const columns = getObjectColumns(data.slice(0, limit), spec.columns);
-  const sortable = spec.sortable !== false;
+  const limit = Math.min(data.length, maxRows);
+  const columns = getObjectColumns(data.slice(0, limit), columnsSpec);
 
   let rows = data.slice(0, limit);
   if (sortable && sortCol !== null) {
@@ -81,9 +90,3 @@ export function Table({ spec = {}, data }) {
     </div>
   );
 }
-
-export const entry = {
-  kind: 'table',
-  renderComponentFn: Table,
-  meta: { showLabel: true, isReadonly: true },
-};

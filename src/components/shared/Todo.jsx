@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { deepEqual } from '../lib/coerce.js';
-import { mergeRows } from '../lib/fieldConfig.js';
+import { deepEqual } from '../registry/lib/coerce.js';
+import { mergeRows } from '../registry/lib/fieldConfig.js';
 
 function TodoComposer({ onAdd }) {
   const [value, setValue] = useState('');
@@ -38,24 +38,36 @@ function TodoComposer({ onAdd }) {
   );
 }
 
-export function Todo({ data, writeTo, onSave }) {
-  const baseItems = useMemo(() => mergeRows(data), [data]);
-  const [state, setState] = useState({ currentState: baseItems, pending: mergeRows(baseItems) });
+/**
+ * Reusable, self-contained todo list.
+ *
+ * Owns its own draft state (`currentState` / `pending` reconciliation), the
+ * add composer, and per-item toggle/remove behaviour. Callers supply the
+ * externally owned `baseItems` array (memoize in the caller) and an `onSave`
+ * handler that decides where the committed items go.
+ *
+ * Props:
+ *   baseItems – externally owned items array the draft is layered on top of
+ *   onSave    – (items) => void, called whenever the list mutates
+ */
+export function Todo({ baseItems = [], onSave }) {
+  const items = useMemo(() => mergeRows(baseItems), [baseItems]);
+  const [state, setState] = useState({ currentState: items, pending: mergeRows(items) });
 
   useEffect(() => {
     setState((current) => {
       const dirty = !deepEqual(current.currentState, current.pending);
       return {
-        currentState: baseItems,
-        pending: dirty ? current.pending : mergeRows(baseItems),
+        currentState: items,
+        pending: dirty ? current.pending : mergeRows(items),
       };
     });
-  }, [baseItems]);
+  }, [items]);
 
   const save = useCallback((nextPending) => {
     setState({ currentState: mergeRows(nextPending), pending: mergeRows(nextPending) });
-    onSave?.(nextPending, { kind: 'todo', writeTo });
-  }, [onSave, writeTo]);
+    onSave?.(nextPending);
+  }, [onSave]);
 
   return (
     <div className="h-100 d-flex flex-column min-h-0">
@@ -94,9 +106,3 @@ export function Todo({ data, writeTo, onSave }) {
     </div>
   );
 }
-
-export const entry = {
-  kind: 'todo',
-  renderComponentFn: Todo,
-  meta: { showLabel: true, controlled: 'commit' },
-};

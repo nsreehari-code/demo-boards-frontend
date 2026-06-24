@@ -1,25 +1,29 @@
 import React from 'react';
 
-// Default text renderer and the registry fallback kind. Reads all config from
-// `spec`; file links resolve through the injected `services.fileUrlForIndex`.
-export function Text({ spec = {}, data, services }) {
-  const format = spec.format ?? 'default';
-  const style = spec.style ?? 'default';
-  const hideIfEmpty = spec.hideIfEmpty;
-
-  if (hideIfEmpty && (data == null || data === '')) return null;
+/**
+ * Reusable text / file-link renderer.
+ *
+ * Props:
+ *   value          – string copy, or a file array when format === 'file-links'
+ *   format         – 'default' | 'file-links'
+ *   style          – 'default' | 'muted' | 'muted-italic' | 'heading'
+ *   hideIfEmpty    – render nothing when value is empty
+ *   resolveFileUrl – (index, file) => href|undefined, used for 'file-links'
+ */
+export function Text({ value, format = 'default', style = 'default', hideIfEmpty = false, resolveFileUrl }) {
+  if (hideIfEmpty && (value == null || value === '')) return null;
 
   if (format === 'file-links') {
-    if (!Array.isArray(data) || data.length === 0) {
+    if (!Array.isArray(value) || value.length === 0) {
       return <div className="board-text-muted small">No files uploaded</div>;
     }
     return (
       <div>
-        {data.map((file, index) => {
+        {value.map((file, index) => {
           if (!file?.stored_name) return null;
           const name = file.name ?? file.stored_name;
           const size = file.size ? ` (${Math.round(file.size / 1024)}KB)` : '';
-          const href = services?.fileUrlForIndex?.(index, file);
+          const href = resolveFileUrl?.(index, file);
           return (
             <div key={`${file.stored_name}-${index}`} className="mb-2">
               {href ? (
@@ -42,11 +46,5 @@ export function Text({ spec = {}, data, services }) {
       : style === 'heading'
         ? 'fw-bold'
         : 'small';
-  return <Tag className={`${className} board-card-copy-block`}>{data != null ? String(data) : ''}</Tag>;
+  return <Tag className={`${className} board-card-copy-block`}>{value != null ? String(value) : ''}</Tag>;
 }
-
-export const entry = {
-  kind: 'text',
-  renderComponentFn: Text,
-  meta: { showLabel: true, isReadonly: true },
-};

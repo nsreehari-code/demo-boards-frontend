@@ -36,65 +36,72 @@ function buildUpstreamSignature(cardState) {
   });
 }
 
-function resolveRefKind(namespaces, element, initialData) {
-  const viewRaw = element?.data?.viewBind ? resolveBind(namespaces, element.data.viewBind) : undefined;
+// The element value source (authoring contract B): `data` is either
+// `{ bind: <path> }` (dynamic) or `{ value: <literal> }` (static). Returns the
+// resolved value, or undefined when there is no value source.
+function resolveElementValue(namespaces, source) {
+  if (!source || typeof source !== 'object') return undefined;
+  if (source.bind) return resolveBind(namespaces, source.bind);
+  if ('value' in source) return source.value;
+  return undefined;
+}
+
+function resolveRefKind(namespaces, element, effectiveData) {
+  const spec = element?.spec ?? {};
+  const viewRaw = spec.viewBind ? resolveBind(namespaces, spec.viewBind) : undefined;
   if (typeof viewRaw === 'string' && viewRaw) return viewRaw;
   if (viewRaw && typeof viewRaw === 'object' && !Array.isArray(viewRaw) && typeof viewRaw.kind === 'string') {
     return viewRaw.kind;
   }
-  if (element?.data?.fallbackKind) return element.data.fallbackKind;
-  if (Array.isArray(initialData)) return 'table';
-  if (typeof initialData === 'string') return 'text';
+  if (spec.fallbackKind) return spec.fallbackKind;
+  if (Array.isArray(effectiveData)) return 'table';
+  if (typeof effectiveData === 'string') return 'text';
   return 'narrative';
 }
 
+// Resolves an authored element to the node shape the engine consumes:
+//   { kind, spec, bind, writeTo, data }
+// Contract B: value lives in `data` ({ bind } | { value }), config in `spec`,
+// and the write target in top-level `writeTo` — no derivation/splitting.
 function normalizeElement(namespaces, element) {
-  const baseData = element?.data?.bind ? resolveBind(namespaces, element.data.bind) : undefined;
-
   if (element?.kind !== 'ref') {
-    return { kind: element.kind, renderDef: element, data: baseData };
+    return {
+      kind: element.kind,
+      spec: element.spec ?? {},
+      bind: element.data?.bind ?? null,
+      writeTo: element.writeTo ?? null,
+      data: resolveElementValue(namespaces, element.data),
+    };
   }
 
-  const viewRaw = element?.data?.viewBind ? resolveBind(namespaces, element.data.viewBind) : undefined;
-  const resolvedExtra = viewRaw && typeof viewRaw === 'object' && !Array.isArray(viewRaw)
-    ? (viewRaw.data && typeof viewRaw.data === 'object' ? viewRaw.data : {})
-    : {};
+  // `ref` selects its effective kind/data/spec from a computed view descriptor
+  // ({ kind, data?, spec? }), falling back to the element's own data/spec.
+  const elementSpec = element.spec ?? {};
+  const { viewBind, fallbackKind, ...refSpec } = elementSpec;
+  const viewRaw = viewBind ? resolveBind(namespaces, viewBind) : undefined;
+  const descriptor = (viewRaw && typeof viewRaw === 'object' && !Array.isArray(viewRaw)) ? viewRaw : {};
+  const descriptorSpec = (descriptor.spec && typeof descriptor.spec === 'object') ? descriptor.spec : {};
+  const descriptorData = (descriptor.data && typeof descriptor.data === 'object') ? descriptor.data : null;
 
-  const mergedData = { ...resolvedExtra, ...(element.data ?? {}) };
-  delete mergedData.viewBind;
-  delete mergedData.fallbackKind;
-
-  if (!mergedData.bind && resolvedExtra.bind) mergedData.bind = resolvedExtra.bind;
-
-  const effectiveData = mergedData.bind ? resolveBind(namespaces, mergedData.bind) : baseData;
+  const effectiveData = descriptorData
+    ? resolveElementValue(namespaces, descriptorData)
+    : resolveElementValue(namespaces, element.data);
   const resolvedKind = resolveRefKind(namespaces, element, effectiveData);
 
   return {
     kind: resolvedKind,
-    renderDef: {
-      ...element,
-      kind: resolvedKind,
-      data: mergedData,
-    },
+    spec: { ...refSpec, ...descriptorSpec },
+    bind: descriptorData?.bind ?? element.data?.bind ?? null,
+    writeTo: element.writeTo ?? null,
     data: effectiveData,
   };
 }
 
 function buildLayoutNode(namespaces, element, index) {
   const normalized = normalizeElement(namespaces, element);
-  const mergedData = normalized.renderDef?.data ?? {};
-
-  // spec is the component's own (open) vocabulary; bind/writeTo are engine wiring
-  // and live at the node top level, so strip them out of spec.
-  const spec = { ...mergedData };
-  delete spec.bind;
-  delete spec.writeTo;
-
-  const bind = mergedData.bind ?? null;
-  const writeTo = mergedData.writeTo ?? null;
   const reactKey = element?.id
-    ?? bind
-    ?? writeTo
+    ?? normalized.bind
+    ?? normalized.writeTo
     ?? element?.label
     ?? `${normalized.kind}-${element?.className ?? 'col-12'}-${index}`;
 
@@ -106,9 +113,9 @@ function buildLayoutNode(namespaces, element, index) {
       kind: normalized.kind,
       id: element?.id,
       label: element?.label,
-      spec,
-      bind,
-      writeTo,
+      spec: normalized.spec,
+      bind: normalized.bind,
+      writeTo: normalized.writeTo,
       data: normalized.data,
     },
   };

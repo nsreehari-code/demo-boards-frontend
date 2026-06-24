@@ -1,7 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
-export function Notes({ data, writeTo, onSave }) {
-  const baseContent = typeof data === 'string' ? data : '';
+/**
+ * Reusable, self-contained notes editor.
+ *
+ * Owns its own draft journal, the textarea, and the dirty-driven Discard / Save
+ * buttons. Callers supply the externally owned `baseContent` string and an
+ * `onSave` handler that decides where the committed text goes.
+ *
+ * Props:
+ *   baseContent – externally owned content string the draft is layered on top of
+ *   placeholder – textarea placeholder text
+ *   onSave      – (content) => void, called on save with the effective content
+ */
+export function Notes({ baseContent = '', placeholder = 'Write markdown...', onSave }) {
   const [journal, setJournal] = useState(null);
 
   useEffect(() => {
@@ -21,15 +32,15 @@ export function Notes({ data, writeTo, onSave }) {
   }, []);
 
   const handleSave = useCallback(() => {
-    onSave?.(effectiveContent, { kind: 'notes', writeTo });
-  }, [effectiveContent, onSave, writeTo]);
+    onSave?.(effectiveContent);
+  }, [effectiveContent, onSave]);
 
   return (
     <div className="h-100 d-flex flex-column min-h-0">
       <textarea
         className="form-control form-control-sm board-textarea flex-grow-1"
         rows={8}
-        placeholder="Write markdown..."
+        placeholder={placeholder}
         value={effectiveContent}
         onChange={handleChange}
       />
@@ -52,9 +63,3 @@ export function Notes({ data, writeTo, onSave }) {
     </div>
   );
 }
-
-export const entry = {
-  kind: 'notes',
-  renderComponentFn: Notes,
-  meta: { showLabel: true, controlled: 'commit' },
-};

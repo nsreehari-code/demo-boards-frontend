@@ -1,21 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getSingleFieldConfig, buildEditorSaveValue } from '../lib/fieldConfig.js';
 
-// `searchbox` kind. Intentionally a duplicate of QueryView.jsx (two first-class
-// kinds, no alias / normalization).
-export function Searchbox({ spec = {}, data, currentValue, writeTo, onSave }) {
-  const singleField = getSingleFieldConfig(spec, data, currentValue, writeTo);
-  const fieldKey = singleField?.fieldKey;
-  const prop = singleField?.prop ?? {};
-  const fieldValue = singleField?.currentValue;
-  const isRequired = singleField?.isRequired;
-  const buttonLabel = spec.actionLabel ?? 'Search';
-
-  const [journalValue, setJournalValue] = useState(fieldValue ?? '');
+/**
+ * Reusable, self-contained search input.
+ *
+ * Owns the local input journal, type-aware coercion, and submit handling.
+ * Callers supply the already-resolved field config (`prop`, `fieldKey`,
+ * `value`, `isRequired`) and an `onSubmit` handler that decides where the
+ * coerced value goes.
+ *
+ * Props:
+ *   prop        – field schema ({ type, format, minimum, maximum, title, placeholder })
+ *   fieldKey    – key of the field being searched
+ *   value       – externally owned current value
+ *   isRequired  – whether the input is required
+ *   buttonLabel – accessible label / tooltip for the submit button
+ *   onSubmit    – (coercedValue) => void, called on submit
+ */
+export function Searchbox({ prop = {}, fieldKey, value, isRequired = false, buttonLabel = 'Search', onSubmit }) {
+  const [journalValue, setJournalValue] = useState(value ?? '');
 
   useEffect(() => {
-    setJournalValue(fieldValue ?? '');
-  }, [fieldValue]);
+    setJournalValue(value ?? '');
+  }, [value]);
 
   const handleSubmit = useCallback((event) => {
     event.preventDefault();
@@ -24,19 +30,12 @@ export function Searchbox({ spec = {}, data, currentValue, writeTo, onSave }) {
     if (prop.type === 'number' || prop.type === 'integer') {
       nextValue = journalValue === '' ? '' : Number.parseFloat(journalValue);
     }
-    onSave?.(
-      buildEditorSaveValue(writeTo, fieldKey, nextValue),
-      { kind: 'searchbox', writeTo },
-    );
-  }, [fieldKey, journalValue, onSave, prop.type, writeTo]);
+    onSubmit?.(nextValue);
+  }, [fieldKey, journalValue, onSubmit, prop.type]);
 
   const handleChange = useCallback((event) => {
     setJournalValue(event.target.value);
   }, []);
-
-  if (!singleField) {
-    return <p className="board-text-muted small mb-0">No search field configured</p>;
-  }
 
   return (
     <form className="input-group input-group-sm" onSubmit={handleSubmit}>
@@ -63,9 +62,3 @@ export function Searchbox({ spec = {}, data, currentValue, writeTo, onSave }) {
     </form>
   );
 }
-
-export const entry = {
-  kind: 'searchbox',
-  renderComponentFn: Searchbox,
-  meta: { showLabel: true, controlled: 'commit' },
-};

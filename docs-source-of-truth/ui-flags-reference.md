@@ -29,8 +29,8 @@ Each entry says **what** the knob is, **where it lives**, **who sets it**, and
 | Runtime status | `cardRuntime.status` | Runtime (not authored) | `src/components/CardShell.jsx`, `src/theme.css` |
 | Pane routing | pane names (`gandalf`, `truthset`, …) — *match conditions are config-driven* | Board UI config / template | `src/lib/cardPresentationConfig.js` |
 | Renderer selection | renderer names (`default`, `ingest`) — *match conditions are config-driven* | Board UI config / template | `src/components/CardRenderer.jsx` |
-| View kinds | `view.elements[].kind` | Agent (card author) | `src/components/CardCoreView.jsx` |
-| Element render options | `view.elements[].data.*` (columns, chartType, writeTo, colorMap, thresholds, …) | Agent (card author) | `src/components/CardCoreView.jsx` |
+| View kinds | `view.elements[].kind` | Agent (card author) | `src/components/registry/cardview/*.jsx` |
+| Element render options | `view.elements[].data.*` (columns, chartType, writeTo, colorMap, thresholds, …) | Agent (card author) | `src/components/renderers/CardviewRenderer.jsx`, `src/components/registry/engine/NodeRenderer.jsx` |
 | App config | `app-config.json` (transportMode, serverOrigin, storage, canvasLayout, …) | Deployer | `src/lib/appConfig.js` |
 | Board UI config | board `ui.paneRules`, `ui.cardRendererRules` | Board / template | `src/hooks/useManagedBoardConfig.js`, `src/lib/cardPresentationConfig.js` |
 | Layout & persistence | canvas positions/widths, width bounds, autosave | Runtime (user drag/resize) | `src/lib/boardCanvasLayout.js`, `src/hooks/useCoordsState.jsx`, `src/lib/boardLayoutCache.js` |
@@ -226,9 +226,11 @@ default   (fallback)
 
 ## 5. View kinds (`view.elements[].kind`)
 
-Each element resolves its data and feeds a renderer. The full kind → component
-map is `CARD_CORE_VIEW_KINDS` in
-[src/components/CardCoreView.jsx](src/components/CardCoreView.jsx).
+Each element resolves its data and feeds a renderer. The kind → component map is
+the registry of cardview entries under
+[src/components/registry/cardview/](src/components/registry/cardview/), resolved
+by [src/components/renderers/CardviewRenderer.jsx](src/components/renderers/CardviewRenderer.jsx)
+and [src/components/registry/engine/NodeRenderer.jsx](src/components/registry/engine/NodeRenderer.jsx).
 
 | kind | Editable | Notes |
 | --- | --- | --- |
@@ -254,7 +256,12 @@ expanded into a `selection`/`searchbox` form.
 
 > Editable kinds without `data.writeTo` drop edits silently.
 
-### Per-kind `data.*` options (all consumed in `CardCoreView.jsx`)
+### Per-kind `data.*` options
+
+These authored `data.*` keys become the component's `spec` (the engine resolves
+`data.bind` to the value and routes the rest into `spec`; see
+[NodeRenderer.jsx](../src/components/registry/engine/NodeRenderer.jsx) and
+[CardviewRenderer.jsx](../src/components/renderers/CardviewRenderer.jsx)).
 
 The options below are the knobs each renderer honors. Anything not listed is
 ignored. `data.bind` (the source path) and `data.writeTo` (the save path) apply
@@ -265,7 +272,7 @@ to every element; see §10 for bind namespaces.
 | `table` | `columns`, `maxRows`, `sortable`, `placeholder` | `maxRows` 200; `sortable` true; `placeholder` "No data". |
 | `editable-table` | `columns`, `schema.properties`, `addRow`, `deleteRow`, `placeholder`, `writeTo` | `addRow`/`deleteRow` true; `placeholder` "No rows". |
 | `chart` | `chartType`, `columns`, `series`, `stacked`, `legend`, `grid`, `height`, `labelKey`/`xKey` | `height` 220; `legend`/`grid` true; `stacked` false; accepts row arrays or Chart.js `{labels,datasets}`. |
-| `metric` | reads `title`, `label`, `metric`/`value`, `detail` from data | label also from `element.label`. |
+| `metric` | the bound value is a number/string | label from `element.label`. |
 | `list` | `maxRows`, `placeholder` | `placeholder` "Empty". |
 | `text` | `format`, `style`, `hideIfEmpty` | `format`: `default`\|`file-links`; `style`: `default`\|`heading`\|`muted`\|`muted-italic`. |
 | `badge` | `colorMap` | value → tone keyword (see below). |
@@ -293,7 +300,7 @@ matching `--status-color`.
 
 For `kind: "alert"`, `data.thresholds` (e.g. `{ green: "<10", amber: "<20" }`)
 selects the tone by comparing the numeric value (parsed by `parseThreshold` /
-`evalThreshold` in `CardCoreView.jsx`). Supported comparison operators:
+`evalThreshold` in `src/components/registry/lib/threshold.js`). Supported comparison operators:
 `<`, `<=`, `>`, `>=`, `=`, `==`, `===`. Resolution order: green → amber → red
 (default).
 
@@ -419,7 +426,7 @@ listed are consumed by the board server, not the UI.
 | --- | --- |
 | `id` | Card identifier. |
 | `meta` | Card flags (§0–§4). |
-| `view.elements[]` | Element definitions rendered by `CardCoreView` (§5). |
+| `view.elements[]` | Element definitions rendered by the cardview registry (§5). |
 | `view.layout.canvas` | Legacy layout override (§9). |
 | `requires` | Upstream token dependencies; available as the `requires.*` bind namespace and surfaced as token badges / inspect metadata on the canvas/backface. |
 | `provides` | Published tokens (array of `{ bindTo }` or strings); surfaced as token badges / inspect metadata and used by graph/layout code. |
@@ -472,10 +479,11 @@ compiled by [src/lib/cardFilterExpression.js](src/lib/cardFilterExpression.js) v
 - Path-state + tone CSS: [src/theme.css](src/theme.css)
 - Pane/renderer rules: [src/lib/cardPresentationConfig.js](src/lib/cardPresentationConfig.js), [src/components/CardRenderer.jsx](src/components/CardRenderer.jsx)
 - Filter syntax: [src/lib/cardFilterExpression.js](src/lib/cardFilterExpression.js)
-- View kinds + element options: [src/components/CardCoreView.jsx](src/components/CardCoreView.jsx)
+- View kinds + element options: [src/components/registry/cardview/](src/components/registry/cardview/), [src/components/renderers/CardviewRenderer.jsx](src/components/renderers/CardviewRenderer.jsx)
 - Authoring guidance (backend): `demo-board/server/chat-flow/instructions/agent-instructions-2-cardlayout.md`, `demo-board/server/chat-flow/skills/manage-cards-on-live-board/SKILL.md`
 
 > Keep this doc in sync when you change `appConfig.js`, `useManagedBoardConfig.js`,
 > `boardCanvasLayout.js`, `useCoordsState.jsx`, `CardShell.jsx`,
-> `cardPresentationConfig.js`, `cardFilterExpression.js`, `CardCoreView.jsx`, or
+> `cardPresentationConfig.js`, `cardFilterExpression.js`, the cardview registry
+> (`registry/cardview/*`, `CardviewRenderer.jsx`, `NodeRenderer.jsx`), or
 > the path-state / tone CSS.

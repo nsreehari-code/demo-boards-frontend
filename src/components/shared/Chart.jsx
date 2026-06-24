@@ -7,7 +7,7 @@ import {
   ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
-import { CHART_PALETTE, LEGEND_STYLE, normalizeChartData, resolveChartVariant } from '../lib/chart.js';
+import { CHART_PALETTE, LEGEND_STYLE, normalizeChartData } from '../registry/lib/chart.js';
 
 function MeasuredChart({ height, children }) {
   const ref = useRef(null);
@@ -35,8 +35,16 @@ function MeasuredChart({ height, children }) {
   );
 }
 
-// `variant` (the chart type) is resolved by the engine via the entry's
-// resolveVariant; it never swaps the Component.
+/**
+ * Reusable, read-only chart renderer (recharts). The chart type comes from
+ * `variant` (resolved upstream); it never swaps the component. Chart config and
+ * series data are read from `spec` + `data` via `normalizeChartData`.
+ *
+ * Props:
+ *   spec    – chart view config ({ stacked, legend, grid, height, ... })
+ *   variant – chart type ('bar' | 'line' | 'area' | 'scatter' | 'pie' | 'doughnut')
+ *   data    – series data
+ */
 export function Chart({ spec = {}, variant, data }) {
   const normalized = useMemo(() => normalizeChartData({ data, viewData: spec }), [data, spec]);
 
@@ -131,11 +139,3 @@ export function Chart({ spec = {}, variant, data }) {
   const height = spec.height ?? 220;
   return <MeasuredChart height={height}>{chart}</MeasuredChart>;
 }
-
-export const entry = {
-  kind: 'chart',
-  renderComponentFn: Chart,
-  defaultVariant: 'bar',
-  resolveVariant: resolveChartVariant,
-  meta: { showLabel: true, isReadonly: true },
-};

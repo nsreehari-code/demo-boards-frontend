@@ -1,8 +1,13 @@
 import React from 'react';
 
-export function Actions({ spec = {}, meta = {}, data, onSave }) {
-  const id = meta.id;
-  const buttons = spec.buttons ?? (Array.isArray(data) ? data : []);
+/**
+ * Reusable button row.
+ *
+ * Props:
+ *   buttons  – [{ id, label?, style?, size?, disabled? }]
+ *   onAction – (buttonId) => void, fired on click
+ */
+export function Actions({ buttons = [], onAction }) {
   if (!buttons.length) return null;
 
   return (
@@ -13,7 +18,7 @@ export function Actions({ spec = {}, meta = {}, data, onSave }) {
           type="button"
           className={`btn btn-${button.style ?? 'outline-secondary'} btn-${button.size ?? 'sm'} board-action-button`}
           disabled={!!button.disabled}
-          onClick={() => onSave?.(null, { kind: 'actions', buttonId: button.id, elemId: id })}
+          onClick={() => onAction?.(button.id)}
         >
           {button.label ?? button.id}
         </button>
@@ -21,9 +26,3 @@ export function Actions({ spec = {}, meta = {}, data, onSave }) {
     </div>
   );
 }
-
-export const entry = {
-  kind: 'actions',
-  renderComponentFn: Actions,
-  meta: { showLabel: true, isReadonly: false },
-};
