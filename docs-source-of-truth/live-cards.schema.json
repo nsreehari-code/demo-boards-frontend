@@ -978,6 +978,18 @@
         },
         "saveLabel": {
           "type": "string"
+        },
+        "validators": {
+          "type": "array",
+          "description": "Cross-field validation rules. Each item is a [jsonataExpr, errorMessage] pair; the expr is evaluated against { data: <current field values> } and must return true to pass. Required-field emptiness is already handled by fields.required, so validators are for format/relationship rules. Runs on blur and submit.",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     },

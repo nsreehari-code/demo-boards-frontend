@@ -1,4 +1,5 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { compileSync } from 'yaml-flow/compute-jsonata';
 import { useDraftState } from '../../hooks/useDraftState.js';
 import { SelectControl, normalizeOption } from './Select.jsx';
 
@@ -82,19 +83,93 @@ function formatTemporalValue(prop, value) {
  *   and `colSpan` (1–12) to control grid width.
  *
  * Props:
- *   spec       – { fields: { properties, required }, discardLabel?, saveLabel? }
+ *   spec       – { fields: { properties, required }, discardLabel?, saveLabel?,
+ *                  validators? }. `validators` is [[jsonataExpr, errorMessage], …];
+ *                  each expr is evaluated against { data: values } and must return
+ *                  true to pass (else its errorMessage is shown). Validation runs
+ *                  on blur and submit — not per keystroke.
  *   baseValues – externally owned values object the draft is layered on top of
  *   idPrefix   – prefix used for generated input/label element ids
  *   onSave     – (values) => void, called on submit with the merged draft values
+ *
+ * Footer props (default = commit mode: dirty-gated Discard / Save, no Cancel):
+ *   onCancel          – () => void; when set, renders a Cancel button
+ *   cancelLabel       – label for the Cancel button (default 'Cancel')
+ *   submitLabel       – label for the submit button (default spec.saveLabel ?? 'Save')
+ *   submitting        – disables Cancel + submit (e.g. while a request is in flight)
+ *   canSubmit         – extra gate; submit is disabled when false (default true)
+ *   alwaysShowActions – create mode: always show the submit button (and hide the
+ *                       dirty-gated Discard), gating submit on required-field
+ *                       completeness instead of dirtiness
+ *   error             – message rendered alongside the footer actions
  */
-export function Form({ spec = {}, baseValues = {}, idPrefix = 'field', onSave }) {
+export function Form({
+  spec = {},
+  baseValues = {},
+  idPrefix = 'field',
+  onSave,
+  onCancel = null,
+  cancelLabel = 'Cancel',
+  submitLabel,
+  submitting = false,
+  canSubmit = true,
+  alwaysShowActions = false,
+  error = '',
+}) {
   const schema = spec.fields ?? {};
   const props = schema.properties ?? {};
   const required = schema.required ?? [];
   const discardLabel = spec.discardLabel ?? 'Discard';
-  const saveLabel = spec.saveLabel ?? 'Save';
+  const saveLabel = submitLabel ?? spec.saveLabel ?? 'Save';
 
   const { values: effectiveValues, dirty, setField, discard: handleDiscard } = useDraftState(baseValues);
+
+  const requiredComplete = required.every((key) => {
+    const value = effectiveValues[key];
+    if (value == null) return false;
+    return typeof value === 'string' ? value.trim() !== '' : true;
+  });
+
+  // Validators are JSONata `[expr, message]` pairs from `spec.validators`,
+  // precompiled once. Each expr is evaluated against { data: values } and must
+  // return true to pass. Validation runs on blur (a field losing focus) and on
+  // submit — not per keystroke — so an expensive expression stays cheap. Results
+  // are held in state; `checked` stays false until the first run.
+  const compiledValidators = useMemo(() => {
+    const list = Array.isArray(spec.validators) ? spec.validators : [];
+    return list.reduce((acc, entry) => {
+      const [expr, message] = Array.isArray(entry) ? entry : [];
+      if (typeof expr !== 'string' || !expr.trim()) return acc;
+      try {
+        acc.push({ expr: compileSync(expr), message: message ?? 'Invalid value' });
+      } catch {
+        // Skip an un-compilable expression rather than break the whole form.
+      }
+      return acc;
+    }, []);
+  }, [spec.validators]);
+
+  const [validation, setValidation] = useState({ checked: false, isValid: true, errors: [] });
+  const runValidation = useCallback((values) => {
+    if (!compiledValidators.length) return true;
+    const root = { data: values };
+    const errors = [];
+    for (const validator of compiledValidators) {
+      let ok = false;
+      try {
+        ok = validator.expr.evaluate(root) === true;
+      } catch {
+        ok = false;
+      }
+      if (!ok) errors.push(validator.message);
+    }
+    setValidation({ checked: true, isValid: errors.length === 0, errors });
+    return errors.length === 0;
+  }, [compiledValidators]);
+  const validationErrors = validation.errors;
+  const submitDisabled = submitting || !canSubmit
+    || (validation.checked && !validation.isValid)
+    || (alwaysShowActions && !requiredComplete);
 
   const setFieldValue = useCallback((key, prop, rawValue) => {
     let nextValue = rawValue;
@@ -114,11 +189,16 @@ export function Form({ spec = {}, baseValues = {}, idPrefix = 'field', onSave })
 
   const handleSubmit = useCallback((event) => {
     event.preventDefault();
+    if (!runValidation(effectiveValues)) return;
     onSave?.(effectiveValues);
-  }, [effectiveValues, onSave]);
+  }, [effectiveValues, onSave, runValidation]);
 
   return (
-    <form className="row g-2 h-100 align-content-start" onSubmit={handleSubmit}>
+    <form
+      className="row g-2 h-100 align-content-start"
+      onSubmit={handleSubmit}
+      onBlur={compiledValidators.length ? () => runValidation(effectiveValues) : undefined}
+    >
       {Object.entries(props).map(([key, prop]) => {
         const id = `${idPrefix}-${key}`;
         const isRequired = required.includes(key);
@@ -242,17 +322,39 @@ export function Form({ spec = {}, baseValues = {}, idPrefix = 'field', onSave })
           </div>
         );
       })}
-      <div className="col-12 mt-1">
-        <button
-          type="button"
-          className={`btn btn-sm btn-outline-secondary board-button me-2${dirty ? '' : ' d-none'}`}
-          onClick={handleDiscard}
-        >
-          {discardLabel}
-        </button>
-        <button type="submit" className={`btn btn-sm btn-primary board-button${dirty ? '' : ' d-none'}`}>
-          {saveLabel}
-        </button>
+      <div className={`col-12 mt-1 d-flex align-items-center gap-2${alwaysShowActions ? ' justify-content-end' : ''}`}>
+        {error || validationErrors.length ? (
+          <div className="board-settings-form__hint text-danger me-auto">
+            {error ? <div>{error}</div> : null}
+            {validationErrors.map((message, index) => (
+              <div key={index}>{message}</div>
+            ))}
+          </div>
+        ) : null}
+        {onCancel ? (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary board-button"
+            onClick={onCancel}
+            disabled={submitting}
+          >
+            {cancelLabel}
+          </button>
+        ) : null}
+        {dirty && !alwaysShowActions ? (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary board-button"
+            onClick={handleDiscard}
+          >
+            {discardLabel}
+          </button>
+        ) : null}
+        {alwaysShowActions || dirty ? (
+          <button type="submit" className="btn btn-sm btn-primary board-button" disabled={submitDisabled}>
+            {saveLabel}
+          </button>
+        ) : null}
       </div>
     </form>
   );
