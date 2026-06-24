@@ -38,6 +38,7 @@ const BASE_PANEL_STYLE = {
  *   fabProps       – extra props spread onto the FAB (e.g. data-testid)
  *   className      – extra classes on the aside layer
  *   panelClassName – extra classes on the scrollable panel
+ *   backdropClassName – extra classes on the dimming backdrop behind the panel
  *   asideStyle     – style overrides merged onto the aside layer
  *   panelStyle     – style overrides merged onto the scrollable panel
  *   children       – panel content (header / nav / body, etc.)
@@ -55,6 +56,7 @@ export function PanelVertical({
   fabProps,
   className = '',
   panelClassName = '',
+  backdropClassName = '',
   asideStyle,
   panelStyle,
   children,
@@ -93,7 +95,7 @@ export function PanelVertical({
       {expanded ? (
         <>
           <div
-            className={`board-ingest-backdrop${isRight ? ' board-ingest-backdrop--right' : ''}`}
+            className={`board-ingest-backdrop${isRight ? ' board-ingest-backdrop--right' : ''}${backdropClassName ? ` ${backdropClassName}` : ''}`}
             aria-hidden="true"
           />
           <div

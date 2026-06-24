@@ -553,6 +553,8 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
         title={open ? 'Close board settings' : 'Board settings'}
         icon="bi-gear-fill"
         iconToggled="bi-x-lg"
+        backdropClassName="board-config-backdrop"
+        asideStyle={{ zIndex: 5000 }}
         fabProps={{
           'data-testid': 'open-board-settings',
           'aria-label': open ? 'Close board settings' : 'Open board settings',

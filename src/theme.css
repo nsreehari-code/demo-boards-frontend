@@ -1310,6 +1310,14 @@ a {
   background: linear-gradient(270deg, rgba(214, 223, 232, 0.92) 0%, rgba(221, 230, 238, 0.74) 35%, rgba(228, 236, 243, 0.18) 74%, transparent 100%);
 }
 
+/* BoardConfigPanel opts into a darker, full-board dimming overlay. */
+.board-ingest-backdrop.board-config-backdrop {
+  left: 0;
+  right: 0;
+  width: 100vw;
+  background: rgba(6, 12, 24, 0.62);
+}
+
 .board-surface,
 .board-ingest-pane,
 .board-modal__dialog {
