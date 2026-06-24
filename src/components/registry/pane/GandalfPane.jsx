@@ -1,6 +1,7 @@
 import React from 'react';
 import { usePaneState } from '../../../hooks/usePaneState.js';
 import { CardRenderer } from '../../renderers/CardRenderer.jsx';
+import { FloatingCircularButton } from '../../shared/FloatingCircularButton.jsx';
 
 const INGEST_PANE_LAYOUTS = {
   vertical: {
@@ -75,15 +76,16 @@ export function GandalfPane({ spec = {} }) {
 
   return (
     <aside aria-label="Ingest pane" className={`board-ingest-layer${expanded ? ' is-open' : ''}`} style={layout.asideStyle}>
-      <button
-        type="button"
-        className={`board-ingest-toggle d-inline-flex align-items-center justify-content-center${expanded ? ' is-open' : ''}`}
+      <FloatingCircularButton
+        toggled={expanded}
+        icon="bi-chevron-right"
+        iconToggled="bi-chevron-left"
         onClick={toggleExpanded}
+        className="board-ingest-toggle"
+        classNameToggled="is-open"
         aria-pressed={expanded}
         title={expanded ? 'Hide ingest pane' : 'Show ingest pane'}
-      >
-        <i className={`bi ${expanded ? 'bi-chevron-left' : 'bi-chevron-right'}`} />
-      </button>
+      />
 
       {expanded ? (
         <>

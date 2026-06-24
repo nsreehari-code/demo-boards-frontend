@@ -10,6 +10,7 @@ import {
 import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
 import { ChallengeConfirmModal } from './shared/ChallengeConfirmModal.jsx';
+import { FloatingCircularButton } from './shared/FloatingCircularButton.jsx';
 import { GlobalModal } from './shared/GlobalModal.jsx';
 import { SmokeRunner } from './test/SmokeRunner.jsx';
 import { SmokeStrategist } from './test/SmokeStrategist.jsx';
@@ -847,19 +848,25 @@ export function AppConfigModal({ boardId, autoOpen = false, serverUnreachable = 
 
   return (
     <>
-      <button
-        type="button"
-        className="board-settings-toggle d-inline-flex align-items-center justify-content-center"
+      <FloatingCircularButton
+        toggled={open}
+        icon="bi-gear-fill"
+        iconToggled="bi-x-lg"
         onClick={() => {
           setOpenedByAuto(false);
           setOpen(true);
         }}
-        title="Board settings"
-        aria-label="Open board settings"
+        onClickToggled={() => {
+          setOpenedByAuto(false);
+          setOpen(false);
+        }}
+        className="board-settings-toggle"
+        classNameToggled="board-settings-toggle--open"
+        title={open ? 'Close board settings' : 'Board settings'}
+        aria-label={open ? 'Close board settings' : 'Open board settings'}
+        aria-pressed={open}
         data-testid="open-board-settings"
-      >
-        <i className="bi bi-gear-fill" />
-      </button>
+      />
 
       <input
         ref={importFileInputRef}
