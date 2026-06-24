@@ -231,39 +231,6 @@ function TableView({ data, renderDef }) {
   );
 }
 
-function FilterView({ data, renderDef, onSave }) {
-  const singleField = getSingleFieldConfig(renderDef, data);
-  if (singleField) {
-    if (singleField.options.length || Array.isArray(singleField.prop.enum)) {
-      return <SelectionView data={data} renderDef={renderDef} onSave={onSave} />;
-    }
-
-    if ((singleField.prop.type ?? 'string') === 'string') {
-      return <QueryView data={data} renderDef={renderDef} onSave={onSave} />;
-    }
-  }
-
-  return <FormView data={data} renderDef={renderDef} onSave={onSave} />;
-}
-
-function normalizeLegacyKind(kind, renderDef, data) {
-  if (kind === 'query') return 'searchbox';
-  if (kind !== 'filter') return kind;
-
-  const singleField = getSingleFieldConfig(renderDef, data);
-  if (!singleField) return 'form';
-
-  if (singleField.options.length || Array.isArray(singleField.prop.enum)) {
-    return 'selection';
-  }
-
-  if ((singleField.prop.type ?? 'string') === 'string') {
-    return 'searchbox';
-  }
-
-  return 'form';
-}
-
 function SelectionView({ data, renderDef, onSave }) {
   const singleField = getSingleFieldConfig(renderDef, data);
   if (!singleField) {
@@ -1125,17 +1092,16 @@ function ActionsView({ data, renderDef, onSave }) {
 }
 
 function CardCoreViewComponent({ kind, renderDef, data, onSave }) {
-  const effectiveKind = normalizeLegacyKind(kind, renderDef, data);
-  const viewEntry = CARD_CORE_VIEW_KINDS[effectiveKind] ?? CARD_CORE_VIEW_KINDS.text;
+  const viewEntry = CARD_CORE_VIEW_KINDS[kind] ?? CARD_CORE_VIEW_KINDS.text;
   const ViewComponent = viewEntry.Component;
-  const viewData = CARD_CORE_VIEW_KINDS[effectiveKind]
+  const viewData = CARD_CORE_VIEW_KINDS[kind]
     ? data
     : (typeof data === 'string' ? data : (data != null ? JSON.stringify(data, null, 2) : ''));
   const body = <ViewComponent data={viewData} renderDef={renderDef} onSave={onSave} />;
 
   return (
     <div className="w-100 d-flex flex-column">
-      <CardFrame label={renderDef?.label} kind={effectiveKind}>
+      <CardFrame label={renderDef?.label} kind={kind}>
         {body}
       </CardFrame>
     </div>
