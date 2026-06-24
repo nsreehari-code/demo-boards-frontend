@@ -93,15 +93,19 @@ function formatTemporalValue(prop, value) {
  *   onSave     – (values) => void, called on submit with the merged draft values
  *
  * Footer props (default = commit mode: dirty-gated Discard / Save, no Cancel):
- *   onCancel          – () => void; when set, renders a Cancel button
- *   cancelLabel       – label for the Cancel button (default 'Cancel')
+ *   onCancel          – () => void; optional extra callback fired when the
+ *                       Discard button is clicked (after reverting local edits),
+ *                       e.g. to close a modal
+ *   cancelLabel       – label for the Discard button (default 'Discard')
  *   submitLabel       – label for the submit button (default spec.saveLabel ?? 'Save')
- *   submitting        – disables Cancel + submit (e.g. while a request is in flight)
+ *   submitting        – disables Discard + submit (e.g. while a request is in flight)
  *   canSubmit         – extra gate; submit is disabled when false (default true)
- *   alwaysShowActions – create mode: always show the submit button (and hide the
- *                       dirty-gated Discard), gating submit on required-field
- *                       completeness instead of dirtiness
+ *   alwaysShowActions – create mode: always show the Discard + submit buttons,
+ *                       gating submit on required-field completeness instead of
+ *                       dirtiness (default: show them only when dirty)
  *   error             – message rendered alongside the footer actions
+ *   cancelButtonClassName / cancelButtonStyle – override Discard button class/style
+ *   submitButtonClassName / submitButtonStyle – override Submit button class/style
  */
 export function Form({
   spec = {},
@@ -109,17 +113,20 @@ export function Form({
   idPrefix = 'field',
   onSave,
   onCancel = null,
-  cancelLabel = 'Cancel',
+  cancelLabel = 'Discard',
   submitLabel,
   submitting = false,
   canSubmit = true,
   alwaysShowActions = false,
   error = '',
+  cancelButtonClassName = 'btn btn-sm btn-outline-secondary board-button',
+  cancelButtonStyle,
+  submitButtonClassName = 'btn btn-sm btn-primary board-button',
+  submitButtonStyle,
 }) {
   const schema = spec.fields ?? {};
   const props = schema.properties ?? {};
   const required = schema.required ?? [];
-  const discardLabel = spec.discardLabel ?? 'Discard';
   const saveLabel = submitLabel ?? spec.saveLabel ?? 'Save';
 
   const { values: effectiveValues, dirty, setField, discard: handleDiscard } = useDraftState(baseValues);
@@ -331,27 +338,19 @@ export function Form({
             ))}
           </div>
         ) : null}
-        {onCancel ? (
+        {alwaysShowActions || dirty ? (
           <button
             type="button"
-            className="btn btn-sm btn-outline-secondary board-button"
-            onClick={onCancel}
+            className={cancelButtonClassName}
+            style={cancelButtonStyle}
+            onClick={() => { handleDiscard(); onCancel?.(); }}
             disabled={submitting}
           >
             {cancelLabel}
           </button>
         ) : null}
-        {dirty && !alwaysShowActions ? (
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-secondary board-button"
-            onClick={handleDiscard}
-          >
-            {discardLabel}
-          </button>
-        ) : null}
         {alwaysShowActions || dirty ? (
-          <button type="submit" className="btn btn-sm btn-primary board-button" disabled={submitDisabled}>
+          <button type="submit" className={submitButtonClassName} style={submitButtonStyle} disabled={submitDisabled}>
             {saveLabel}
           </button>
         ) : null}

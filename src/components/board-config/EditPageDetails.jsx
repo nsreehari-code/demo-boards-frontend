@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BOARD_TRANSPORT_MODE_SERVER_URL } from '../../lib/appConfig.js';
-import { SchemaForm } from '../shared/SchemaForm.jsx';
+import { Form } from '../shared/Form.jsx';
 
 export function toPageDetailsDraft(board) {
   const metadata = board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
@@ -67,45 +67,26 @@ export function EditPageDetails({
     };
   }, [boardId, loadBoard, transportMode]);
 
-  const setPageField = (key, value) => {
-    setDraft((current) => ({
-      ...current,
-      [key]: value,
-    }));
-    if (errorMessage) setErrorMessage('');
-    if (successMessage) setSuccessMessage('');
-  };
-
   const fieldsDisabled = loading || transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !boardId;
 
-  const pageDetailFields = [
-    { key: 'pageTitle', label: 'Page Title', placeholder: 'Live' },
-    { key: 'pageSubtitle', label: 'Page Subtitle', placeholder: 'Live operational intelligence for agent workflows' },
-    { key: 'refreshAllIntervalMinutes', label: 'Refresh Interval (minutes)', type: 'number', min: '1', step: '1', placeholder: '30' },
-  ];
+  const spec = useMemo(() => ({
+    fields: {
+      properties: {
+        pageTitle: { title: 'Page Title', placeholder: 'Live', disabled: fieldsDisabled },
+        pageSubtitle: { title: 'Page Subtitle', placeholder: 'Live operational intelligence for agent workflows', disabled: fieldsDisabled },
+        refreshAllIntervalMinutes: { title: 'Refresh Interval (minutes)', type: 'integer', minimum: 1, placeholder: '30', disabled: fieldsDisabled },
+      },
+      required: ['pageTitle', 'pageSubtitle', 'refreshAllIntervalMinutes'],
+    },
+  }), [fieldsDisabled]);
 
-  const saveDisabled = transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL
-    || !boardId
-    || loading
-    || saving
-    || !draft.pageTitle.trim()
-    || !draft.pageSubtitle.trim()
-    || !draft.refreshAllIntervalMinutes.trim()
-    || !draft.uiTemplate.trim();
-
-  const handleSave = async () => {
+  const handleSave = async (values) => {
     const nextValues = {
-      pageTitle: draft.pageTitle.trim(),
-      pageSubtitle: draft.pageSubtitle.trim(),
-      refreshAllIntervalMinutes: draft.refreshAllIntervalMinutes.trim(),
-      uiTemplate: draft.uiTemplate.trim(),
+      pageTitle: String(values.pageTitle ?? '').trim(),
+      pageSubtitle: String(values.pageSubtitle ?? '').trim(),
+      refreshAllIntervalMinutes: String(values.refreshAllIntervalMinutes ?? '').trim(),
+      uiTemplate: String(values.uiTemplate ?? '').trim(),
     };
-
-    if (!nextValues.pageTitle || !nextValues.pageSubtitle || !nextValues.refreshAllIntervalMinutes || !nextValues.uiTemplate) {
-      setErrorMessage('All page detail fields are required.');
-      setSuccessMessage('');
-      return;
-    }
 
     setSaving(true);
     setErrorMessage('');
@@ -123,14 +104,18 @@ export function EditPageDetails({
 
   return (
     <div className="board-settings-io-card d-flex flex-column gap-3">
-      <div className="d-flex align-items-center justify-content-between gap-2">
-        <div className="board-settings-io-card__title">Page Details</div>
-        <button type="button" className="btn btn-outline-secondary board-button" onClick={() => { void handleSave(); }} disabled={saveDisabled}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
+      <div className="board-settings-io-card__title">Page Details</div>
 
-      <SchemaForm spec={{ fields: pageDetailFields }} value={draft} setValue={setPageField} disabled={fieldsDisabled} />
+      <Form
+        spec={spec}
+        baseValues={draft}
+        idPrefix="page-details"
+        onSave={handleSave}
+        submitLabel={saving ? 'Saving…' : 'Save'}
+        submitting={saving}
+        canSubmit={!fieldsDisabled}
+        error={errorMessage ? `Save failed: ${errorMessage}` : ''}
+      />
 
       {loading ? (
         <div className="board-settings-form__hint text-muted">
@@ -138,11 +123,6 @@ export function EditPageDetails({
         </div>
       ) : null}
 
-      {errorMessage ? (
-        <div className="board-settings-form__hint text-danger">
-          Save failed: {errorMessage}
-        </div>
-      ) : null}
       {!errorMessage && successMessage ? (
         <div className="board-settings-form__hint text-success">
           {successMessage}
