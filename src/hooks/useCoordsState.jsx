@@ -346,6 +346,7 @@ export function useCardWidthState(cardId) {
   const width = context?.layoutState?.widths?.[cardId] ?? null;
   const setWidth = useCallback((nextWidth) => {
     context?.setWidth?.(cardId, nextWidth);
+    context?.scheduleAutosave?.();
   }, [cardId, context]);
   return [width, setWidth];
 }

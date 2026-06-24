@@ -235,6 +235,52 @@ a {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 20px 48px rgba(70, 95, 122, 0.14);
 }
 
+/* Generic InfiniteCanvas node frame: structure + rail layout only. Visuals
+   (tone, dim, token gems, handles) are injected by the consumer via renderNode
+   / renderNodePort, so this stays board-agnostic. */
+.infinite-canvas-node {
+  position: relative;
+  width: 100%;
+}
+
+.infinite-canvas-node__row {
+  display: flex;
+  align-items: stretch;
+}
+
+.infinite-canvas-node__body {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.infinite-canvas-node__rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.infinite-canvas-node__rail--top {
+  margin-bottom: 0.28rem;
+}
+
+.infinite-canvas-node__rail--bottom {
+  margin-top: 0.28rem;
+}
+
+.infinite-canvas-node__rail--left {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  margin-right: 0.28rem;
+}
+
+.infinite-canvas-node__rail--right {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  margin-left: 0.28rem;
+}
+
 .board-flow-node {
   position: relative;
   width: 100%;
