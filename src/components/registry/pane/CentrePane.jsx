@@ -1,7 +1,7 @@
 import React from 'react';
 import { useBoardState } from '../../../hooks/useBoardState.js';
-import { BoardCanvas } from '../../BoardCanvas.jsx';
-import { CardRenderer } from '../card/index.jsx';
+import { InfiniteCanvasPane } from './sub/InfiniteCanvasPane.jsx';
+import { CardRenderer } from '../../renderers/CardRenderer.jsx';
 import { BoardCoordsProvider } from '../../../hooks/useCoordsState.jsx';
 
 const CENTRE_PANE_LAYOUTS = {
@@ -46,7 +46,7 @@ export function CentrePane({ spec = {} }) {
 
   const content = layoutStrategy === 'infinite-canvas' ? (
     <div className={layout.containerClassName}>
-      <BoardCanvas
+      <InfiniteCanvasPane
         boardId={boardId}
         cardIds={visibleCardIds}
         cardContents={board.cardContents}

@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCardState } from '../../../../hooks/useCardState.js';
 import { callBoardMcp } from '../../../../lib/client.js';
 import { CardBackface } from './CardBackface.jsx';
-import { ChallengeConfirmModal } from '../../../ChallengeConfirmModal.jsx';
-import { NodeRenderer } from '../../engine/NodeRenderer.jsx';
-import { GlobalModal } from '../../../GlobalModal.jsx';
+import { ChallengeConfirmModal } from '../../../shared/ChallengeConfirmModal.jsx';
+import { CardRenderer } from '../../../renderers/CardRenderer.jsx';
+import { GlobalModal } from '../../../shared/GlobalModal.jsx';
 
 const DELETE_CARD_SVG = (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="inspect-card__trash-icon">
@@ -393,7 +393,7 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
             <div className="board-flow-node inspect-card__preview-node">
               <div className="board-flow-node__card">
                 <div className="board-app-shell inspect-card__preview-theme-scope" data-theme={theme ?? undefined}>
-                  <NodeRenderer node={{ kind: 'card:default', spec: { boardId, cardId, chrome: 'inspect' } }} />
+                  <CardRenderer boardId={boardId} cardId={cardId} chrome="inspect" />
                 </div>
               </div>
             </div>

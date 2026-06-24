@@ -1,9 +1,10 @@
 # Four-Tier Component Registry — Source of Truth
 
 Status: **LOCKED** (2026-06-24) — full N×N symmetry, one unified registry, no
-artificial blockers. Implementation pending (Tier 1 first). Changes to this
-contract require explicit re-opening; implementation is held to the conformance
-bar below, not the reverse.
+artificial blockers. Implemented: the unified `registry.js`, the `NodeRenderer`
+engine, the per-tier entry barrels, and the `renderers/` resolution hosts (§8).
+Changes to this contract require explicit re-opening; implementation is held to
+the conformance bar below, not the reverse.
 
 This document defines the declarative component-registry contract for the board
 frontend. The goal is to represent the UI — boards, panes, cards, and card views
@@ -17,7 +18,7 @@ resolvers, so that eventually an entire board can be driven by JSON.
 | 1 | **View** (`card-core-view`) | values | `ChartView`, `TableView`, `FormView`, … (`CARD_CORE_VIEW_KINDS`) |
 | 2 | **Card** | a view-tree | `CardShell`, `StrategistCard`, `IngestCard` (`CardRenderer`) |
 | 3 | **Pane** | cards | `CentrePane`, `GandalfPane`, `TruthsetExplorePane` |
-| 4 | **Board** | panes | `MainBoard` |
+| 4 | **Board** | panes | `BoardShell` (`BoardRenderer`) |
 
 The tier labels are **organizational groupings of registry entries**, not rigid
 structural barriers. The contract is uniform and recursive (see the litmus test
@@ -192,7 +193,7 @@ Instance-level metadata travels as a single `meta` object (`{ label, id, ... }`)
 the prop contract never accretes one-off props. This `meta` (Instance lifetime) is
 distinct from a registry **entry**'s `meta` (Type-level flags like `showLabel`).
 
-## 5. Resolver responsibilities (`CardCore` / `NodeRenderer`)
+## 5. Resolver responsibilities (`CardviewRenderer` / `NodeRenderer`)
 
 In order:
 
@@ -215,22 +216,63 @@ Binding stays **out** of components: `data`/`onSave` are the resolved ends of
 
 | Field | View (T1) | Card (T2) | Pane (T3) | Board (T4) |
 |-------|-----------|-----------|-----------|------------|
-| Component | `ChartView` | `CardShell`/`StrategistCard` | `CentrePane` | `MainBoard` |
+| Component | `ChartView` | `CardShell`/`StrategistCard` | `CentrePane` | `BoardShell` |
 | requiredPropKeys | — | `boardId, cardId` | `boardId` | `boardId` |
 | resolveKind | `normalizeLegacyKind` | `resolveCardRenderer(state, rules)` | pane rules | `layout.kind` → Component |
 | resolveVariant | `detectChartType` / `style` | compact/expanded | `infinite-canvas`/`flowing-cards` | pane arrangement |
 | spec | `renderDef.data` | renderer kind, `enableResize` | `layoutStrategy`, filters, rules | pane composition |
 | data | bound values | `cardState.cardContent` | filtered **card-ID list** | pane set |
 | onSave | field/`card_data` | `cardActions.patch` | — | `save-layout`/`save-meta` |
-| status (from) | `CardCore` | `useCardState` | `useBoardState` | `useManagedBoardConfig` + `App` |
+| status (from) | `CardviewRenderer` | `useCardState` | `useBoardState` | `useManagedBoardConfig` + `App` |
 | childResolver (enumeration) | — | (internal view-tree) | filter→card IDs (data-driven) | `spec.panes` (structural) |
 
 ## 7. The Card hinge
 
 `Card` is **a leaf to its Pane** (rendered from one card ID) but **a container
-internally** (`CardShell` → `CardCore` renders a view-tree). Its entry uses the
-universal leaf shape outward while `CardCore` acts as the Tier-1 resolver inward.
-It is the one tier that wears both hats.
+internally** (`CardShell` → `CardviewRenderer` renders a view-tree). Its entry uses
+the universal leaf shape outward while `CardviewRenderer` acts as the Tier-1
+resolver inward. It is the one tier that wears both hats.
+
+## 8. Resolution hosts — `renderers/` vs `registry/` (implemented layout)
+
+The contract above is *what* renders; this section is *where* it lives. The
+implementation splits into two module groups under `src/components/`:
+
+- **`registry/`** — the passive substrate: the unified `registry.js`, the
+  `engine/NodeRenderer.jsx` resolver, the pure `lib/` utils, and the per-tier
+  **entry barrels** (`board/`, `pane/`, `card/`, `cardview/`). Entries are passive
+  Components the engine dispatches to; a barrel only `export const <tier>Entries`.
+- **`renderers/`** — the **resolution hosts**: `BoardRenderer`, `PaneRenderer`,
+  `CardRenderer`, `CardviewRenderer` (the former `CardCore`). A host reads a
+  tier's data (hooks / config), resolves it into a node (or node list), and hands
+  it to `NodeRenderer`. One host per tier; hosts are *consumers* of the registry,
+  **not** entries in it.
+
+A **host** is the data→node bridge; an **entry** is the node→DOM leaf. The engine
+(`NodeRenderer`) is the only module both sides share.
+
+### Init-cycle invariant (normative)
+
+`registry.js` reads every barrel's `export const <tier>Entries` at **module-init
+time** (via `register()`). Therefore:
+
+1. **Barrels must not import `NodeRenderer`** — directly or transitively on an
+   init path. A barrel is a pure entry list.
+2. **The lazy entry point imports a host, never a barrel.** `App.jsx` lazy-loads
+   `renderers/BoardRenderer.jsx`. Lazy-loading a barrel that pulls in
+   `NodeRenderer → registry.js` re-enters `registry.js` mid-init and runs
+   `register(boardEntries)` while `boardEntries` is still in TDZ →
+   `Cannot access 'boardEntries' before initialization`. The production build
+   hoists differently and hides this; **only the dev runtime fails**, so this is
+   verified in-browser, not by build.
+3. **Dependency direction is one-way: `renderers → registry`.** A barrel may
+   reference a host *as a value* (the `pane` barrel registers `PaneRenderer` as
+   the generic `pane` kind); that back-edge is safe only because it touches just
+   `registry.js`'s **hoisted function** exports (`lookupEntry` / `resolveEntry`)
+   at call time, never its init-time entry consts.
+4. **`NodeRenderer` is imported only by the hosts and the engine's own
+   recursion.** No leaf / chrome / pane component calls it directly (e.g.
+   `InspectCard` previews via `CardRenderer`, not a hand-built node).
 
 ## Invariants (hold at all four tiers)
 
@@ -262,7 +304,7 @@ The *same* dispatch that renders a `chart` renders a `board`; only the presence
 of `childResolver` differs. To actually render a board **as a card-core kind**
 (a nested board inside a card body) three things are required:
 
-1. The Tier-1 resolver (`CardCore`) must honor the **container extension**
+1. The Tier-1 resolver (`CardviewRenderer`) must honor the **container extension**
    (`childResolver` / structural `children`); today it renders leaves only.
 2. The nested board gets its **own** `boardId` + its **own** state/status context
    (`useBoardState` / `useManagedBoardConfig`), independent of the parent card.
@@ -286,7 +328,7 @@ change is non-conformant and must be reworked — not the contract.
 3. **Board-as-entry.** A board is registrable as an entry with a `childResolver`.
    Rendering a board requires no code path that a chart entry could not also use.
 4. **Container extension is honored everywhere.** Any resolver that can render a
-   leaf (including `CardCore`) MUST honor `childResolver` / structural
+   leaf (including `CardviewRenderer`) MUST honor `childResolver` / structural
    `children`, so a container kind (e.g. `board`) can be nested inside any tier —
    including a card body — without new machinery.
 5. **Own context per nested unit.** A nested container resolves its own

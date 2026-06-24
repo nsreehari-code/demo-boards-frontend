@@ -1,9 +1,9 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GlobalModal } from './GlobalModal.jsx';
-import { useBoardState } from '../hooks/useBoardState.js';
-import { useCardState } from '../hooks/useCardState.js';
-import { useManageBoards } from '../hooks/useManageBoards.js';
-import { initBoard, refreshCard, removeRuntimeCard, upsertRuntimeCard } from '../lib/client.js';
+import { GlobalModal } from '../shared/GlobalModal.jsx';
+import { useBoardState } from '../../hooks/useBoardState.js';
+import { useCardState } from '../../hooks/useCardState.js';
+import { useManageBoards } from '../../hooks/useManageBoards.js';
+import { initBoard, refreshCard, removeRuntimeCard, upsertRuntimeCard } from '../../lib/client.js';
 
 // Frontend manual runner for the journey-strategist agentface. This is the
 // "other side of the coin" to the backend my-http-test S1 case: same board,

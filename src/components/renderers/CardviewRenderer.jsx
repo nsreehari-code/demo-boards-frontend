@@ -1,10 +1,21 @@
+// Cardview tier resolution host. Like the other renderers, it is a *consumer*
+// of the registry (not an entry): it reads card state (data), builds the binding
+// namespaces, resolves the card's `view.elements` into leaf nodes
+// (normalizeElement → buildLayoutNode → resolveRefKind) and dispatches each
+// through NodeRenderer. It also owns the data plumbing a view needs — bind /
+// writeTo patching, file-URL resolution, and the optimistic save/overlay cycle.
+//
+// Living outside `registry/` keeps the dependency direction one-way
+// (renderers → registry): card components (CardShell, StrategistCard) compose it
+// the same way panes compose CardRenderer.
+
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
-import { useCardState } from '../../../../hooks/useCardState.js';
-import { NodeRenderer } from '../../engine/NodeRenderer.jsx';
-import { deepSet } from '../../lib/path.js';
-import { resolveBind } from '../../lib/bind.js';
-import { deepEqual } from '../../lib/coerce.js';
+import { ensureCardFileUrl, getCardFileUrl } from '../../lib/client.js';
+import { useCardState } from '../../hooks/useCardState.js';
+import { NodeRenderer } from '../registry/engine/NodeRenderer.jsx';
+import { deepSet } from '../registry/lib/path.js';
+import { resolveBind } from '../registry/lib/bind.js';
+import { deepEqual } from '../registry/lib/coerce.js';
 
 function buildNamespaces(boardId, cardState) {
   return {
@@ -128,7 +139,7 @@ async function patchCardDataValue(cardActions, cardData, writeTo, value) {
   }
 }
 
-function CardCoreComponent({ boardId, cardId }) {
+function CardviewRendererComponent({ boardId, cardId }) {
   const cardState = useCardState(boardId, cardId);
   const [saving, setSaving] = useState(false);
   const [fileUrlVersion, setFileUrlVersion] = useState(0);
@@ -264,4 +275,4 @@ function CardCoreComponent({ boardId, cardId }) {
   );
 }
 
-export const CardCore = memo(CardCoreComponent);
+export const CardviewRenderer = memo(CardviewRendererComponent);

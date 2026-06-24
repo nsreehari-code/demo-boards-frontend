@@ -47,7 +47,7 @@ board template. Each links to its detailed section below.
 
 | Flag | Read in | Purpose |
 | --- | --- | --- |
-| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `PostboxCard.jsx`, `StrategistCard.jsx`, `BoardCanvas.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
+| `meta.title` | `CardShell.jsx`, `IngestCard.jsx`, `PostboxCard.jsx`, `StrategistCard.jsx`, `InfiniteCanvasPane.jsx`, `boardCanvasLayout.js` | Card title; falls back to the card id when absent. |
 | `meta.presentation.prominence` | `boardCanvasLayout.js` | Ordering weight (§1). |
 | `meta.presentation.footprint` | `boardCanvasLayout.js` | Card width (§1). |
 | `meta.presentation.resizable` | `CardShell.jsx` | Whether the user may resize at runtime (§1). |
@@ -175,15 +175,15 @@ in board UI config), but the list below is the actual UI that exists today.
 
 ### Implemented pane surfaces (current code)
 
-`MainBoard.jsx` mounts exactly three pane surfaces:
+`BoardRenderer` (the board tier's resolution host) mounts exactly three pane surfaces:
 
 | Implemented pane surface | Component | What it does |
 | --- | --- | --- |
-| Main Canvas / centre pane | `CentrePane` | The default board surface. In current wiring it uses `layoutStrategy="infinite-canvas"` and renders unmatched cards on `BoardCanvas`. |
+| Main Canvas / centre pane | `CentrePane` | The default board surface. In current wiring it uses `layoutStrategy="infinite-canvas"` and renders unmatched cards on `InfiniteCanvasPane`. |
 | Left rail ingest pane | `IngestPane` | A toggleable fixed left rail labelled `Board Manager`, showing one filtered card at a time with prev/next navigation. |
 | Right rail truthset pane | `TruthsetExplorePane` | A toggleable fixed right rail labelled `Truthset Explore`, showing one filtered card at a time with prev/next navigation. |
 
-In the current `MainBoard.jsx` wiring, the board UI config pane named `gandalf`
+In the current `BoardRenderer` wiring, the board UI config pane named `gandalf`
 feeds the **left rail ingest pane**, the pane named `truthset` feeds the **right
 rail truthset pane**, and cards excluded from both feed the **Main Canvas**.
 Those pane *names* come from config; the three pane *surfaces* above are what is

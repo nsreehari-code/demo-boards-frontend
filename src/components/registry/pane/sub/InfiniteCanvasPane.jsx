@@ -12,9 +12,9 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { buildDeterministicCanvasLayout } from '../lib/boardCanvasLayout.js';
-import { useBoardLayoutActions, useBoardLayoutState } from '../hooks/useCoordsState.jsx';
-import { CardRenderer } from './registry/card/index.jsx';
+import { buildDeterministicCanvasLayout } from '../../../../lib/boardCanvasLayout.js';
+import { useBoardLayoutActions, useBoardLayoutState } from '../../../../hooks/useCoordsState.jsx';
+import { CardRenderer } from '../../../renderers/CardRenderer.jsx';
 
 const NODE_WIDTH = 360;
 const EDGE_CURVATURE_SUBTLE = 0.26;
@@ -353,7 +353,7 @@ function getMiniMapNodeClassName(node) {
   return node?.data?.status === 'running' ? 'is-running' : '';
 }
 
-export function BoardCanvas({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, rendererRules = [] }) {
+export function InfiniteCanvasPane({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, rendererRules = [] }) {
   const [selectedToken, setSelectedToken] = useState(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const layoutState = useBoardLayoutState();

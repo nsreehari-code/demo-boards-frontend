@@ -11,7 +11,7 @@ import {
 } from './lib/appConfig.js';
 import { healthz } from './lib/client.js';
 
-const MainBoard = lazy(() => import('./components/MainBoard.jsx').then((module) => ({ default: module.MainBoard })));
+const BoardRenderer = lazy(() => import('./components/renderers/BoardRenderer.jsx').then((module) => ({ default: module.BoardRenderer })));
 
 const BOARD_ID = DEFAULT_BOARD_ID;
 const DEFAULT_THEME = 'mist-ops';
@@ -272,7 +272,7 @@ export default function App() {
                 </div>
               )}
             >
-              <MainBoard boardId={BOARD_ID} />
+              <BoardRenderer boardId={BOARD_ID} />
             </Suspense>
           )}
       </main>

@@ -1,15 +1,15 @@
 import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { GlobalModal } from './GlobalModal.jsx';
-import { EMPTY_ARRAY, EMPTY_OBJECT } from '../lib/board-sse-state.js';
-import { useBoardState } from '../hooks/useBoardState.js';
-import { useCardState } from '../hooks/useCardState.js';
-import { useChatActions, useChatWatchParty } from '../hooks/useChatState.js';
-import { useManageBoards } from '../hooks/useManageBoards.js';
-import { useRuntimeCards } from '../hooks/useRuntimeCards.js';
-import { useCardChatViews } from '../hooks/useSseSlices.js';
-import { initBoard } from '../lib/client.js';
-import { compileRendererRules, resolveCardRenderer, resolvePaneFilters } from '../lib/cardPresentationConfig.js';
-import { WATCHPARTY_AGENT_TOOL_ACTIONS } from '../lib/watchparty-agent-tools.js';
+import { GlobalModal } from '../shared/GlobalModal.jsx';
+import { EMPTY_ARRAY, EMPTY_OBJECT } from '../../lib/board-sse-state.js';
+import { useBoardState } from '../../hooks/useBoardState.js';
+import { useCardState } from '../../hooks/useCardState.js';
+import { useChatActions, useChatWatchParty } from '../../hooks/useChatState.js';
+import { useManageBoards } from '../../hooks/useManageBoards.js';
+import { useRuntimeCards } from '../../hooks/useRuntimeCards.js';
+import { useCardChatViews } from '../../hooks/useSseSlices.js';
+import { initBoard } from '../../lib/client.js';
+import { compileRendererRules, resolveCardRenderer, resolvePaneFilters } from '../../lib/cardPresentationConfig.js';
+import { WATCHPARTY_AGENT_TOOL_ACTIONS } from '../../lib/watchparty-agent-tools.js';
 
 const SMOKE_BOARD_ID = 'live-test-frontend';
 const PROBE_ENVELOPE = '__probe__echo__probe__';

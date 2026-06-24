@@ -3,8 +3,8 @@ import { useCardWidthState } from '../../../../hooks/useCoordsState.jsx';
 import { useCardState } from '../../../../hooks/useCardState.js';
 import { useChatStateAIWorking } from '../../../../hooks/useChatState.js';
 import { useBoardInspectState } from '../../../../hooks/useBoardState.js';
-import { ChatPane, MiniChatPane } from '../../../ChatPane.jsx';
-import { GlobalModal } from '../../../GlobalModal.jsx';
+import { ChatPane, MiniChatPane } from './ChatPane.jsx';
+import { GlobalModal } from '../../../shared/GlobalModal.jsx';
 import { InspectCard } from './InspectCard.jsx';
 
 // CardChrome is the single owner of all card-tier chrome: the resizable shell,

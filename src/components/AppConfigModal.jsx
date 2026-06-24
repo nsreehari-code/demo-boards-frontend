@@ -9,10 +9,10 @@ import {
 } from '../lib/appConfig.js';
 import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
-import { ChallengeConfirmModal } from './ChallengeConfirmModal.jsx';
-import { GlobalModal } from './GlobalModal.jsx';
-import { SmokeRunner } from './SmokeRunner.jsx';
-import { SmokeStrategist } from './SmokeStrategist.jsx';
+import { ChallengeConfirmModal } from './shared/ChallengeConfirmModal.jsx';
+import { GlobalModal } from './shared/GlobalModal.jsx';
+import { SmokeRunner } from './test/SmokeRunner.jsx';
+import { SmokeStrategist } from './test/SmokeStrategist.jsx';
 
 const RUNTIME_DUMP_VERSION = 1;
 const FORWARD_ICON_SVG = (

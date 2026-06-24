@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { CardChrome } from './sub/CardChrome.jsx';
-import { GandalfChatPane } from '../../ChatPane.jsx';
+import { GandalfChatPane } from './sub/ChatPane.jsx';
 
 // Ingest card: a chat/ingest body that today lacks card chrome. By rendering its
 // body inside the shared CardChrome it gains the same header, resize, inspect,

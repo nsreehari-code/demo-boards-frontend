@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { useBoardState } from '../../../hooks/useBoardState.js';
-import { CardRenderer } from '../card/index.jsx';
+import React from 'react';
+import { usePaneState } from '../../../hooks/usePaneState.js';
+import { CardRenderer } from '../../renderers/CardRenderer.jsx';
 
 const TRUTHSET_PANE_LAYOUTS = {
   vertical: {
@@ -83,48 +83,26 @@ function TruthsetExploreEmptyState() {
 
 export function TruthsetExplorePane({ spec = {} }) {
   const { boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] } = spec;
-  const board = useBoardState(boardId);
-  const [visible, setVisible] = useState(false);
-  const [idx, setIdx] = useState(0);
   const layout = resolveLayoutStrategy(layoutStrategy);
-  const truthsetCardIds = useMemo(() => {
-    if (!board) return [];
-    return [...board.filterCards(includeFilters)];
-  }, [board, includeFilters]);
-
-  const safeIdx = Math.min(idx, Math.max(0, truthsetCardIds.length - 1));
-  const cardId = truthsetCardIds[safeIdx] ?? null;
-  const cards = useMemo(() => {
-    if (!board || !visible) return [];
-    return truthsetCardIds.map((currentCardId) => {
-      const cardContent = board.cardContents[currentCardId] ?? null;
-      return {
-        id: currentCardId,
-        meta: cardContent?.meta ?? {},
-        card_data: cardContent?.card_data ?? {},
-      };
-    });
-  }, [board, truthsetCardIds]);
-
-  if (!board || truthsetCardIds.length === 0) return null;
+  const { cardIds, idx, activeCardId, cards, expanded, toggleExpanded, goPrev, goNext } = usePaneState(boardId, { includeFilters });
 
   return (
     <aside
       aria-label="Truthset Explore pane"
-      className={`board-ingest-layer board-ingest-layer--right${visible ? ' is-open' : ''}`}
+      className={`board-ingest-layer board-ingest-layer--right${expanded ? ' is-open' : ''}`}
       style={layout.asideStyle}
     >
       <button
         type="button"
-        className={`board-ingest-toggle board-ingest-toggle--right d-inline-flex align-items-center justify-content-center${visible ? ' is-open' : ''}`}
-        onClick={() => setVisible((current) => !current)}
-        aria-pressed={visible}
-        title={visible ? 'Hide Truthset Explore pane' : 'Show Truthset Explore pane'}
+        className={`board-ingest-toggle board-ingest-toggle--right d-inline-flex align-items-center justify-content-center${expanded ? ' is-open' : ''}`}
+        onClick={toggleExpanded}
+        aria-pressed={expanded}
+        title={expanded ? 'Hide Truthset Explore pane' : 'Show Truthset Explore pane'}
       >
-        <i className={`bi ${visible ? 'bi-chevron-right' : 'bi-chevron-left'}`} />
+        <i className={`bi ${expanded ? 'bi-chevron-right' : 'bi-chevron-left'}`} />
       </button>
 
-      {visible ? (
+      {expanded ? (
         <>
           <div className="board-ingest-backdrop board-ingest-backdrop--right" aria-hidden="true" />
           <div className="board-ingest-pane d-flex flex-column" style={layout.railStyle}>
@@ -132,16 +110,16 @@ export function TruthsetExplorePane({ spec = {} }) {
               <div>
                 <div className="board-ingest-pane__eyebrow">Truthset Explore</div>
               </div>
-              <span className="board-ingest-pane__count">{`${truthsetCardIds.length} cards`}</span>
+              <span className="board-ingest-pane__count">{`${cardIds.length} cards`}</span>
             </div>
             <TruthsetExploreNav
               cards={cards}
-              idx={safeIdx}
-              onPrev={() => setIdx((current) => Math.max(0, current - 1))}
-              onNext={() => setIdx((current) => Math.min(truthsetCardIds.length - 1, current + 1))}
+              idx={idx}
+              onPrev={goPrev}
+              onNext={goNext}
             />
             <div className="board-ingest-pane__body flex-grow-1 min-h-0">
-              {cardId ? <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} chrome="bare" /> : <TruthsetExploreEmptyState />}
+              {activeCardId ? <CardRenderer boardId={boardId} cardId={activeCardId} rendererRules={rendererRules} chrome="bare" /> : <TruthsetExploreEmptyState />}
             </div>
           </div>
         </>

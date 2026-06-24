@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { useBoardState } from '../../../hooks/useBoardState.js';
-import { CardRenderer } from '../card/index.jsx';
+import React from 'react';
+import { usePaneState } from '../../../hooks/usePaneState.js';
+import { CardRenderer } from '../../renderers/CardRenderer.jsx';
 
 const INGEST_PANE_LAYOUTS = {
   vertical: {
@@ -70,44 +70,22 @@ function GandalfPaneNav({ cards, idx, onPrev, onNext }) {
 
 export function GandalfPane({ spec = {} }) {
   const { boardId, includeFilters = [], layoutStrategy = 'vertical', rendererRules = [] } = spec;
-  const board = useBoardState(boardId);
-  const [visible, setVisible] = useState(false);
-  const [idx, setIdx] = useState(0);
   const layout = resolveLayoutStrategy(layoutStrategy);
-  const ingestCardIds = useMemo(() => {
-    if (!board) return [];
-    return [...board.filterCards(includeFilters)];
-  }, [board, includeFilters]);
-
-  const safeIdx = Math.min(idx, Math.max(0, ingestCardIds.length - 1));
-  const cardId = ingestCardIds[safeIdx] ?? null;
-  const cards = useMemo(() => {
-    if (!board || !visible) return [];
-    return ingestCardIds.map((currentCardId) => {
-      const cardContent = board.cardContents[currentCardId] ?? null;
-      return {
-        id: currentCardId,
-        meta: cardContent?.meta ?? {},
-        card_data: cardContent?.card_data ?? {},
-      };
-    });
-  }, [board, ingestCardIds, visible]);
-
-  if (!board || ingestCardIds.length === 0) return null;
+  const { cardIds, idx, activeCardId, cards, expanded, toggleExpanded, goPrev, goNext } = usePaneState(boardId, { includeFilters });
 
   return (
-    <aside aria-label="Ingest pane" className={`board-ingest-layer${visible ? ' is-open' : ''}`} style={layout.asideStyle}>
+    <aside aria-label="Ingest pane" className={`board-ingest-layer${expanded ? ' is-open' : ''}`} style={layout.asideStyle}>
       <button
         type="button"
-        className={`board-ingest-toggle d-inline-flex align-items-center justify-content-center${visible ? ' is-open' : ''}`}
-        onClick={() => setVisible((current) => !current)}
-        aria-pressed={visible}
-        title={visible ? 'Hide ingest pane' : 'Show ingest pane'}
+        className={`board-ingest-toggle d-inline-flex align-items-center justify-content-center${expanded ? ' is-open' : ''}`}
+        onClick={toggleExpanded}
+        aria-pressed={expanded}
+        title={expanded ? 'Hide ingest pane' : 'Show ingest pane'}
       >
-        <i className={`bi ${visible ? 'bi-chevron-left' : 'bi-chevron-right'}`} />
+        <i className={`bi ${expanded ? 'bi-chevron-left' : 'bi-chevron-right'}`} />
       </button>
 
-      {visible ? (
+      {expanded ? (
         <>
           <div className="board-ingest-backdrop" aria-hidden="true" />
           <div className="board-ingest-pane d-flex flex-column" style={layout.railStyle}>
@@ -115,16 +93,16 @@ export function GandalfPane({ spec = {} }) {
               <div>
                 <div className="board-ingest-pane__eyebrow">Board Manager</div>
               </div>
-              <span className="board-ingest-pane__count">{`${ingestCardIds.length} cards`}</span>
+              <span className="board-ingest-pane__count">{`${cardIds.length} cards`}</span>
             </div>
             <GandalfPaneNav
               cards={cards}
-              idx={safeIdx}
-              onPrev={() => setIdx((current) => Math.max(0, current - 1))}
-              onNext={() => setIdx((current) => Math.min(ingestCardIds.length - 1, current + 1))}
+              idx={idx}
+              onPrev={goPrev}
+              onNext={goNext}
             />
             <div className="board-ingest-pane__body flex-grow-1 min-h-0">
-              {cardId ? <CardRenderer boardId={boardId} cardId={cardId} rendererRules={rendererRules} chrome="bare" /> : null}
+              {activeCardId ? <CardRenderer boardId={boardId} cardId={activeCardId} rendererRules={rendererRules} chrome="bare" /> : null}
             </div>
           </div>
         </>

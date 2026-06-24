@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import BoardMarkdown from './BoardMarkdown.jsx';
-import { useChatState } from '../hooks/useChatState.js';
-import { useCardStateFilesData } from '../hooks/useCardState.js';
-import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../lib/client.js';
+import BoardMarkdown from '../../../shared/BoardMarkdown.jsx';
+import { useChatState } from '../../../../hooks/useChatState.js';
+import { useCardStateFilesData } from '../../../../hooks/useCardState.js';
+import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
 
 // Number of user turns to fetch each time "Show previous messages" is clicked.
 const HISTORY_TURNS_PER_PAGE = 5;

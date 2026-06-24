@@ -18,8 +18,8 @@
 
 import { cardViewEntries } from './cardview/index.js';
 import { cardEntries } from './card/index.jsx';
-import { paneEntries } from './pane/index.js';
-import { boardEntries } from './board/index.js';
+import { paneEntries } from './pane/index.jsx';
+import { boardEntries } from './board/index.jsx';
 import { coerceUnknownData } from './lib/coerce.js';
 
 export const FALLBACK_KIND = 'text';

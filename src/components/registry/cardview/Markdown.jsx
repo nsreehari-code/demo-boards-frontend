@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import BoardMarkdown from '../../BoardMarkdown.jsx';
+import BoardMarkdown from '../../shared/BoardMarkdown.jsx';
 
 function MarkdownComponent({ data }) {
   let text = '';
