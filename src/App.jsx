@@ -1,6 +1,7 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useBoardState } from './hooks/useBoardState.js';
 import { AppConfigModal } from './components/AppConfigModal.jsx';
+import { TimerButton } from './components/shared/TimerButton.jsx';
 import {
   BOARD_TRANSPORT_MODE,
   BOARD_TRANSPORT_MODE_SERVER_URL,
@@ -43,96 +44,6 @@ function formatCountdown(remainingMs) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function RefreshAllButton({ canRefreshAll, refreshAll }) {
-  const [nextRefreshAt, setNextRefreshAt] = useState(() => Date.now() + REFRESH_ALL_INTERVAL_MS);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const [refreshingAll, setRefreshingAll] = useState(false);
-  const refreshAllRef = useRef(null);
-  const isMountedRef = useRef(true);
-  const timerArmedRef = useRef(false);
-
-  const remainingMs = Math.max(0, nextRefreshAt - nowMs);
-
-  refreshAllRef.current = refreshAll ?? null;
-
-  const resetCountdown = () => {
-    const currentTime = Date.now();
-    setNowMs(currentTime);
-    setNextRefreshAt(currentTime + REFRESH_ALL_INTERVAL_MS);
-    timerArmedRef.current = false;
-  };
-
-  useEffect(() => () => {
-    isMountedRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    if (refreshingAll) {
-      return undefined;
-    }
-
-    const timerId = window.setInterval(() => {
-      timerArmedRef.current = true;
-      setNowMs(Date.now());
-    }, 1000);
-
-    return () => window.clearInterval(timerId);
-  }, [refreshingAll]);
-
-  useEffect(() => {
-    if (!timerArmedRef.current || remainingMs > 0 || refreshingAll || !canRefreshAll) {
-      return;
-    }
-
-    const runRefreshAll = async () => {
-      setRefreshingAll(true);
-      try {
-        window.dispatchEvent(new Event('demo-board:persist-canvas'));
-        await refreshAllRef.current?.();
-      } finally {
-        if (isMountedRef.current) {
-          setRefreshingAll(false);
-          resetCountdown();
-        }
-      }
-    };
-
-    runRefreshAll();
-  }, [canRefreshAll, refreshingAll, remainingMs]);
-
-  const handleRefreshAll = async () => {
-    if (refreshingAll) {
-      return;
-    }
-
-    setRefreshingAll(true);
-    try {
-      window.dispatchEvent(new Event('demo-board:persist-canvas'));
-      await refreshAllRef.current?.();
-    } finally {
-      setRefreshingAll(false);
-      resetCountdown();
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      className="btn btn-outline-secondary btn-sm board-button d-inline-flex align-items-center gap-2"
-      onClick={handleRefreshAll}
-      disabled={!canRefreshAll || refreshingAll}
-      title="Refresh all cards"
-    >
-      {refreshingAll ? (
-        <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-      ) : (
-        <i className="bi bi-arrow-clockwise" />
-      )}
-      <span>{formatCountdown(remainingMs)}</span>
-    </button>
-  );
 }
 
 export default function App() {
@@ -241,10 +152,27 @@ export default function App() {
             <div className="board-topbar__subtitle text-truncate">{PAGE_SUBTITLE}</div>
           </div>
           <div className="board-topbar__actions d-flex align-items-center justify-content-end gap-2 flex-shrink-0 ms-auto">
-            <RefreshAllButton
-              canRefreshAll={canRefreshAll}
-              refreshAll={board?.boardActions?.refreshAll ?? null}
-            />
+            <TimerButton
+              duration={REFRESH_ALL_INTERVAL_MS}
+              onClick={async () => {
+                window.dispatchEvent(new Event('demo-board:persist-canvas'));
+                await board?.boardActions?.refreshAll?.();
+              }}
+              disabled={!canRefreshAll}
+              className="btn btn-outline-secondary btn-sm board-button d-inline-flex align-items-center gap-2"
+              title="Refresh all cards"
+            >
+              {({ remainingMs, pending }) => (
+                <>
+                  {pending ? (
+                    <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                  ) : (
+                    <i className="bi bi-arrow-clockwise" />
+                  )}
+                  <span>{formatCountdown(remainingMs)}</span>
+                </>
+              )}
+            </TimerButton>
           </div>
         </div>
       </nav>
