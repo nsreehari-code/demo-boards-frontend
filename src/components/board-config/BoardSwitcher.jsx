@@ -36,6 +36,12 @@ const FORWARD_ICON_SVG = (
  *   onToggleLayout – () => void; flip the selected board's layout kind
  *   layoutToggleDisabled – disables the layout toggle button
  *   togglingLayout – whether a layout toggle is in flight
+ *   smokeRunnerEnabled   – whether the Run Tests icon button should be shown
+ *   onRunSmokeRunner     – () => void; open the smoke runner
+ *   smokeRunnerTitle     – tooltip for the Run Tests icon button
+ *   smokeStrategistEnabled – whether the Run Strategist icon button should be shown
+ *   onRunStrategist      – () => void; open the strategist smoke suite
+ *   smokeStrategistTitle – tooltip for the Run Strategist icon button
  */
 export function BoardSwitcher({
   value,
@@ -49,9 +55,16 @@ export function BoardSwitcher({
   onToggleLayout,
   layoutToggleDisabled = false,
   togglingLayout = false,
+  smokeRunnerEnabled = false,
+  onRunSmokeRunner,
+  smokeRunnerTitle = '',
+  smokeStrategistEnabled = false,
+  onRunStrategist,
+  smokeStrategistTitle = '',
 }) {
   const showLayoutToggle = typeof onToggleLayout === 'function';
   const isCardsLayout = layoutKind === 'flowing-cards';
+  const showRunButtons = smokeRunnerEnabled || smokeStrategistEnabled;
   return (
     <div className="board-settings-modal__header-content">
       <div className="board-settings-modal__eyebrow mb-2">Board</div>
@@ -83,8 +96,28 @@ export function BoardSwitcher({
           title="Switch board"
           aria-label="Switch board"
         >
-          Switch
+          {showRunButtons ? null : 'Switch'}
         </BoardConfigButton>
+        {smokeRunnerEnabled ? (
+          <BoardConfigButton
+            icon="bi-flask"
+            className="d-inline-flex align-items-center justify-content-center"
+            onClick={onRunSmokeRunner}
+            title={smokeRunnerTitle}
+            aria-label={smokeRunnerTitle || 'Run tests'}
+            data-testid="board-settings-smoke-test-button"
+          />
+        ) : null}
+        {smokeStrategistEnabled ? (
+          <BoardConfigButton
+            icon="bi-compass"
+            className="d-inline-flex align-items-center justify-content-center"
+            onClick={onRunStrategist}
+            title={smokeStrategistTitle}
+            aria-label={smokeStrategistTitle || 'Run strategist'}
+            data-testid="board-settings-smoke-strategist-button"
+          />
+        ) : null}
         {showLayoutToggle ? (
           <BoardConfigButton
             icon={isCardsLayout ? 'bi-diagram-3' : 'bi-bounding-box'}

@@ -510,16 +510,16 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
   }
 
   const smokeRunnerEnabled = formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
-    && formState.defaultBoardId === 'live-test-frontend';
+    && boardId === 'live-test-frontend';
   const smokeRunnerTitle = smokeRunnerEnabled
     ? 'Run the in-app smoke suite against the live-test-frontend board'
-    : 'Smoke suite is only available when the selected board id is live-test-frontend';
+    : 'Smoke suite is only available when the active board id is live-test-frontend';
 
   const smokeStrategistEnabled = formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
-    && formState.defaultBoardId === 'live-test-journey-frontend';
+    && boardId === 'live-test-journey-frontend';
   const smokeStrategistTitle = smokeStrategistEnabled
     ? 'Run the strategist smoke suite against the live-test-journey-frontend board'
-    : 'Strategist smoke suite is only available when the selected board id is live-test-journey-frontend';
+    : 'Strategist smoke suite is only available when the active board id is live-test-journey-frontend';
 
   const closeAddBoard = () => {
     if (addBoardSubmitting) return;
@@ -598,6 +598,12 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
                 onToggleLayout={() => { void handleToggleLayout(); }}
                 layoutToggleDisabled={formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL || !formState.defaultBoardId}
                 togglingLayout={togglingLayout}
+                smokeRunnerEnabled={smokeRunnerEnabled}
+                onRunSmokeRunner={() => setSmokeRunnerOpen(true)}
+                smokeRunnerTitle={smokeRunnerTitle}
+                smokeStrategistEnabled={smokeStrategistEnabled}
+                onRunStrategist={() => setSmokeStrategistOpen(true)}
+                smokeStrategistTitle={smokeStrategistTitle}
               />
             </div>
 
@@ -613,25 +619,6 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
                   title="New board"
                 >
                   New Board
-                </BoardConfigButton>
-                <BoardConfigButton
-                  icon="bi-flask"
-                  className="ms-auto"
-                  onClick={() => setSmokeRunnerOpen(true)}
-                  disabled={!smokeRunnerEnabled}
-                  title={smokeRunnerTitle}
-                  data-testid="board-settings-smoke-test-button"
-                >
-                  Run Tests
-                </BoardConfigButton>
-                <BoardConfigButton
-                  icon="bi-compass"
-                  onClick={() => setSmokeStrategistOpen(true)}
-                  disabled={!smokeStrategistEnabled}
-                  title={smokeStrategistTitle}
-                  data-testid="board-settings-smoke-strategist-button"
-                >
-                  Run Strategist
                 </BoardConfigButton>
               </div>
               {serverUnreachable ? (
