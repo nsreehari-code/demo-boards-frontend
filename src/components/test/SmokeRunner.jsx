@@ -259,7 +259,9 @@ const BASE_PORTFOLIO_CARD = {
         label: 'Holdings',
         data: {
           bind: 'card_data.holdings',
-          writeTo: 'card_data.holdings',
+        },
+        writeTo: 'card_data.holdings',
+        spec: {
           columns: ['ticker', 'quantity', 'cost_basis'],
           schema: {
             properties: {
@@ -334,6 +336,8 @@ const BASE_MARKET_PRICES_CARD = {
         label: 'Prices',
         data: {
           bind: 'computed_values.prices',
+        },
+        spec: {
           columns: ['ticker', 'name', 'price', 'change', 'chg_pct'],
           sortable: true,
         },
@@ -397,6 +401,8 @@ const BASE_PORTFOLIO_VALUE_CARD = {
         label: 'Positions',
         data: {
           bind: 'computed_values.positions',
+        },
+        spec: {
           columns: ['ticker', 'value', 'gain_$', 'gain_%'],
           sortable: true,
         },

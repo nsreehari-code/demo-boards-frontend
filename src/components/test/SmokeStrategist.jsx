@@ -48,7 +48,8 @@ const SEED_CARD_CONTENT = Object.freeze({
       {
         kind: 'notes',
         label: 'What do you want to investigate?',
-        data: { bind: 'card_data.intent', writeTo: 'card_data.intent' },
+        data: { bind: 'card_data.intent' },
+        writeTo: 'card_data.intent',
       },
     ],
   },

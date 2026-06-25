@@ -105,7 +105,7 @@ const RUN_CASE_IDS = ['MB1', 'MB2', 'T0', 'T1', 'T2', 'T3', 'T3u', 'T4', 'T8', '
 const SKIP_CASE_IDS = ['TQ', 'TT', 'TS', 'T9', 'T9F'];
 
 async function ensureLiveTestBoard(page) {
-  const boardSettingsDialog = page.locator('[role="dialog"][aria-label="Board settings"]');
+  const boardSettingsDialog = page.locator('aside[aria-label="Board settings"].is-open');
   const boardSelect = page.getByTestId('board-settings-board-select');
 
   await expect(boardSettingsDialog).toBeVisible();
@@ -115,7 +115,7 @@ async function ensureLiveTestBoard(page) {
   if (currentBoardId !== SMOKE_BOARD_ID) {
     await boardSelect.selectOption(SMOKE_BOARD_ID);
     await page.getByRole('button', { name: 'Switch board' }).click();
-    await expect(page.locator('[role="dialog"][aria-label="Board settings"]')).toBeHidden();
+    await expect(boardSettingsDialog).toBeHidden();
     await page.getByTestId('open-board-settings').click();
     await expect(boardSettingsDialog).toBeVisible();
     await expect(boardSelect).toHaveValue(SMOKE_BOARD_ID);

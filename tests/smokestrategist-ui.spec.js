@@ -82,7 +82,7 @@ async function waitForSuiteOutcome(statusChip, logPane, timeoutMs) {
 }
 
 async function ensureStrategistBoardSelected(page) {
-  const boardSettingsDialog = page.locator('[role="dialog"][aria-label="Board settings"]');
+  const boardSettingsDialog = page.locator('aside[aria-label="Board settings"].is-open');
   const boardSelect = page.getByTestId('board-settings-board-select');
 
   await expect(boardSettingsDialog).toBeVisible();
@@ -92,7 +92,7 @@ async function ensureStrategistBoardSelected(page) {
   if (currentBoardId !== STRATEGIST_BOARD_ID) {
     await boardSelect.selectOption(STRATEGIST_BOARD_ID);
     await page.getByRole('button', { name: 'Switch board' }).click();
-    await expect(page.locator('[role="dialog"][aria-label="Board settings"]')).toBeHidden();
+    await expect(boardSettingsDialog).toBeHidden();
     await page.getByTestId('open-board-settings').click();
     await expect(boardSettingsDialog).toBeVisible();
     await expect(boardSelect).toHaveValue(STRATEGIST_BOARD_ID);
