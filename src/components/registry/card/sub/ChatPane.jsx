@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BoardMarkdown from '../../../shared/BoardMarkdown.jsx';
+import { MessageWithAttachmentsInput } from '../../../shared/MessageWithAttachmentsInput.jsx';
+import { ChatBubble, ChatIconShell } from '../../../shared/ChatBubble.jsx';
 import { useChatState } from '../../../../hooks/useChatState.js';
 import { useCardStateFilesData } from '../../../../hooks/useCardState.js';
 import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
@@ -97,23 +99,6 @@ function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, bo
   }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
 }
 
-function UserBubbleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-    </svg>
-  );
-}
-
-function AssistantBubbleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
-
 function WorkingBubbleIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -165,18 +150,6 @@ const toolStates = [
 
 function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function ChatIconShell({ children }) {
-  return (
-    <span
-      className="flex-shrink-0 d-inline-flex align-items-center"
-      aria-hidden="true"
-      style={{ lineHeight: 1.4, opacity: 0.55, marginTop: '0.1rem' }}
-    >
-      {children}
-    </span>
-  );
 }
 
 function ChatMessageText({ text, expanded, onOverflowChange }) {
@@ -317,9 +290,9 @@ function SystemMessage({ msg, boardId, cardId }) {
   const showText = !(indexedFile && indexedAttachment);
 
   return (
-    <div className="text-center small text-muted fst-italic px-2 my-1 d-flex flex-column align-items-center" style={{ gap: '0.35rem' }}>
-      {showText ? <div>{text}</div> : null}
-      {indexedFile && indexedAttachment ? (
+    <ChatBubble
+      variant="system"
+      attachments={indexedFile && indexedAttachment ? (
         <SystemAttachmentChip
           boardId={boardId}
           cardId={cardId}
@@ -328,7 +301,9 @@ function SystemMessage({ msg, boardId, cardId }) {
           label={directLabel}
         />
       ) : null}
-    </div>
+    >
+      {showText ? <div>{text}</div> : null}
+    </ChatBubble>
   );
 }
 
@@ -341,79 +316,60 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
   const isUser = role === 'user';
   const showFooter = isOverflowing || expanded;
   return (
-    <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
-      <div
-        className="px-2 py-2 rounded-3 small d-flex flex-column"
-        style={{
-          maxWidth: '82%',
-          background: isUser
-            ? 'color-mix(in srgb, var(--color-surface-muted) 92%, transparent)'
-            : 'color-mix(in srgb, var(--color-accent-soft) 84%, var(--color-surface-strong))',
-          border: isUser ? '1px solid var(--color-border)' : '1px solid var(--color-border-strong)',
-          overflowWrap: 'anywhere',
-          wordBreak: 'break-word',
-          overflowX: 'hidden',
-        }}
-      >
-        <div className={`d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`} style={{ gap: '0.45rem' }}>
-          <ChatIconShell>
-            {isUser ? <UserBubbleIcon /> : <AssistantBubbleIcon />}
-          </ChatIconShell>
-          <div className="flex-grow-1 min-w-0">
-            <ChatMessageText text={text} expanded={expanded} onOverflowChange={setIsOverflowing} />
-            {(files ?? []).map((f, i) => (
-              <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
-            ))}
-          </div>
-        </div>
-        {showFooter ? (
-          <button
-            type="button"
-            className="d-flex justify-content-center align-items-center btn btn-link p-0 border-0"
-            onClick={() => onToggleExpand?.(msgId)}
-            title={expanded ? 'Collapse message' : 'Expand message'}
-            aria-label={expanded ? 'Collapse message' : 'Expand message'}
-            aria-expanded={expanded}
+    <ChatBubble
+      variant={isUser ? 'user' : 'assistant'}
+      attachments={(files ?? []).map((f, i) => (
+        <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
+      ))}
+      footer={showFooter ? (
+        <button
+          type="button"
+          className="d-flex justify-content-center align-items-center btn btn-link p-0 border-0"
+          onClick={() => onToggleExpand?.(msgId)}
+          title={expanded ? 'Collapse message' : 'Expand message'}
+          aria-label={expanded ? 'Collapse message' : 'Expand message'}
+          aria-expanded={expanded}
+          style={{
+            marginLeft: '-0.5rem',
+            marginRight: '-0.5rem',
+            marginBottom: '-0.5rem',
+            marginTop: '0.4rem',
+            paddingTop: '0.2rem',
+            paddingBottom: '0.2rem',
+            borderTop: '1px solid var(--color-border)',
+            background: 'color-mix(in srgb, var(--color-surface-muted) 88%, transparent)',
+            borderBottomLeftRadius: 'inherit',
+            borderBottomRightRadius: 'inherit',
+            color: 'var(--color-text-soft)',
+            textDecoration: 'none',
+          }}
+        >
+          <svg
+            width="18"
+            height="10"
+            viewBox="0 0 24 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
             style={{
-              marginLeft: '-0.5rem',
-              marginRight: '-0.5rem',
-              marginBottom: '-0.5rem',
-              marginTop: '0.4rem',
-              paddingTop: '0.2rem',
-              paddingBottom: '0.2rem',
-              borderTop: '1px solid var(--color-border)',
-              background: 'color-mix(in srgb, var(--color-surface-muted) 88%, transparent)',
-              borderBottomLeftRadius: 'inherit',
-              borderBottomRightRadius: 'inherit',
-              color: 'var(--color-text-soft)',
-              textDecoration: 'none',
+              transform: expanded ? 'rotate(180deg)' : 'none',
+              transition: 'transform 120ms ease',
             }}
           >
-            <svg
-              width="18"
-              height="10"
-              viewBox="0 0 24 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              style={{
-                transform: expanded ? 'rotate(180deg)' : 'none',
-                transition: 'transform 120ms ease',
-              }}
-            >
-              <polyline points="3 3 12 10 21 3" />
-            </svg>
-          </button>
-        ) : null}
-      </div>
-    </div>
+            <polyline points="3 3 12 10 21 3" />
+          </svg>
+        </button>
+      ) : null}
+    >
+      <ChatMessageText text={text} expanded={expanded} onOverflowChange={setIsOverflowing} />
+    </ChatBubble>
   );
 }
 
-const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
+const ChatMessageBubble = React.memo(ChatBubbleImpl, (prev, next) => (
   prev.msg === next.msg
   && prev.msgId === next.msgId
   && prev.expanded === next.expanded
@@ -437,7 +393,7 @@ const MessageList = React.memo(function MessageList({ messages, compact, boardId
         occurrences.set(base, occurrence + 1);
         const msgId = `${base}:${occurrence}`;
         return (
-          <ChatBubble
+          <ChatMessageBubble
             key={msgId}
             msg={msg}
             msgId={msgId}
@@ -668,108 +624,55 @@ const ChatComposer = React.memo(function ChatComposer({
   variant = 'default',
   onPopout,
 }) {
-  const [text, setText] = useState('');
-  const [dragActive, setDragActive] = useState(false);
-  const fileRef = useRef(null);
-  const textareaRef = useRef(null);
   const isMini = variant === 'mini';
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
 
   const upload = (file) => {
     if (!file || processing) return;
     chatActions.uploadFileForChat(file, turnId).catch(() => {});
   };
 
-  const send = () => {
-    if (processing) return;
-    const t = text.trim();
+  const submitText = ({ text }) => {
+    const t = (text || '').trim();
     if (!t) return;
     chatActions.sendChatAction(t, { turnId }).catch(() => {});
-    setText('');
   };
 
   return (
-    <div className={`board-chat-pane__composer border-top d-flex flex-column gap-2 flex-shrink-0${isMini ? ' board-chat-pane__composer--mini p-1' : ' p-2'}`}>
-      {!isMini ? (
-        <div
-          className={`board-chat-pane__dropzone border rounded-3 p-2 small text-center${processing ? ' is-disabled' : dragActive ? ' is-active' : ''}`}
-          role="button"
-          tabIndex={0}
-          aria-disabled={processing}
-          onClick={() => { if (!processing) fileRef.current?.click(); }}
-          onDragEnter={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-          onDragOver={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-          onDragLeave={(e) => { e.preventDefault(); if (!processing && e.currentTarget === e.target) setDragActive(false); }}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragActive(false);
-            upload(e.dataTransfer.files?.[0]);
-          }}
-          onKeyDown={(e) => {
-            if (processing) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              fileRef.current?.click();
-            }
-          }}
-        >
-          Drop a file here or click to browse
-        </div>
-      ) : null}
-
-      <input
-        ref={fileRef}
-        type="file"
-        className="d-none"
-        disabled={processing}
-        onChange={(e) => {
-          upload(e.target.files?.[0]);
-          e.target.value = '';
-        }}
-      />
-
-      <div className={`board-chat-pane__input-row d-flex gap-2 align-items-end${isMini ? ' board-chat-pane__input-row--mini' : ''}`}>
-        {isMini ? (
-          <button
-            type="button"
-            className="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
-            onClick={() => fileRef.current?.click()}
-            title="Attach file"
-            aria-label={`Attach file for ${cardId}`}
-            disabled={processing}
-            data-testid={`chat-pane-attach-${cardId}`}
-          >
-            <ChatAttachIcon />
-          </button>
-        ) : null}
-        <textarea
-          ref={textareaRef}
-          className="board-chat-pane__textarea form-control form-control-sm"
-          data-testid={`chat-pane-textarea-${cardId}`}
-          rows={1}
-          value={text}
-          placeholder={placeholder ?? 'Send a message…'}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          style={{ resize: 'none', minHeight: '38px', maxHeight: '160px' }}
-        />
-        <button
-          className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
-          data-testid={`chat-pane-send-${cardId}`}
-          aria-label={`Send chat for ${cardId}`}
-          onClick={send}
-          disabled={processing || !text.trim()}
-        >
-          <i className="bi bi-send" />
-        </button>
-      </div>
-    </div>
+    <MessageWithAttachmentsInput
+      staged={false}
+      multiline
+      requireText
+      disabled={processing}
+      onAttach={(files) => upload(files[0])}
+      onSubmit={submitText}
+      placeholder={placeholder ?? 'Send a message…'}
+      className={`board-chat-pane__composer border-top d-flex flex-column gap-2 flex-shrink-0${isMini ? ' board-chat-pane__composer--mini p-1' : ' p-2'}`}
+      inputRowClassName={`board-chat-pane__input-row d-flex gap-2 align-items-end${isMini ? ' board-chat-pane__input-row--mini' : ''}`}
+      attachVariant={isMini ? 'button' : 'dropzone'}
+      dropzoneClassName="board-chat-pane__dropzone border rounded-3 p-2 small text-center"
+      dropzoneActiveClassName="is-active"
+      dropzoneDisabledClassName="is-disabled"
+      dropzoneContent="Drop a file here or click to browse"
+      attachButtonClassName="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
+      attachButtonContent={<ChatAttachIcon />}
+      attachButtonProps={{
+        title: 'Attach file',
+        'aria-label': `Attach file for ${cardId}`,
+        'data-testid': `chat-pane-attach-${cardId}`,
+      }}
+      inputClassName="board-chat-pane__textarea form-control form-control-sm"
+      inputProps={{
+        rows: 1,
+        style: { resize: 'none', minHeight: '38px', maxHeight: '160px' },
+        'data-testid': `chat-pane-textarea-${cardId}`,
+      }}
+      submitClassName="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
+      submitContent={<i className="bi bi-send" />}
+      submitProps={{
+        'data-testid': `chat-pane-send-${cardId}`,
+        'aria-label': `Send chat for ${cardId}`,
+      }}
+    />
   );
 });
 
