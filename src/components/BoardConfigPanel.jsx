@@ -19,6 +19,7 @@ import { EditPageDetails, toPageDetailsDraft } from './board-config/EditPageDeta
 import { TemplateCardIngest, TemplateIngestPreview } from './board-config/TemplateCardIngest.jsx';
 import { ChallengeConfirmModal } from './shared/ChallengeConfirmModal.jsx';
 import { PanelVertical } from './shared/PanelVertical.jsx';
+import { FileUpload } from './shared/FileUpload.jsx';
 import { SmokeRunner } from './test/SmokeRunner.jsx';
 import { SmokeStrategist } from './test/SmokeStrategist.jsx';
 
@@ -588,14 +589,12 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
 
   return (
     <>
-      <input
+      <FileUpload
         ref={importFileInputRef}
-        type="file"
+        variant="input"
         accept="application/json,.json"
-        className="d-none"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = '';
+        onFiles={async (files) => {
+          const file = files[0];
           if (!file) return;
           await handleImportRuntimeDump(file);
         }}
@@ -780,7 +779,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
           message="This will overwrite the current runtime card state from a local dump file. Cards not present in the file will be removed."
           onConfirm={() => {
             setPendingAction(null);
-            importFileInputRef.current?.click();
+            importFileInputRef.current?.open();
           }}
           onCancel={() => setPendingAction(null)}
         />

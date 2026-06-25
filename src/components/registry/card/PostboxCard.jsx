@@ -1,5 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardChrome } from './sub/CardChrome.jsx';
+import { useFileDrop } from '../../shared/FileUpload.jsx';
+import { MessageWithAttachmentsInput } from '../../shared/MessageWithAttachmentsInput.jsx';
 import { useCardState, useCardStateFilesData } from '../../../hooks/useCardState.js';
 import { useChatState } from '../../../hooks/useChatState.js';
 import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../lib/client.js';
@@ -216,23 +218,6 @@ function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, bo
   }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
 }
 
-function SelectedFileChip({ file, onRemove }) {
-  const name = typeof file?.name === 'string' && file.name.trim() ? file.name.trim() : 'Untitled file';
-  const size = file?.size ? ` (${formatFileSize(file.size)})` : '';
-
-  return (
-    <span className="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-2 px-3 py-2 text-body-emphasis">
-      <span className="text-truncate" style={{ maxWidth: '18rem' }}>{`${name}${size}`}</span>
-      <button
-        type="button"
-        className="btn-close btn-close-sm"
-        aria-label={`Remove ${name}`}
-        onClick={onRemove}
-      />
-    </span>
-  );
-}
-
 function DownloadFileChip({ boardId, cardId, index, file, label }) {
   const [resolvedHref, setResolvedHref] = useState(() => {
     if (!file?.stored_name) return '';
@@ -366,11 +351,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
   const messages = chat?.messages ?? [];
   const chatActions = chat?.chatActions ?? null;
   const boardSseClientId = chat?.boardSseClientId ?? null;
-  const [commentText, setCommentText] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [composerDragActive, setComposerDragActive] = useState(false);
   const [viewMode, setViewMode] = useState('submissions');
   const [liveMessages, setLiveMessages] = useState([]);
   const [historyMessages, setHistoryMessages] = useState([]);
@@ -378,7 +359,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
-  const fileRef = useRef(null);
+  const composerRef = useRef(null);
   const messagesRef = useRef(null);
   const liveKeyRef = useRef('');
   const lastLoadedAnchorRef = useRef('');
@@ -392,8 +373,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
   );
 
   useEffect(() => {
-    setSelectedFiles([]);
-    setCommentText('');
+    composerRef.current?.clear();
     setLiveMessages([]);
     setHistoryMessages([]);
     setHistoryAnchorTurnId('');
@@ -489,44 +469,23 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
   }, [submissions.length, viewMode]);
 
   const allowMessageOnly = variant === 'universal';
-  const canSubmit = (selectedFiles.length > 0 || (allowMessageOnly && commentText.trim().length > 0)) && !submitting;
 
-  const addFiles = useCallback((incomingFiles) => {
-    const nextFiles = Array.from(incomingFiles || []).filter(Boolean);
-    if (nextFiles.length === 0) {
-      return;
-    }
+  const { dragActive, handlers: stageDropHandlers } = useFileDrop({
+    onFiles: (files) => composerRef.current?.addFiles(files),
+  });
 
-    setSelectedFiles((current) => {
-      const merged = [...current];
-      for (const file of nextFiles) {
-        const exists = merged.some((entry) => (
-          entry.name === file.name
-          && entry.size === file.size
-          && entry.lastModified === file.lastModified
-        ));
-        if (!exists) {
-          merged.push(file);
-        }
-      }
-      return merged;
-    });
-  }, []);
-
-  const handleSubmit = useCallback(async () => {
-    if (!chatActions || !canSubmit) {
+  const handleSubmit = useCallback(async ({ text, files }) => {
+    if (!chatActions) {
       return;
     }
 
     setSubmitting(true);
     try {
-      const text = commentText.trim() || 'na';
-      await chatActions.sendChat(text, {
+      const message = (typeof text === 'string' ? text.trim() : '') || 'na';
+      await chatActions.sendChat(message, {
         turnId: draftTurnId,
-        files: selectedFiles,
+        files,
       });
-      setCommentText('');
-      setSelectedFiles([]);
       setDraftTurnId(makeTurnId());
       try {
         const latest = await fetchChatHistoryBeforeTurn(boardId, cardId, '', HISTORY_TURNS_PER_PAGE);
@@ -539,7 +498,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
     } finally {
       setSubmitting(false);
     }
-  }, [boardId, cardId, canSubmit, chatActions, commentText, draftTurnId, selectedFiles]);
+  }, [boardId, cardId, chatActions, draftTurnId]);
 
   if (!cardState?.cardContent || !chat) return null;
 
@@ -553,25 +512,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
       <div
         ref={messagesRef}
         className={`board-postbox-stage flex-grow-1 overflow-auto p-3${dragActive ? ' board-postbox-stage--dragging' : ''}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          if (event.currentTarget === event.target) {
-            setDragActive(false);
-          }
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-          addFiles(event.dataTransfer.files);
-        }}
+        {...stageDropHandlers}
       >
         {dragActive ? (
           <div className="board-postbox-stage__drophint">
@@ -643,88 +584,33 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
         )}
       </div>
 
-      <div className="border-top p-3 d-flex flex-column gap-3 flex-shrink-0">
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="d-none"
-          onChange={(event) => {
-            addFiles(event.target.files);
-            event.target.value = '';
-          }}
-        />
-
-        <button
-          type="button"
-          className={`board-postbox-dropzone ${composerDragActive ? 'board-postbox-dropzone--active' : ''}`}
-          onClick={() => fileRef.current?.click()}
-          disabled={submitting}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setComposerDragActive(true);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setComposerDragActive(true);
-          }}
-          onDragLeave={(event) => {
-            event.preventDefault();
-            if (event.currentTarget === event.target) {
-              setComposerDragActive(false);
-            }
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setComposerDragActive(false);
-            addFiles(event.dataTransfer.files);
-          }}
-        >
-          <i className="bi bi-cloud-arrow-up board-postbox-dropzone__icon" />
-          <span className="board-postbox-dropzone__title">Drag &amp; drop files here</span>
-          <span className="board-postbox-dropzone__hint">or click to browse</span>
-        </button>
-
-        {selectedFiles.length > 0 ? (
-          <div className="d-flex flex-wrap gap-2">
-            {selectedFiles.map((file, index) => (
-              <SelectedFileChip
-                key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                file={file}
-                onRemove={() => {
-                  setSelectedFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        <div className="d-flex align-items-center gap-2">
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            value={commentText}
-            placeholder={allowMessageOnly ? 'Write a message, attach files, or both' : 'Add comment (optional)'}
-            onChange={(event) => setCommentText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && canSubmit) {
-                event.preventDefault();
-                void handleSubmit();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="btn btn-sm btn-primary flex-shrink-0"
-            onClick={() => void handleSubmit()}
-            disabled={!canSubmit}
-          >
-            {submitting
-              ? (allowMessageOnly ? 'Sending…' : 'Uploading…')
-              : (allowMessageOnly ? 'Send' : 'Upload')}
-          </button>
-        </div>
-      </div>
+      <MessageWithAttachmentsInput
+        ref={composerRef}
+        staged
+        multiple
+        disabled={submitting}
+        requireAttachment={!allowMessageOnly}
+        onSubmit={handleSubmit}
+        placeholder={allowMessageOnly ? 'Write a message, attach files, or both' : 'Add comment (optional)'}
+        className="border-top p-3 d-flex flex-column gap-3 flex-shrink-0"
+        inputRowClassName="d-flex align-items-center gap-2"
+        attachVariant="dropzone"
+        dropzoneAs="button"
+        dropzoneClassName="board-postbox-dropzone"
+        dropzoneActiveClassName="board-postbox-dropzone--active"
+        dropzoneContent={(
+          <>
+            <i className="bi bi-cloud-arrow-up board-postbox-dropzone__icon" />
+            <span className="board-postbox-dropzone__title">Drag &amp; drop files here</span>
+            <span className="board-postbox-dropzone__hint">or click to browse</span>
+          </>
+        )}
+        inputClassName="form-control form-control-sm"
+        submitClassName="btn btn-sm btn-primary flex-shrink-0"
+        submitContent={submitting
+          ? (allowMessageOnly ? 'Sending…' : 'Uploading…')
+          : (allowMessageOnly ? 'Send' : 'Upload')}
+      />
     </div>
     </CardChrome>
   );

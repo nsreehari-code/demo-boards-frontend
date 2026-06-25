@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BoardMarkdown from '../../../shared/BoardMarkdown.jsx';
+import { MessageWithAttachmentsInput } from '../../../shared/MessageWithAttachmentsInput.jsx';
 import { useChatState } from '../../../../hooks/useChatState.js';
 import { useCardStateFilesData } from '../../../../hooks/useCardState.js';
 import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
@@ -668,108 +669,55 @@ const ChatComposer = React.memo(function ChatComposer({
   variant = 'default',
   onPopout,
 }) {
-  const [text, setText] = useState('');
-  const [dragActive, setDragActive] = useState(false);
-  const fileRef = useRef(null);
-  const textareaRef = useRef(null);
   const isMini = variant === 'mini';
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
 
   const upload = (file) => {
     if (!file || processing) return;
     chatActions.uploadFileForChat(file, turnId).catch(() => {});
   };
 
-  const send = () => {
-    if (processing) return;
-    const t = text.trim();
+  const submitText = ({ text }) => {
+    const t = (text || '').trim();
     if (!t) return;
     chatActions.sendChatAction(t, { turnId }).catch(() => {});
-    setText('');
   };
 
   return (
-    <div className={`board-chat-pane__composer border-top d-flex flex-column gap-2 flex-shrink-0${isMini ? ' board-chat-pane__composer--mini p-1' : ' p-2'}`}>
-      {!isMini ? (
-        <div
-          className={`board-chat-pane__dropzone border rounded-3 p-2 small text-center${processing ? ' is-disabled' : dragActive ? ' is-active' : ''}`}
-          role="button"
-          tabIndex={0}
-          aria-disabled={processing}
-          onClick={() => { if (!processing) fileRef.current?.click(); }}
-          onDragEnter={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-          onDragOver={(e) => { e.preventDefault(); if (!processing) setDragActive(true); }}
-          onDragLeave={(e) => { e.preventDefault(); if (!processing && e.currentTarget === e.target) setDragActive(false); }}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragActive(false);
-            upload(e.dataTransfer.files?.[0]);
-          }}
-          onKeyDown={(e) => {
-            if (processing) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              fileRef.current?.click();
-            }
-          }}
-        >
-          Drop a file here or click to browse
-        </div>
-      ) : null}
-
-      <input
-        ref={fileRef}
-        type="file"
-        className="d-none"
-        disabled={processing}
-        onChange={(e) => {
-          upload(e.target.files?.[0]);
-          e.target.value = '';
-        }}
-      />
-
-      <div className={`board-chat-pane__input-row d-flex gap-2 align-items-end${isMini ? ' board-chat-pane__input-row--mini' : ''}`}>
-        {isMini ? (
-          <button
-            type="button"
-            className="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
-            onClick={() => fileRef.current?.click()}
-            title="Attach file"
-            aria-label={`Attach file for ${cardId}`}
-            disabled={processing}
-            data-testid={`chat-pane-attach-${cardId}`}
-          >
-            <ChatAttachIcon />
-          </button>
-        ) : null}
-        <textarea
-          ref={textareaRef}
-          className="board-chat-pane__textarea form-control form-control-sm"
-          data-testid={`chat-pane-textarea-${cardId}`}
-          rows={1}
-          value={text}
-          placeholder={placeholder ?? 'Send a message…'}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          style={{ resize: 'none', minHeight: '38px', maxHeight: '160px' }}
-        />
-        <button
-          className="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
-          data-testid={`chat-pane-send-${cardId}`}
-          aria-label={`Send chat for ${cardId}`}
-          onClick={send}
-          disabled={processing || !text.trim()}
-        >
-          <i className="bi bi-send" />
-        </button>
-      </div>
-    </div>
+    <MessageWithAttachmentsInput
+      staged={false}
+      multiline
+      requireText
+      disabled={processing}
+      onAttach={(files) => upload(files[0])}
+      onSubmit={submitText}
+      placeholder={placeholder ?? 'Send a message…'}
+      className={`board-chat-pane__composer border-top d-flex flex-column gap-2 flex-shrink-0${isMini ? ' board-chat-pane__composer--mini p-1' : ' p-2'}`}
+      inputRowClassName={`board-chat-pane__input-row d-flex gap-2 align-items-end${isMini ? ' board-chat-pane__input-row--mini' : ''}`}
+      attachVariant={isMini ? 'button' : 'dropzone'}
+      dropzoneClassName="board-chat-pane__dropzone border rounded-3 p-2 small text-center"
+      dropzoneActiveClassName="is-active"
+      dropzoneDisabledClassName="is-disabled"
+      dropzoneContent="Drop a file here or click to browse"
+      attachButtonClassName="board-chat-pane__icon-button board-icon-button board-icon-button--sm flex-shrink-0"
+      attachButtonContent={<ChatAttachIcon />}
+      attachButtonProps={{
+        title: 'Attach file',
+        'aria-label': `Attach file for ${cardId}`,
+        'data-testid': `chat-pane-attach-${cardId}`,
+      }}
+      inputClassName="board-chat-pane__textarea form-control form-control-sm"
+      inputProps={{
+        rows: 1,
+        style: { resize: 'none', minHeight: '38px', maxHeight: '160px' },
+        'data-testid': `chat-pane-textarea-${cardId}`,
+      }}
+      submitClassName="board-chat-pane__send btn btn-sm btn-primary flex-shrink-0"
+      submitContent={<i className="bi bi-send" />}
+      submitProps={{
+        'data-testid': `chat-pane-send-${cardId}`,
+        'aria-label': `Send chat for ${cardId}`,
+      }}
+    />
   );
 });
 
