@@ -344,7 +344,6 @@ may also be stored in `localStorage` under `demo-boards.app-config.override`
 | `canvasLayout.rowGap` | `280` | Vertical gap between rows (px). |
 | `canvasLayout.origin.{x,y}` | `40` / `40` | Canvas origin offset. |
 | `storage.adapter` | `firestore` | `firestore` or `localstorage`. |
-| `storage.seedCardsUrl` | `''` | URL to seed initial cards. |
 | `storage.firestore.{firebaseConfig,appName,refs}` | `{}` / `''` / `{}` | Firestore wiring. |
 | `storage.localstorage.refs` | `{}` | LocalStorage board refs. |
 | `boardServerConstants.agentOutputChannel` | `agent-output` | SSE channel name (§6). |

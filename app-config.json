@@ -22,7 +22,6 @@
   "serverOrigin": "http://127.0.0.1:7799",
   "storage": {
     "adapter": "localstorage",
-    "seedCardsUrl": "/seed-cards/{boardId}.json",
     "localstorage": {}
   },
   "boardServerConstants": {

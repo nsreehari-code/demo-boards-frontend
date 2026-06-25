@@ -36,11 +36,8 @@ function normalizeStorageConfig(config) {
 
   const localstorageSource = source.localstorage ?? {};
 
-  const seedCardsUrl = typeof source.seedCardsUrl === 'string' ? source.seedCardsUrl.trim() : '';
-
   return {
     adapter,
-    seedCardsUrl,
     localstorage: normalizeLocalStorageStorageConfig(localstorageSource),
   };
 }
@@ -60,7 +57,6 @@ export const FALLBACK_APP_CONFIG = Object.freeze({
   serverOrigin: 'http://localhost:7799',
   storage: {
     adapter: STORAGE_ADAPTER_LOCALSTORAGE,
-    seedCardsUrl: '',
     localstorage: { refs: {} },
   },
   boardServerConstants: {
