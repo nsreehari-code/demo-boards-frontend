@@ -552,8 +552,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
     <div className="board-postbox-card h-100 d-flex flex-column overflow-hidden">
       <div
         ref={messagesRef}
-        className={`flex-grow-1 overflow-auto p-3 ${dragActive ? 'border border-primary border-2' : ''}`}
-        style={{ background: dragActive ? 'rgba(13, 110, 253, 0.08)' : 'transparent' }}
+        className={`board-postbox-stage flex-grow-1 overflow-auto p-3${dragActive ? ' board-postbox-stage--dragging' : ''}`}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragActive(true);
@@ -575,7 +574,7 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
         }}
       >
         {dragActive ? (
-          <div className="rounded-4 border border-primary border-dashed p-4 mb-3 text-center text-primary bg-white">
+          <div className="board-postbox-stage__drophint">
             Drop files to stage this submission
           </div>
         ) : null}

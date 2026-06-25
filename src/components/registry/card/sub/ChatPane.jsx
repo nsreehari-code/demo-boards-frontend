@@ -347,9 +347,9 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
         style={{
           maxWidth: '82%',
           background: isUser
-            ? 'var(--bs-secondary-bg, #e9ecef)'
-            : 'var(--bs-primary-bg-subtle, #cfe2ff)',
-          border: isUser ? 'none' : '1px solid var(--bs-border-color, #dee2e6)',
+            ? 'color-mix(in srgb, var(--color-surface-muted) 92%, transparent)'
+            : 'color-mix(in srgb, var(--color-accent-soft) 84%, var(--color-surface-strong))',
+          border: isUser ? '1px solid var(--color-border)' : '1px solid var(--color-border-strong)',
           overflowWrap: 'anywhere',
           wordBreak: 'break-word',
           overflowX: 'hidden',
@@ -381,11 +381,11 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
               marginTop: '0.4rem',
               paddingTop: '0.2rem',
               paddingBottom: '0.2rem',
-              borderTop: '1px solid rgba(0, 0, 0, 0.08)',
-              background: 'rgba(0, 0, 0, 0.05)',
+              borderTop: '1px solid var(--color-border)',
+              background: 'color-mix(in srgb, var(--color-surface-muted) 88%, transparent)',
               borderBottomLeftRadius: 'inherit',
               borderBottomRightRadius: 'inherit',
-              color: 'rgba(0, 0, 0, 0.55)',
+              color: 'var(--color-text-soft)',
               textDecoration: 'none',
             }}
           >

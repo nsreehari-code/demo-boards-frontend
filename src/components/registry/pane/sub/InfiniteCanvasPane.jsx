@@ -171,15 +171,15 @@ function LeaderLineEdge({
     targetPosition,
     curvature,
   });
-  const baseStrokeColor = 'rgba(83, 133, 137, 0.58)';
-  const highlightStrokeColor = 'rgba(71, 122, 136, 0.78)';
-  const dimStrokeColor = 'rgba(83, 133, 137, 0.2)';
+  const baseStrokeColor = 'var(--board-edge-stroke)';
+  const highlightStrokeColor = 'var(--board-edge-stroke-highlight)';
+  const dimStrokeColor = 'var(--board-edge-stroke-dim)';
   const strokeColor = isHighlighted
     ? highlightStrokeColor
     : isDimmed
       ? dimStrokeColor
       : baseStrokeColor;
-  const flowColor = isHighlighted ? 'rgba(146, 208, 213, 0.86)' : 'rgba(166, 216, 220, 0.74)';
+  const flowColor = isHighlighted ? 'var(--board-edge-flow-highlight)' : 'var(--board-edge-flow)';
   const plugMarkerId = `${id}-plug`;
   const endPlugMarkerId = `${id}-end-plug`;
   const mainStrokeWidth = isHighlighted ? 2.4 : 1.7;
@@ -247,11 +247,11 @@ function miniMapNodeStatus(node) {
 }
 
 function getMiniMapNodeColor(node) {
-  return miniMapNodeStatus(node) === 'running' ? 'rgba(111, 192, 154, 0.92)' : 'rgba(125, 149, 171, 0.58)';
+  return miniMapNodeStatus(node) === 'running' ? 'var(--board-minimap-node-running-fill)' : 'var(--board-minimap-node-fill)';
 }
 
 function getMiniMapNodeStrokeColor(node) {
-  return miniMapNodeStatus(node) === 'running' ? 'rgba(34, 132, 93, 0.96)' : 'rgba(97, 122, 147, 0.34)';
+  return miniMapNodeStatus(node) === 'running' ? 'var(--board-minimap-node-running-stroke)' : 'var(--board-minimap-node-stroke)';
 }
 
 function getMiniMapNodeClassName(node) {

@@ -16,6 +16,9 @@
   --color-accent: #54a6ff;
   --color-accent-strong: #7dc7ff;
   --color-accent-soft: rgba(84, 166, 255, 0.16);
+  --color-danger: #ff6b81;
+  --color-error: #ff6b81;
+  --color-ok: #2ed1a2;
   --color-overlay: rgba(4, 10, 19, 0.76);
   --color-shadow: 0 24px 60px rgba(3, 9, 20, 0.4);
   --color-shadow-soft: 0 18px 44px rgba(3, 9, 20, 0.28);
@@ -31,6 +34,23 @@
   --status-blocked-soft: rgba(242, 184, 75, 0.16);
   --status-fresh-soft: rgba(142, 166, 196, 0.14);
   --status-unknown-soft: rgba(125, 143, 168, 0.14);
+  --board-edge-stroke: rgba(110, 154, 215, 0.5);
+  --board-edge-stroke-highlight: rgba(122, 173, 255, 0.78);
+  --board-edge-stroke-dim: rgba(110, 154, 215, 0.18);
+  --board-edge-flow: rgba(125, 199, 255, 0.8);
+  --board-edge-flow-highlight: rgba(160, 222, 255, 0.92);
+  --board-edge-label-bg: rgba(17, 27, 46, 0.9);
+  --board-edge-label-border: rgba(110, 154, 215, 0.3);
+  --board-edge-label-text: #a9c7ea;
+  --board-edge-label-highlight-text: #e5eefc;
+  --board-edge-label-running-text: #7dc7ff;
+  --board-stage-drag-bg: rgba(84, 166, 255, 0.08);
+  --board-stage-drag-border: rgba(84, 166, 255, 0.54);
+  --board-stage-drag-text: #7dc7ff;
+  --board-minimap-node-fill: rgba(142, 166, 196, 0.58);
+  --board-minimap-node-stroke: rgba(125, 143, 168, 0.34);
+  --board-minimap-node-running-fill: rgba(46, 209, 162, 0.92);
+  --board-minimap-node-running-stroke: rgba(46, 209, 162, 0.96);
   --surface-radius: 8px;
   --surface-radius-sm: 6px;
   --nav-height: 60px;
@@ -53,6 +73,9 @@
   --color-accent: #1f8fff;
   --color-accent-strong: #176dd1;
   --color-accent-soft: rgba(31, 143, 255, 0.12);
+  --color-danger: #d6455d;
+  --color-error: #d6455d;
+  --color-ok: #18b57d;
   --color-overlay: rgba(20, 42, 65, 0.2);
   --color-shadow: 0 24px 56px rgba(83, 112, 143, 0.16);
   --color-shadow-soft: 0 14px 30px rgba(83, 112, 143, 0.1);
@@ -68,6 +91,23 @@
   --status-blocked-soft: rgba(217, 146, 46, 0.12);
   --status-fresh-soft: rgba(101, 134, 170, 0.1);
   --status-unknown-soft: rgba(129, 145, 163, 0.1);
+  --board-edge-stroke: rgba(83, 133, 137, 0.58);
+  --board-edge-stroke-highlight: rgba(71, 122, 136, 0.78);
+  --board-edge-stroke-dim: rgba(83, 133, 137, 0.2);
+  --board-edge-flow: rgba(166, 216, 220, 0.74);
+  --board-edge-flow-highlight: rgba(146, 208, 213, 0.86);
+  --board-edge-label-bg: rgba(247, 250, 252, 0.92);
+  --board-edge-label-border: rgba(84, 119, 160, 0.18);
+  --board-edge-label-text: #476a90;
+  --board-edge-label-highlight-text: #214d83;
+  --board-edge-label-running-text: #1d5a90;
+  --board-stage-drag-bg: rgba(31, 143, 255, 0.08);
+  --board-stage-drag-border: rgba(31, 143, 255, 0.44);
+  --board-stage-drag-text: #176dd1;
+  --board-minimap-node-fill: rgba(125, 149, 171, 0.58);
+  --board-minimap-node-stroke: rgba(97, 122, 147, 0.34);
+  --board-minimap-node-running-fill: rgba(111, 192, 154, 0.92);
+  --board-minimap-node-running-stroke: rgba(34, 132, 93, 0.96);
   --surface-radius: 8px;
   --surface-radius-sm: 6px;
   --nav-height: 60px;
@@ -497,10 +537,10 @@ a {
   pointer-events: none;
   z-index: 4;
   padding: 0.16rem 0.45rem;
-  border: 1px solid rgba(84, 119, 160, 0.18);
+  border: 1px solid var(--board-edge-label-border);
   border-radius: 999px;
-  background: rgba(247, 250, 252, 0.92);
-  color: #476a90;
+  background: var(--board-edge-label-bg);
+  color: var(--board-edge-label-text);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -511,14 +551,14 @@ a {
 }
 
 .board-flow__edge-label.is-highlighted {
-  color: #214d83;
-  border-color: rgba(45, 103, 170, 0.28);
+  color: var(--board-edge-label-highlight-text);
+  border-color: color-mix(in srgb, var(--board-edge-label-border) 120%, var(--color-accent));
   box-shadow: 0 8px 20px rgba(44, 89, 138, 0.16);
 }
 
 .board-flow__edge-label.is-running {
-  color: #1d5a90;
-  border-color: rgba(69, 145, 219, 0.26);
+  color: var(--board-edge-label-running-text);
+  border-color: color-mix(in srgb, var(--board-edge-label-border) 110%, var(--color-accent-strong));
   box-shadow: 0 8px 22px rgba(63, 129, 191, 0.18);
 }
 
@@ -2291,6 +2331,25 @@ a {
 
 .board-postbox-dropzone--active * {
   pointer-events: none;
+}
+
+.board-postbox-stage {
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.board-postbox-stage--dragging {
+  background: var(--board-stage-drag-bg);
+}
+
+.board-postbox-stage__drophint {
+  border: 1.5px dashed var(--board-stage-drag-border);
+  border-radius: calc(var(--surface-radius) + 4px);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--board-stage-drag-bg) 90%, var(--color-surface));
+  color: var(--board-stage-drag-text);
+  font-weight: 700;
 }
 
 .board-postbox-file-table {

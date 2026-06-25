@@ -24,9 +24,15 @@ function normalizeManagedBoardEntry(board) {
     aiWorkspaceTemplate: typeof board?.aiWorkspaceTemplate === 'string' ? board.aiWorkspaceTemplate.trim() : '',
     uiTemplate: typeof board?.uiTemplate === 'string' ? board.uiTemplate.trim() : '',
     refsTemplate: typeof board?.refsTemplate === 'string' ? board.refsTemplate.trim() : '',
+    ui: board?.ui && typeof board.ui === 'object' && !Array.isArray(board.ui)
+      ? board.ui
+      : {},
     metadata: board?.metadata && typeof board.metadata === 'object' && !Array.isArray(board.metadata)
       ? board.metadata
       : {},
+    rawBoard: board && typeof board === 'object' && !Array.isArray(board)
+      ? board
+      : null,
   };
 }
 

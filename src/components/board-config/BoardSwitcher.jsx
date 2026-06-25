@@ -36,6 +36,10 @@ const FORWARD_ICON_SVG = (
  *   onToggleLayout – () => void; flip the selected board's layout kind
  *   layoutToggleDisabled – disables the layout toggle button
  *   togglingLayout – whether a layout toggle is in flight
+ *   themePackId          – current theme pack id ('mist-ops' | 'signal-room' | null)
+ *   onToggleTheme        – () => void; cycle to the next theme
+ *   themeToggleDisabled  – disables the theme toggle button
+ *   togglingTheme        – whether a theme toggle is in flight
  *   smokeRunnerEnabled   – whether the Run Tests icon button should be shown
  *   onRunSmokeRunner     – () => void; open the smoke runner
  *   smokeRunnerTitle     – tooltip for the Run Tests icon button
@@ -55,6 +59,10 @@ export function BoardSwitcher({
   onToggleLayout,
   layoutToggleDisabled = false,
   togglingLayout = false,
+  themePackId = null,
+  onToggleTheme,
+  themeToggleDisabled = false,
+  togglingTheme = false,
   smokeRunnerEnabled = false,
   onRunSmokeRunner,
   smokeRunnerTitle = '',
@@ -63,7 +71,9 @@ export function BoardSwitcher({
   smokeStrategistTitle = '',
 }) {
   const showLayoutToggle = typeof onToggleLayout === 'function';
+  const showThemeToggle = typeof onToggleTheme === 'function';
   const isCardsLayout = layoutKind === 'flowing-cards';
+  const isSignalRoom = themePackId === 'signal-room';
   const showRunButtons = smokeRunnerEnabled || smokeStrategistEnabled;
   return (
     <div className="board-settings-modal__header-content">
@@ -135,6 +145,17 @@ export function BoardSwitcher({
                 : 'Switch this board to the flowing cards layout'
             }
             data-testid="board-settings-toggle-layout-button"
+          />
+        ) : null}
+        {showThemeToggle ? (
+          <BoardConfigButton
+            icon={isSignalRoom ? 'bi-brightness-high' : 'bi-moon-stars'}
+            className="d-inline-flex align-items-center justify-content-center"
+            onClick={onToggleTheme}
+            disabled={themeToggleDisabled || themePackId == null || togglingTheme}
+            title={isSignalRoom ? 'Switch to mist-ops theme' : 'Switch to signal-room theme'}
+            aria-label={isSignalRoom ? 'Switch to mist-ops theme' : 'Switch to signal-room theme'}
+            data-testid="board-settings-toggle-theme-button"
           />
         ) : null}
       </div>

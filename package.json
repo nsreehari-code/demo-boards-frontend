@@ -30,7 +30,6 @@
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
     "yaml-flow": "^8.11.9"
-    "yaml-flow": "^8.11.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",
