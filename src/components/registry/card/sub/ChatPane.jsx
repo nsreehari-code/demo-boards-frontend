@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BoardMarkdown from '../../../shared/BoardMarkdown.jsx';
 import { MessageWithAttachmentsInput } from '../../../shared/MessageWithAttachmentsInput.jsx';
+import { ChatBubble, ChatIconShell } from '../../../shared/ChatBubble.jsx';
 import { useChatState } from '../../../../hooks/useChatState.js';
 import { useCardStateFilesData } from '../../../../hooks/useCardState.js';
 import { callBoardMcp, ensureCardFileUrl, getCardFileUrl } from '../../../../lib/client.js';
@@ -98,23 +99,6 @@ function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, bo
   }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
 }
 
-function UserBubbleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-    </svg>
-  );
-}
-
-function AssistantBubbleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
-
 function WorkingBubbleIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -166,18 +150,6 @@ const toolStates = [
 
 function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function ChatIconShell({ children }) {
-  return (
-    <span
-      className="flex-shrink-0 d-inline-flex align-items-center"
-      aria-hidden="true"
-      style={{ lineHeight: 1.4, opacity: 0.55, marginTop: '0.1rem' }}
-    >
-      {children}
-    </span>
-  );
 }
 
 function ChatMessageText({ text, expanded, onOverflowChange }) {
@@ -318,9 +290,9 @@ function SystemMessage({ msg, boardId, cardId }) {
   const showText = !(indexedFile && indexedAttachment);
 
   return (
-    <div className="text-center small text-muted fst-italic px-2 my-1 d-flex flex-column align-items-center" style={{ gap: '0.35rem' }}>
-      {showText ? <div>{text}</div> : null}
-      {indexedFile && indexedAttachment ? (
+    <ChatBubble
+      variant="system"
+      attachments={indexedFile && indexedAttachment ? (
         <SystemAttachmentChip
           boardId={boardId}
           cardId={cardId}
@@ -329,7 +301,9 @@ function SystemMessage({ msg, boardId, cardId }) {
           label={directLabel}
         />
       ) : null}
-    </div>
+    >
+      {showText ? <div>{text}</div> : null}
+    </ChatBubble>
   );
 }
 
@@ -342,79 +316,60 @@ function ChatBubbleImpl({ msg, msgId, expanded, onToggleExpand, compact = false,
   const isUser = role === 'user';
   const showFooter = isOverflowing || expanded;
   return (
-    <div className={`d-flex mb-2 ${isUser ? 'justify-content-end' : ''}`}>
-      <div
-        className="px-2 py-2 rounded-3 small d-flex flex-column"
-        style={{
-          maxWidth: '82%',
-          background: isUser
-            ? 'color-mix(in srgb, var(--color-surface-muted) 92%, transparent)'
-            : 'color-mix(in srgb, var(--color-accent-soft) 84%, var(--color-surface-strong))',
-          border: isUser ? '1px solid var(--color-border)' : '1px solid var(--color-border-strong)',
-          overflowWrap: 'anywhere',
-          wordBreak: 'break-word',
-          overflowX: 'hidden',
-        }}
-      >
-        <div className={`d-flex align-items-start ${isUser ? 'flex-row-reverse' : ''}`} style={{ gap: '0.45rem' }}>
-          <ChatIconShell>
-            {isUser ? <UserBubbleIcon /> : <AssistantBubbleIcon />}
-          </ChatIconShell>
-          <div className="flex-grow-1 min-w-0">
-            <ChatMessageText text={text} expanded={expanded} onOverflowChange={setIsOverflowing} />
-            {(files ?? []).map((f, i) => (
-              <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
-            ))}
-          </div>
-        </div>
-        {showFooter ? (
-          <button
-            type="button"
-            className="d-flex justify-content-center align-items-center btn btn-link p-0 border-0"
-            onClick={() => onToggleExpand?.(msgId)}
-            title={expanded ? 'Collapse message' : 'Expand message'}
-            aria-label={expanded ? 'Collapse message' : 'Expand message'}
-            aria-expanded={expanded}
+    <ChatBubble
+      variant={isUser ? 'user' : 'assistant'}
+      attachments={(files ?? []).map((f, i) => (
+        <div key={i} className="badge bg-secondary-subtle text-secondary-emphasis mt-1 d-block">{f}</div>
+      ))}
+      footer={showFooter ? (
+        <button
+          type="button"
+          className="d-flex justify-content-center align-items-center btn btn-link p-0 border-0"
+          onClick={() => onToggleExpand?.(msgId)}
+          title={expanded ? 'Collapse message' : 'Expand message'}
+          aria-label={expanded ? 'Collapse message' : 'Expand message'}
+          aria-expanded={expanded}
+          style={{
+            marginLeft: '-0.5rem',
+            marginRight: '-0.5rem',
+            marginBottom: '-0.5rem',
+            marginTop: '0.4rem',
+            paddingTop: '0.2rem',
+            paddingBottom: '0.2rem',
+            borderTop: '1px solid var(--color-border)',
+            background: 'color-mix(in srgb, var(--color-surface-muted) 88%, transparent)',
+            borderBottomLeftRadius: 'inherit',
+            borderBottomRightRadius: 'inherit',
+            color: 'var(--color-text-soft)',
+            textDecoration: 'none',
+          }}
+        >
+          <svg
+            width="18"
+            height="10"
+            viewBox="0 0 24 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
             style={{
-              marginLeft: '-0.5rem',
-              marginRight: '-0.5rem',
-              marginBottom: '-0.5rem',
-              marginTop: '0.4rem',
-              paddingTop: '0.2rem',
-              paddingBottom: '0.2rem',
-              borderTop: '1px solid var(--color-border)',
-              background: 'color-mix(in srgb, var(--color-surface-muted) 88%, transparent)',
-              borderBottomLeftRadius: 'inherit',
-              borderBottomRightRadius: 'inherit',
-              color: 'var(--color-text-soft)',
-              textDecoration: 'none',
+              transform: expanded ? 'rotate(180deg)' : 'none',
+              transition: 'transform 120ms ease',
             }}
           >
-            <svg
-              width="18"
-              height="10"
-              viewBox="0 0 24 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              style={{
-                transform: expanded ? 'rotate(180deg)' : 'none',
-                transition: 'transform 120ms ease',
-              }}
-            >
-              <polyline points="3 3 12 10 21 3" />
-            </svg>
-          </button>
-        ) : null}
-      </div>
-    </div>
+            <polyline points="3 3 12 10 21 3" />
+          </svg>
+        </button>
+      ) : null}
+    >
+      <ChatMessageText text={text} expanded={expanded} onOverflowChange={setIsOverflowing} />
+    </ChatBubble>
   );
 }
 
-const ChatBubble = React.memo(ChatBubbleImpl, (prev, next) => (
+const ChatMessageBubble = React.memo(ChatBubbleImpl, (prev, next) => (
   prev.msg === next.msg
   && prev.msgId === next.msgId
   && prev.expanded === next.expanded
@@ -438,7 +393,7 @@ const MessageList = React.memo(function MessageList({ messages, compact, boardId
         occurrences.set(base, occurrence + 1);
         const msgId = `${base}:${occurrence}`;
         return (
-          <ChatBubble
+          <ChatMessageBubble
             key={msgId}
             msg={msg}
             msgId={msgId}
