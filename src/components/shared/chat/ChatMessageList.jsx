@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import BoardMarkdown from '../BoardMarkdown.jsx';
 import { ChatBubble } from './ChatBubble.jsx';
 import { useCardStateFilesData } from '../../../hooks/useCardState.js';
-import { ensureCardFileUrl, getCardFileUrl } from '../../../lib/client.js';
+import { useCardFileUrl } from '../../../hooks/useCardFileUrl.js';
 import { getMessageTurnId } from '../../../lib/chatMessages.js';
 
 function ChatMessageText({ text, expanded, onOverflowChange }) {
@@ -50,19 +50,6 @@ function ChatMessageText({ text, expanded, onOverflowChange }) {
   );
 }
 
-function resolveChatAttachmentDownloadUrl(boardId, cardId, file, index) {
-  if (!boardId || !cardId || !file || !Number.isInteger(index) || index < 0) {
-    return null;
-  }
-
-  const storedName = typeof file.stored_name === 'string' ? file.stored_name : '';
-  if (!storedName) {
-    return null;
-  }
-
-  return getCardFileUrl(boardId, cardId, index, storedName);
-}
-
 function parseIndexedSystemAttachment(text) {
   if (typeof text !== 'string' || !text.trim()) {
     return null;
@@ -86,35 +73,8 @@ function parseIndexedSystemAttachment(text) {
 }
 
 function SystemAttachmentChip({ boardId, cardId, file, index, label }) {
-  const [resolvedHref, setResolvedHref] = useState(() => resolveChatAttachmentDownloadUrl(boardId, cardId, file, index));
+  const resolvedHref = useCardFileUrl(boardId, cardId, index, file);
   const displayLabel = label || file?.name || file?.stored_name || `Attachment #${index}`;
-
-  useEffect(() => {
-    const nextHref = resolveChatAttachmentDownloadUrl(boardId, cardId, file, index);
-    if (nextHref) {
-      setResolvedHref(nextHref);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const storedName = typeof file?.stored_name === 'string' ? file.stored_name : '';
-    if (!storedName) {
-      setResolvedHref('');
-      return undefined;
-    }
-
-    void ensureCardFileUrl(boardId, cardId, index, storedName)
-      .then((href) => {
-        if (!cancelled) setResolvedHref(href || '');
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedHref('');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [boardId, cardId, file, index]);
 
   if (!resolvedHref) {
     return null;

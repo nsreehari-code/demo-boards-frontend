@@ -4,8 +4,9 @@ import { useFileDrop } from '../../shared/FileUpload.jsx';
 import { MessageWithAttachmentsInput } from '../../shared/MessageWithAttachmentsInput.jsx';
 import { useCardState, useCardStateFilesData } from '../../../hooks/useCardState.js';
 import { useChatConversation } from '../../../hooks/useChatConversation.js';
-import { ensureCardFileUrl, getCardFileUrl } from '../../../lib/client.js';
+import { useCardFileUrl } from '../../../hooks/useCardFileUrl.js';
 import { getMessageTurnId } from '../../../lib/chatMessages.js';
+import { formatFileSize } from '../../../lib/format.js';
 
 const HISTORY_TURNS_PER_PAGE = 8;
 
@@ -13,26 +14,6 @@ function normalizeCommentText(text) {
   const normalized = typeof text === 'string' ? text.trim() : '';
   if (!normalized) return '';
   return normalized.toLowerCase() === 'na' ? '' : normalized;
-}
-
-function formatFileSize(size) {
-  const value = Number(size);
-  if (!Number.isFinite(value) || value <= 0) {
-    return 'Unknown size';
-  }
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  const kb = value / 1024;
-  if (kb < 1024) {
-    return `${Math.max(1, Math.round(kb))} KB`;
-  }
-  const mb = kb / 1024;
-  if (mb < 1024) {
-    return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`;
-  }
-  const gb = mb / 1024;
-  return `${gb.toFixed(gb >= 100 ? 0 : 1)} GB`;
 }
 
 function formatTimestamp(value) {
@@ -133,37 +114,7 @@ function buildFileViewEntries(files) {
 }
 
 function DownloadFileChip({ boardId, cardId, index, file, label }) {
-  const [resolvedHref, setResolvedHref] = useState(() => {
-    if (!file?.stored_name) return '';
-    return getCardFileUrl(boardId, cardId, index, file.stored_name);
-  });
-
-  useEffect(() => {
-    const storedName = typeof file?.stored_name === 'string' ? file.stored_name : '';
-    if (!storedName) {
-      setResolvedHref('');
-      return undefined;
-    }
-
-    const immediateHref = getCardFileUrl(boardId, cardId, index, storedName);
-    if (immediateHref) {
-      setResolvedHref(immediateHref);
-      return undefined;
-    }
-
-    let cancelled = false;
-    void ensureCardFileUrl(boardId, cardId, index, storedName)
-      .then((href) => {
-        if (!cancelled) setResolvedHref(href || '');
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedHref('');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [boardId, cardId, index, file]);
+  const resolvedHref = useCardFileUrl(boardId, cardId, index, file);
 
   const displayLabel = label || file?.name || file?.stored_name || `Attachment #${index}`;
 

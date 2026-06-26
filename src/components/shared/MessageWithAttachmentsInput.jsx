@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { FileUpload } from './FileUpload.jsx';
+import { formatFileSize } from '../../lib/format.js';
 
 /**
  * Shared "message + attachments" composer.
@@ -18,26 +19,6 @@ import { FileUpload } from './FileUpload.jsx';
  * The forwarded ref exposes `{ addFiles(fileList), clear(), focus() }` so an
  * external drop target (e.g. a surrounding drop area) can stage files too.
  */
-
-function formatFileSize(size) {
-  const value = Number(size);
-  if (!Number.isFinite(value) || value <= 0) {
-    return 'Unknown size';
-  }
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  const kb = value / 1024;
-  if (kb < 1024) {
-    return `${Math.max(1, Math.round(kb))} KB`;
-  }
-  const mb = kb / 1024;
-  if (mb < 1024) {
-    return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`;
-  }
-  const gb = mb / 1024;
-  return `${gb.toFixed(gb >= 100 ? 0 : 1)} GB`;
-}
 
 function mergeFiles(current, incoming) {
   const merged = [...current];
