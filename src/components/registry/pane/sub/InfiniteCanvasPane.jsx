@@ -266,6 +266,7 @@ export function InfiniteCanvasPane({ boardId, cardIds, cardContents, cardRuntime
   const focusedCardIdRef = useRef(null);
   const savedViewportRef = useRef(null);
   const tokenRefitInitRef = useRef(false);
+  const previousSelectedTokenRef = useRef(null);
 
   const graph = useMemo(() => buildGraph(cardIds, cardContents, cardRuntimes, dataObjects), [cardIds, cardContents, cardRuntimes, dataObjects]);
   const baseLayout = useMemo(() => buildDeterministicCanvasLayout({
@@ -453,13 +454,22 @@ export function InfiniteCanvasPane({ boardId, cardIds, cardContents, cardRuntime
     savedViewportRef.current = null;
   }, [boardId]);
 
-  // Refit on token-focus change. Skip the first run — the canvas owns the
-  // initial restore-or-fit.
+  // Refit only when token focus itself changes. Ordinary board rerenders often
+  // allocate a fresh `cardIds` array; treating that as a refit signal snaps the
+  // viewport back to fitView and overrides user pan/zoom.
   useEffect(() => {
     if (!tokenRefitInitRef.current) {
       tokenRefitInitRef.current = true;
+      previousSelectedTokenRef.current = selectedToken;
       return undefined;
     }
+
+    const previousSelectedToken = previousSelectedTokenRef.current;
+    previousSelectedTokenRef.current = selectedToken;
+    if (!selectedToken && !previousSelectedToken) {
+      return undefined;
+    }
+
     const api = canvasRef.current;
     if (!api) {
       return undefined;
