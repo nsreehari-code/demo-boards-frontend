@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCardState } from '../../../../hooks/useCardState.js';
 import { callBoardMcp } from '../../../../lib/client.js';
-import { CardBackface } from './CardBackface.jsx';
+import { CardPreflight } from './CardPreflight.jsx';
 import { ChallengeConfirmModal } from '../../../shared/ChallengeConfirmModal.jsx';
 import { CardRenderer } from '../../../renderers/CardRenderer.jsx';
 import { GlobalModal } from '../../../shared/GlobalModal.jsx';
@@ -38,6 +38,19 @@ function normalizeCardFlightData(data) {
     provides_outputs: data.provides_outputs && typeof data.provides_outputs === 'object' ? data.provides_outputs : {},
     rendered_view: data.rendered_view && typeof data.rendered_view === 'object' ? data.rendered_view : { elements: [] },
   };
+}
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function JsonSection({ title, value }) {
+  return (
+    <div className="global-modal__section">
+      <div className="global-modal__section-title">{title}</div>
+      <pre className="global-modal__pre">{JSON.stringify(value, null, 2)}</pre>
+    </div>
+  );
 }
 
 function FlightLoadingContent({ kind, title }) {
@@ -79,17 +92,12 @@ function SourceFlightContent({ flightResult }) {
       <div className="global-modal__chips">
         {data.bindTo ? <span className="global-modal__chip">{data.bindTo}</span> : null}
         <span className={`global-modal__chip global-modal__chip--${data.ok ? 'ok' : 'fail'}`}>{data.ok ? 'ok' : 'failed'}</span>
-        {data.issues.length > 0 ? <span className="global-modal__chip global-modal__chip--fail">{data.issues.length} issue{data.issues.length === 1 ? '' : 's'}</span> : null}
+        {data.issues.length > 0 ? <span className="global-modal__chip global-modal__chip--fail">{pluralize(data.issues.length, 'issue')}</span> : null}
       </div>
       {data.issues.length > 0 ? (
         <ul className="global-modal__issues-list">{data.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
       ) : null}
-      {data.result !== null ? (
-        <div className="global-modal__section">
-          <div className="global-modal__section-title">Result</div>
-          <pre className="global-modal__pre">{JSON.stringify(data.result, null, 2)}</pre>
-        </div>
-      ) : null}
+      {data.result !== null ? <JsonSection title="Result" value={data.result} /> : null}
     </>
   );
 }
@@ -112,9 +120,9 @@ function CardFlightContent({ flightResult }) {
       <div className="global-modal__chips">
         {data.cardId ? <span className="global-modal__chip">{data.cardId}</span> : null}
         <span className={`global-modal__chip global-modal__chip--${data.ok ? 'ok' : 'fail'}`}>{data.ok ? 'ok' : 'failed'}</span>
-        {data.issues.length > 0 ? <span className="global-modal__chip global-modal__chip--fail">{data.issues.length} issue{data.issues.length === 1 ? '' : 's'}</span> : null}
-        {providesKeys.length > 0 ? <span className="global-modal__chip">{providesKeys.length} provide{providesKeys.length === 1 ? '' : 's'}</span> : null}
-        {elements.length > 0 ? <span className="global-modal__chip">{elements.length} view element{elements.length === 1 ? '' : 's'}</span> : null}
+        {data.issues.length > 0 ? <span className="global-modal__chip global-modal__chip--fail">{pluralize(data.issues.length, 'issue')}</span> : null}
+        {providesKeys.length > 0 ? <span className="global-modal__chip">{pluralize(providesKeys.length, 'provide')}</span> : null}
+        {elements.length > 0 ? <span className="global-modal__chip">{pluralize(elements.length, 'view element')}</span> : null}
       </div>
       {data.issues.length > 0 ? (
         <div className="global-modal__section">
@@ -122,18 +130,8 @@ function CardFlightContent({ flightResult }) {
           <ul className="global-modal__issues-list">{data.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
         </div>
       ) : null}
-      {providesKeys.length > 0 ? (
-        <div className="global-modal__section">
-          <div className="global-modal__section-title">Provides Outputs</div>
-          <pre className="global-modal__pre">{JSON.stringify(data.provides_outputs, null, 2)}</pre>
-        </div>
-      ) : null}
-      {elements.length > 0 ? (
-        <div className="global-modal__section">
-          <div className="global-modal__section-title">Rendered View</div>
-          <pre className="global-modal__pre">{JSON.stringify(data.rendered_view, null, 2)}</pre>
-        </div>
-      ) : null}
+      {providesKeys.length > 0 ? <JsonSection title="Provides Outputs" value={data.provides_outputs} /> : null}
+      {elements.length > 0 ? <JsonSection title="Rendered View" value={data.rendered_view} /> : null}
     </>
   );
 }
@@ -166,10 +164,7 @@ function InspectCardOutput({ flightResult }) {
             <span className="global-modal__chip">{flightResult.token}</span>
             <span className="global-modal__chip">{flightResult.tokenKind}</span>
           </div>
-          <div className="global-modal__section">
-            <div className="global-modal__section-title">Current Data</div>
-            <pre className="global-modal__pre">{JSON.stringify(flightResult.data, null, 2)}</pre>
-          </div>
+          <JsonSection title="Current Data" value={flightResult.data} />
         </div>
       </div>
     );
@@ -237,89 +232,56 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
     return { [activeFlight.sourceIndex]: true };
   }, [activeFlight]);
 
+  const runFlight = useCallback(async ({ base, action }) => {
+    setFlightResult({ ...base, status: 'running' });
+    try {
+      const payload = await action();
+      if (!mountedRef.current) {
+        return;
+      }
+      setFlightResult({
+        ...base,
+        status: 'success',
+        data: payload && typeof payload === 'object' ? payload : {},
+      });
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setFlightResult({
+        ...base,
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
+
   const handleRunFlight = useCallback(async ({ sourceIndex, bindTo }) => {
     if (flightDisabled || !Number.isInteger(sourceIndex) || sourceIndex < 0) {
       return;
     }
 
     const label = bindTo || `source ${sourceIndex}`;
-    setFlightResult({
-      title: `Source flight: ${label}`,
-      kind: 'source',
-      sourceIndex,
-      status: 'running',
-    });
-
-    try {
-      const payload = await cardState.cardActions.runSingleSourceInLiveCard(sourceIndex, {
+    await runFlight({
+      base: { title: `Source flight: ${label}`, kind: 'source', sourceIndex },
+      action: () => cardState.cardActions.runSingleSourceInLiveCard(sourceIndex, {
         mockRequires: cardState?.requiresDataObjects,
-      });
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      setFlightResult({
-        title: `Source flight: ${label}`,
-        kind: 'source',
-        sourceIndex,
-        status: 'success',
-        data: payload && typeof payload === 'object' ? payload : {},
-      });
-    } catch (error) {
-      if (!mountedRef.current) {
-        return;
-      }
-
-      setFlightResult({
-        title: `Source flight: ${label}`,
-        kind: 'source',
-        sourceIndex,
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [boardId, cardId, cardState?.requiresDataObjects, flightDisabled]);
+      }),
+    });
+  }, [cardState, flightDisabled, runFlight]);
 
   const handleRunCardFlight = useCallback(async () => {
     if (flightDisabled || !cardState?.cardContent) {
       return;
     }
 
-    setFlightResult({
-      title: `Card flight: ${cardId}`,
-      kind: 'card',
-      status: 'running',
-    });
-
-    try {
-      const payload = await cardState.cardActions.runOneCycleWithCandidateCard(cardState.cardContent, {
+    await runFlight({
+      base: { title: `Card flight: ${cardId}`, kind: 'card' },
+      action: () => cardState.cardActions.runOneCycleWithCandidateCard(cardState.cardContent, {
         mockRequires: cardState.requiresDataObjects,
-      });
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      setFlightResult({
-        title: `Card flight: ${cardId}`,
-        kind: 'card',
-        status: 'success',
-        data: payload && typeof payload === 'object' ? payload : {},
-      });
-    } catch (error) {
-      if (!mountedRef.current) {
-        return;
-      }
-
-      setFlightResult({
-        title: `Card flight: ${cardId}`,
-        kind: 'card',
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [cardId, cardState, flightDisabled]);
+      }),
+    });
+  }, [cardId, cardState, flightDisabled, runFlight]);
 
   const handleInspectToken = useCallback(({ token, kind }) => {
     if (!token || !kind) {
@@ -414,7 +376,7 @@ export function InspectCard({ boardId, cardId, title, onClose }) {
         </div>
         <div className="inspect-card__sidebar">
           <div className="inspect-card__sidebar-pane inspect-card__sidebar-pane--top">
-            <CardBackface
+            <CardPreflight
               cardId={cardId}
               cardContent={cardState.cardContent}
               loadingBySource={loadingBySource}

@@ -132,17 +132,13 @@ function SourceBlock({ summary, onRunFlight, isLoading, disabled }) {
           <strong className="board-card-backface__source-bind">{summary.bindTo || 'unbound'}</strong>
         </button>
         {onRunFlight ? (
-          <button
-            type="button"
-            className="board-icon-button board-icon-button--sm board-icon-button--flight-source"
+          <FlightButton
+            variant="source"
             title={`Run source flight: ${summary.bindTo || 'source'}`}
             onClick={() => onRunFlight({ sourceIndex: summary.index, bindTo: summary.bindTo })}
+            loading={isLoading}
             disabled={disabled || isLoading}
-          >
-            {isLoading
-              ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-              : <i className="bi bi-flask" aria-hidden="true" style={{ fontSize: '0.92rem', display: 'block' }} />}
-          </button>
+          />
         ) : null}
       </div>
       {expanded ? (
@@ -174,7 +170,53 @@ function ChipRow({ value, onClick, isActive = false }) {
   );
 }
 
-export function CardBackface({
+const FLIGHT_ICON_STYLE = {
+  card: { fontSize: '0.9rem' },
+  source: { fontSize: '0.92rem', display: 'block' },
+};
+
+function FlightButton({ variant, title, onClick, loading, disabled }) {
+  return (
+    <button
+      type="button"
+      className={`board-icon-button board-icon-button--sm board-icon-button--flight-${variant}`}
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {loading
+        ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+        : <i className="bi bi-flask" aria-hidden="true" style={FLIGHT_ICON_STYLE[variant]} />}
+    </button>
+  );
+}
+
+function TokenChipSection({ title, tokens, kind, getValue, onInspectToken, activeTokenKey }) {
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="board-card-backface__section board-card-backface__section--io">
+      <div className="board-card-backface__section-title">{title}</div>
+      <div className="board-card-backface__chips-row">
+        {tokens.map((token, idx) => {
+          const value = getValue(token, idx);
+          return (
+            <ChipRow
+              key={`${kind}-${idx}`}
+              value={value}
+              onClick={onInspectToken ? () => onInspectToken({ token: value, kind }) : null}
+              isActive={activeTokenKey === `${kind}:${value}`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CardPreflight({
   cardId,
   cardContent,
   loadingBySource,
@@ -213,53 +255,35 @@ export function CardBackface({
       <div className="board-card-backface__title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', minWidth: 0 }}>
         <span className="text-truncate" title={cardId}>{cardId}</span>
         {onRunCardFlight ? (
-          <button
-            type="button"
-            className="board-icon-button board-icon-button--sm board-icon-button--flight-card"
+          <FlightButton
+            variant="card"
             title="Run card preflight"
             onClick={() => onRunCardFlight()}
+            loading={cardFlightLoading}
             disabled={flightDisabled || cardFlightLoading}
-          >
-            {cardFlightLoading
-              ? <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-              : <i className="bi bi-flask" style={{ fontSize: '0.9rem' }} />}
-          </button>
+          />
         ) : null}
       </div>
 
       {/* Depends On + Produces Row */}
       {(requires.length > 0 || provides.length > 0) && (
         <div className="board-card-backface__io-row">
-          {requires.length > 0 && (
-            <div className="board-card-backface__section board-card-backface__section--io">
-              <div className="board-card-backface__section-title">Depends On</div>
-              <div className="board-card-backface__chips-row">
-                {requires.map((key) => (
-                  <ChipRow
-                    key={`requires-${key}`}
-                    value={key}
-                    onClick={onInspectToken ? () => onInspectToken({ token: key, kind: 'require' }) : null}
-                    isActive={activeTokenKey === `require:${key}`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          {provides.length > 0 && (
-            <div className="board-card-backface__section board-card-backface__section--io">
-              <div className="board-card-backface__section-title">Produces</div>
-              <div className="board-card-backface__chips-row">
-                {provides.map((item, idx) => (
-                  <ChipRow
-                    key={`provides-${idx}`}
-                    value={item.bindTo}
-                    onClick={onInspectToken ? () => onInspectToken({ token: item.bindTo, kind: 'provide' }) : null}
-                    isActive={activeTokenKey === `provide:${item.bindTo}`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          <TokenChipSection
+            title="Depends On"
+            tokens={requires}
+            kind="require"
+            getValue={(token) => token}
+            onInspectToken={onInspectToken}
+            activeTokenKey={activeTokenKey}
+          />
+          <TokenChipSection
+            title="Produces"
+            tokens={provides}
+            kind="provide"
+            getValue={(item) => item.bindTo}
+            onInspectToken={onInspectToken}
+            activeTokenKey={activeTokenKey}
+          />
         </div>
       )}
 
