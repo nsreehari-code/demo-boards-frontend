@@ -1,42 +1,40 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatPaneHistory } from './ChatPaneHistory.jsx';
 import { ChatPaneLive } from './ChatPaneLive.jsx';
-import {
-  mergeLiveMessages,
-  mergeMessageArrays,
-  getFirstTurnId,
-  countDistinctTurns,
-} from '../../../lib/chatMessages.js';
-
-const DEFAULT_HISTORY_TURNS_PER_PAGE = 5;
 
 /**
- * The scrollable conversation surface. Owns:
+ * The scrollable conversation surface. Owns only the view concerns:
  *  - scroll stickiness (stay pinned to the bottom unless the user scrolls up),
- *  - live SSE message accumulation + the immutable history/live boundary,
- *  - backward history pagination via the injected `onLoadPrevious` callback.
+ *  - the expand/collapse UI state for individual bubbles.
  *
- * It composes the presentational ChatPaneHistory and ChatPaneLive surfaces.
+ * All chat data orchestration (live accumulation, the immutable history/live
+ * boundary, and backward pagination) lives in useChatConversation; this
+ * component renders the already-orchestrated `liveMessages` / `historyMessages`
+ * and composes the presentational ChatPaneHistory and ChatPaneLive surfaces.
  *
  * Props:
- *  - `messages`       — raw live messages from chat state.
+ *  - `liveMessages`   — display-ready live messages (raw msg objects).
+ *  - `historyMessages`— display-ready older messages (raw msg objects).
  *  - `processing`     — whether a turn is in flight (drives the working bubble).
  *  - `agentOutput`/`agentTools` — live watch-party agent activity.
- *  - `historyEnabled` — when false, render raw `messages` with no history surface.
- *  - `onLoadPrevious(currentTurnId, numTurns)` — callback resolving to an array
- *    of older messages strictly before `currentTurnId`. Required for history.
+ *  - `historyEnabled` — render the history surface when an anchor exists.
+ *  - `hasMore`/`historyLoading`/`canLoadMore`/`onShowPrevious` — pagination.
  */
 export function ChatPaneBubblesList({
   boardId,
   cardId,
-  messages,
+  compact = false,
   processing = false,
   agentOutput = '',
   agentTools = '',
-  compact = false,
+  liveMessages = [],
+  historyMessages = [],
   historyEnabled = false,
-  onLoadPrevious,
-  historyTurnsPerPage = DEFAULT_HISTORY_TURNS_PER_PAGE,
+  historyAnchorTurnId = '',
+  hasMore = false,
+  historyLoading = false,
+  canLoadMore = false,
+  onShowPrevious,
 }) {
   const messagesRef = useRef(null);
   const bottomRef = useRef(null);
@@ -45,102 +43,22 @@ export function ChatPaneBubblesList({
   const scrollFrameRef = useRef(null);
 
   const [openMsgId, setOpenMsgId] = useState(null);
-  const [liveMessages, setLiveMessages] = useState([]);
-  const [historyAnchorTurnId, setHistoryAnchorTurnId] = useState('');
-  const liveKeyRef = useRef('');
 
   const handleToggleExpand = useCallback((msgId) => {
     setOpenMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
 
-  // Accumulate live SSE messages so new turns append rather than replace the
-  // already-rendered conversation (the SSE chat view may only carry the latest
-  // turn). Reset accumulation when the board/card changes.
-  useEffect(() => {
-    if (!historyEnabled) return;
-    const key = `${boardId}::${cardId}`;
-    setLiveMessages((prev) => {
-      if (liveKeyRef.current !== key) {
-        liveKeyRef.current = key;
-        return mergeLiveMessages([], messages);
-      }
-      return mergeLiveMessages(prev, messages);
-    });
-  }, [historyEnabled, boardId, cardId, messages]);
-
-  const liveForDisplay = useMemo(
-    () => (historyEnabled ? liveMessages.map((entry) => entry.msg) : messages),
-    [historyEnabled, liveMessages, messages],
-  );
-
   const displayMessages = useMemo(
-    () => liveForDisplay.map((msg) => ({ msg, isHistory: false })),
-    [liveForDisplay],
+    () => liveMessages.map((msg) => ({ msg, isHistory: false })),
+    [liveMessages],
   );
-
-  const firstLiveTurnId = useMemo(
-    () => getFirstTurnId(liveForDisplay),
-    [liveForDisplay],
-  );
-
-  // Lock the history/live boundary once: the first turn id the live stream
-  // shows becomes the immutable anchor. History is everything strictly before
-  // it; the live forward stream owns this turn and everything after.
-  useEffect(() => {
-    if (!historyEnabled || historyAnchorTurnId || !firstLiveTurnId) {
-      return;
-    }
-    setHistoryAnchorTurnId(firstLiveTurnId);
-  }, [historyEnabled, historyAnchorTurnId, firstLiveTurnId]);
-
-  // --- History pagination (owned here, driven by onLoadPrevious) ---
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [cursorTurnId, setCursorTurnId] = useState('');
-  const didInitialFetchRef = useRef(false);
-
-  const loadBefore = useCallback(async (turnId) => {
-    if (!turnId || typeof onLoadPrevious !== 'function') return;
-    setHistoryLoading(true);
-    try {
-      const older = await onLoadPrevious(turnId, historyTurnsPerPage);
-      if (!Array.isArray(older) || older.length === 0) {
-        setHasMore(false);
-        return;
-      }
-      setHistory((prev) => mergeMessageArrays(older, prev));
-      const nextCursorTurnId = getFirstTurnId(older);
-      if (!nextCursorTurnId || nextCursorTurnId === turnId) {
-        setHasMore(false);
-        return;
-      }
-      setCursorTurnId(nextCursorTurnId);
-      setHasMore(countDistinctTurns(older) >= historyTurnsPerPage);
-    } catch {
-      setHasMore(false);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [onLoadPrevious, historyTurnsPerPage]);
-
-  // Exactly one automatic fetch, anchored at the immutable boundary turn id.
-  useEffect(() => {
-    if (!historyEnabled || didInitialFetchRef.current || !historyAnchorTurnId) return;
-    didInitialFetchRef.current = true;
-    setCursorTurnId(historyAnchorTurnId);
-    void loadBefore(historyAnchorTurnId);
-  }, [historyEnabled, historyAnchorTurnId, loadBefore]);
-
-  const handleShowPrevious = useCallback(() => {
-    if (historyLoading) return;
-    void loadBefore(cursorTurnId);
-  }, [historyLoading, cursorTurnId, loadBefore]);
 
   const historyEntries = useMemo(
-    () => history.map((msg) => ({ msg, isHistory: true })),
-    [history],
+    () => historyMessages.map((msg) => ({ msg, isHistory: true })),
+    [historyMessages],
   );
+
+  const liveCount = liveMessages.length;
 
   // --- Scroll stickiness ---
   const scrollToBottom = (behavior = 'auto') => {
@@ -205,14 +123,14 @@ export function ChatPaneBubblesList({
         scrollFrameRef.current = null;
       }
     };
-  }, [messages.length, processing, boardId, cardId]);
+  }, [liveCount, processing, boardId, cardId]);
 
   useEffect(() => {
     if (!shouldStickToBottomRef.current) {
       return;
     }
 
-    scheduleScrollToBottom(messages.length > 0 || processing ? 'smooth' : 'auto');
+    scheduleScrollToBottom(liveCount > 0 || processing ? 'smooth' : 'auto');
 
     return () => {
       if (scrollFrameRef.current !== null) {
@@ -220,7 +138,7 @@ export function ChatPaneBubblesList({
         scrollFrameRef.current = null;
       }
     };
-  }, [messages.length, processing]);
+  }, [liveCount, processing]);
 
   useEffect(() => {
     return () => {
@@ -250,8 +168,8 @@ export function ChatPaneBubblesList({
           entries={historyEntries}
           hasMore={hasMore}
           loading={historyLoading}
-          canLoadMore={!!cursorTurnId}
-          onShowPrevious={handleShowPrevious}
+          canLoadMore={canLoadMore}
+          onShowPrevious={onShowPrevious}
         />
       ) : null}
       <ChatPaneLive

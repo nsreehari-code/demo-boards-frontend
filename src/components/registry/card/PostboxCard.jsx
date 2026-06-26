@@ -3,17 +3,9 @@ import { CardChrome } from './sub/CardChrome.jsx';
 import { useFileDrop } from '../../shared/FileUpload.jsx';
 import { MessageWithAttachmentsInput } from '../../shared/MessageWithAttachmentsInput.jsx';
 import { useCardState, useCardStateFilesData } from '../../../hooks/useCardState.js';
-import { useChatState } from '../../../hooks/useChatState.js';
+import { useChatConversation } from '../../../hooks/useChatConversation.js';
 import { ensureCardFileUrl, getCardFileUrl } from '../../../lib/client.js';
-import {
-  fetchChatMessagesBeforeTurn,
-  mergeLiveMessages,
-  mergeMessageArrays,
-  getMessageTurnId,
-  getFirstTurnId,
-  countDistinctTurns,
-  makeTurnId,
-} from '../../../lib/chatMessages.js';
+import { getMessageTurnId } from '../../../lib/chatMessages.js';
 
 const HISTORY_TURNS_PER_PAGE = 8;
 
@@ -138,16 +130,6 @@ function buildFileViewEntries(files) {
       }
       return right.index - left.index;
     });
-}
-
-function useChatSubscription(subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId) {
-  useEffect(() => {
-    if (!subscribeChat || !unsubscribeChat || !boardId || !cardId || !boardSseClientId) return;
-    subscribeChat().catch(() => {});
-    return () => {
-      unsubscribeChat().catch(() => {});
-    };
-  }, [subscribeChat, unsubscribeChat, boardId, cardId, boardSseClientId]);
 }
 
 function DownloadFileChip({ boardId, cardId, index, file, label }) {
@@ -279,109 +261,34 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
   const { boardId, cardId, chrome = 'full', enableResize = false } = spec;
   const cardState = useCardState(boardId, cardId);
   const filesUploaded = useCardStateFilesData(boardId, cardId);
-  const chat = useChatState(boardId, cardId);
-  const messages = chat?.messages ?? [];
-  const chatActions = chat?.chatActions ?? null;
-  const boardSseClientId = chat?.boardSseClientId ?? null;
+  const conv = useChatConversation(boardId, cardId, { historyTurnsPerPage: HISTORY_TURNS_PER_PAGE });
+  const {
+    chat,
+    chatActions,
+    historyMessages,
+    liveMessages,
+    hasMore,
+    historyLoading,
+    canLoadMore,
+    draftTurnId,
+    rotateDraftTurn,
+    refreshLatest,
+    showPrevious,
+  } = conv;
   const [submitting, setSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState('submissions');
-  const [liveMessages, setLiveMessages] = useState([]);
-  const [historyMessages, setHistoryMessages] = useState([]);
-  const [historyAnchorTurnId, setHistoryAnchorTurnId] = useState('');
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
-  const [draftTurnId, setDraftTurnId] = useState(() => makeTurnId());
   const composerRef = useRef(null);
   const messagesRef = useRef(null);
-  const liveKeyRef = useRef('');
-  const lastLoadedAnchorRef = useRef('');
 
-  useChatSubscription(
-    chatActions?.subscribeChat,
-    chatActions?.unsubscribeChat,
-    boardId,
-    cardId,
-    boardSseClientId,
-  );
-
+  // Clear the staged composer when switching cards. The chat data reset is owned
+  // by useChatConversation.
   useEffect(() => {
     composerRef.current?.clear();
-    setLiveMessages([]);
-    setHistoryMessages([]);
-    setHistoryAnchorTurnId('');
-    setHistoryHasMore(false);
-    setHistoryLoading(false);
-    setDraftTurnId(makeTurnId());
-    liveKeyRef.current = '';
-    lastLoadedAnchorRef.current = '';
   }, [boardId, cardId]);
 
-  useEffect(() => {
-    const key = `${boardId}::${cardId}`;
-    setLiveMessages((prev) => {
-      if (liveKeyRef.current !== key) {
-        liveKeyRef.current = key;
-        return mergeLiveMessages([], messages);
-      }
-      return mergeLiveMessages(prev, messages);
-    });
-  }, [boardId, cardId, messages]);
-
-  const liveForDisplay = useMemo(
-    () => liveMessages.map((entry) => entry.msg),
-    [liveMessages],
-  );
-
-  const firstLiveTurnId = useMemo(
-    () => getFirstTurnId(liveForDisplay),
-    [liveForDisplay],
-  );
-
-  useEffect(() => {
-    if (historyAnchorTurnId || !firstLiveTurnId) {
-      return;
-    }
-    setHistoryAnchorTurnId(firstLiveTurnId);
-  }, [historyAnchorTurnId, firstLiveTurnId]);
-
-  const loadHistory = useCallback(async (beforeTurnId) => {
-    if (!beforeTurnId || historyLoading) {
-      return;
-    }
-
-    setHistoryLoading(true);
-    try {
-      const incoming = await fetchChatMessagesBeforeTurn(boardId, cardId, beforeTurnId, HISTORY_TURNS_PER_PAGE);
-      setHistoryMessages((current) => mergeMessageArrays(incoming, current));
-      setHistoryHasMore(countDistinctTurns(incoming) >= HISTORY_TURNS_PER_PAGE);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [boardId, cardId, historyLoading]);
-
-  useEffect(() => {
-    if (!historyAnchorTurnId || lastLoadedAnchorRef.current === historyAnchorTurnId) {
-      return;
-    }
-
-    lastLoadedAnchorRef.current = historyAnchorTurnId;
-    void loadHistory(historyAnchorTurnId);
-  }, [historyAnchorTurnId, loadHistory]);
-
-  useEffect(() => {
-    if (!messages.length) {
-      return;
-    }
-
-    const lastTurnId = getMessageTurnId(messages[messages.length - 1]);
-    if (lastTurnId && lastTurnId === draftTurnId) {
-      setDraftTurnId(makeTurnId());
-    }
-  }, [messages, draftTurnId]);
-
   const allMessages = useMemo(
-    () => [...historyMessages, ...liveForDisplay],
-    [historyMessages, liveForDisplay],
+    () => [...historyMessages, ...liveMessages],
+    [historyMessages, liveMessages],
   );
 
   const submissions = useMemo(
@@ -418,25 +325,18 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
         turnId: draftTurnId,
         files,
       });
-      setDraftTurnId(makeTurnId());
+      rotateDraftTurn();
       try {
-        const latest = await fetchChatMessagesBeforeTurn(boardId, cardId, '', HISTORY_TURNS_PER_PAGE);
-        if (latest.length > 0) {
-          setHistoryMessages((current) => mergeMessageArrays(current, latest));
-        }
+        await refreshLatest();
       } catch {
         // Non-fatal: the submission is stored; it will appear on next refresh.
       }
     } finally {
       setSubmitting(false);
     }
-  }, [boardId, cardId, chatActions, draftTurnId]);
+  }, [chatActions, draftTurnId, rotateDraftTurn, refreshLatest]);
 
   if (!cardState?.cardContent || !chat) return null;
-
-  const historyBeforeTurnId = historyMessages.length > 0
-    ? getFirstTurnId(historyMessages)
-    : historyAnchorTurnId;
 
   return (
     <CardChrome boardId={boardId} cardId={cardId} chrome={chrome} enableResize={enableResize}>
@@ -479,13 +379,13 @@ function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
 
         {viewMode === 'submissions' ? (
           <>
-            {historyHasMore && historyBeforeTurnId ? (
+            {hasMore && canLoadMore ? (
               <div className="d-flex justify-content-center mb-3">
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
                   disabled={historyLoading}
-                  onClick={() => void loadHistory(historyBeforeTurnId)}
+                  onClick={() => showPrevious()}
                 >
                   {historyLoading ? 'Loading…' : 'Show previous submissions'}
                 </button>
