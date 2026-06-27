@@ -19,6 +19,7 @@ import { NotesKind } from './NotesKind.jsx';
 import { EditableTableKind } from './EditableTableKind.jsx';
 import { TodoKind } from './TodoKind.jsx';
 import { MarkdownKind } from './MarkdownKind.jsx';
+import { MultiFileUploadKind } from './MultiFileUploadKind.jsx';
 import { resolveChartVariant } from '../lib/chart.js';
 
 // Shared meta presets (engine framing + interaction model).
@@ -47,4 +48,5 @@ export const cardViewEntries = [
   // `markdown` and `markup` are two explicit kinds sharing one component.
   { kind: 'markdown', renderComponentFn: MarkdownKind, meta: READ_ONLY },
   { kind: 'markup', renderComponentFn: MarkdownKind, meta: READ_ONLY },
+  { kind: 'multi-file-upload', renderComponentFn: MultiFileUploadKind, meta: { showLabel: true, isReadonly: false } },
 ];

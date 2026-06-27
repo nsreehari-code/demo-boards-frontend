@@ -194,7 +194,10 @@ function CardviewRendererComponent({ boardId, cardId }) {
     return href;
   }, [boardId, cardId, fileUrlVersion]);
 
-  const services = useMemo(() => ({ fileUrlForIndex }), [fileUrlForIndex]);
+  const services = useMemo(() => ({
+    fileUrlForIndex,
+    uploadCardFilesMultiple: (files, message) => cardActions?.uploadCardFilesMultiple?.(files, message),
+  }), [fileUrlForIndex, cardActions]);
 
   useEffect(() => {
     if (!saving) return;

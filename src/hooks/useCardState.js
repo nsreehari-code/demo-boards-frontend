@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { callBoardMcp, dispatchAction, refreshCard, patchCard, uploadFileForChat } from '../lib/client.js';
+import { callBoardMcp, dispatchAction, refreshCard, patchCard, uploadFileForChat, uploadCardFilesMultiple } from '../lib/client.js';
 import {
   resolveCanRefresh,
   resolveRequireTokens,
@@ -99,6 +99,7 @@ export function useCardState(boardId, cardId) {
     patch: (patch) => patchCard(boardId, cardId, patch),
     dispatchAction: (type, payload = {}) => dispatchAction(boardId, cardId, type, payload),
     uploadFileForChat: (file) => uploadFileForChat(boardId, cardId, file),
+    uploadCardFilesMultiple: (files, message = '') => uploadCardFilesMultiple(boardId, cardId, files, message),
     discoverSourceKinds: async () => unwrapMcpToolPayload(await readJsonResponse(
       await callBoardMcp(boardId, 'discover.source-kinds', {}),
     )),

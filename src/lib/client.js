@@ -242,6 +242,19 @@ export const addChatAttachment = async (boardId, cardId, file, turnId) =>
 export const uploadFileForChat = (boardId, cardId, file, turnId) =>
   addChatAttachment(boardId, cardId, file, turnId);
 
+export const uploadCardFilesMultiple = async (boardId, cardId, files, message = '') => {
+  const normalizedFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+  if (normalizedFiles.length === 0) {
+    throw new Error('uploadCardFilesMultiple requires at least one file');
+  }
+  const fileArgs = await Promise.all(normalizedFiles.map((file) => toAttachmentArg(file)));
+  return callBoardControlplaneMcp(boardId, 'manage.upload-card-file-multiple', {
+    card_id: cardId,
+    ...(typeof message === 'string' && message ? { message } : {}),
+    files: fileArgs,
+  });
+};
+
 export const addChatEntryAndAnyAttachments = async (
   boardId,
   cardId,
