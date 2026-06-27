@@ -9,13 +9,13 @@
 
 import { CardShell } from './CardShell.jsx';
 import { StrategistCard } from './StrategistCard.jsx';
-import { IngestCard } from './IngestCard.jsx';
+import { ChatCard } from './ChatCard.jsx';
 import { PostboxCard } from './PostboxCard.jsx';
 
 export const cardEntries = [
   { kind: 'card:default', renderComponentFn: CardShell, meta: { bare: true } },
   { kind: 'card:strategist', renderComponentFn: StrategistCard, meta: { bare: true } },
-  { kind: 'card:ingest', renderComponentFn: IngestCard, meta: { bare: true } },
+  { kind: 'card:ingest', renderComponentFn: ChatCard, meta: { bare: true } },
   { kind: 'card:postbox', renderComponentFn: PostboxCard, meta: { bare: true } },
   {
     kind: 'card:postbox-universal',

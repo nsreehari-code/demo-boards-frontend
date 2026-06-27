@@ -2,10 +2,10 @@ import React, { memo } from 'react';
 import { CardChrome } from './sub/CardChrome.jsx';
 import { GandalfChatPane } from '../../shared/chat/ChatPane.jsx';
 
-// Ingest card: a chat/ingest body that today lacks card chrome. By rendering its
+// Chat card: a chat/ingest body that today lacks card chrome. By rendering its
 // body inside the shared CardChrome it gains the same header, resize, inspect,
 // refresh and chat as every other card when shown in the centre pane.
-function IngestCardComponent({ spec = {} }) {
+function ChatCardComponent({ spec = {} }) {
   const { boardId, cardId, enableResize = false, chrome = 'full' } = spec;
   return (
     <CardChrome boardId={boardId} cardId={cardId} chrome={chrome} enableResize={enableResize}>
@@ -18,4 +18,4 @@ function IngestCardComponent({ spec = {} }) {
   );
 }
 
-export const IngestCard = memo(IngestCardComponent);
+export const ChatCard = memo(ChatCardComponent);
