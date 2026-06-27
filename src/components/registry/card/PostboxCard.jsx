@@ -1,20 +1,11 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { CardChrome } from './sub/CardChrome.jsx';
 import { useFileDrop } from '../../shared/FileUpload.jsx';
 import { MessageWithAttachmentsInput } from '../../shared/MessageWithAttachmentsInput.jsx';
-import { useCardState, useCardStateFilesData } from '../../../hooks/useCardState.js';
-import { useChatConversation } from '../../../hooks/useChatConversation.js';
+import { useCardState } from '../../../hooks/useCardState.js';
 import { useCardFileUrl } from '../../../hooks/useCardFileUrl.js';
-import { getMessageTurnId } from '../../../lib/chatMessages.js';
-import { formatFileSize } from '../../../lib/format.js';
 
-const HISTORY_TURNS_PER_PAGE = 8;
-
-function normalizeCommentText(text) {
-  const normalized = typeof text === 'string' ? text.trim() : '';
-  if (!normalized) return '';
-  return normalized.toLowerCase() === 'na' ? '' : normalized;
-}
+const EMPTY_ARRAY = Object.freeze([]);
 
 function formatTimestamp(value) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -33,90 +24,9 @@ function formatTimestamp(value) {
   }).format(date);
 }
 
-function describeMimeType(file) {
-  const mime = typeof file?.mime_type === 'string' ? file.mime_type.trim() : '';
-  if (!mime) {
-    return 'Unknown type';
-  }
-  return mime;
-}
-
-function groupMessagesByTurn(messages) {
-  const groups = [];
-  const groupByTurn = new Map();
-
-  for (const msg of Array.isArray(messages) ? messages : []) {
-    const role = typeof msg?.role === 'string' ? msg.role.trim().toLowerCase() : '';
-    if (role !== 'user') {
-      continue;
-    }
-
-    const turnId = getMessageTurnId(msg) || `__message-${groups.length}`;
-    let group = groupByTurn.get(turnId);
-
-    if (!group) {
-      group = {
-        turnId,
-        comments: [],
-        files: [],
-        fileKeys: new Set(),
-        createdAt: '',
-      };
-      groupByTurn.set(turnId, group);
-      groups.push(group);
-    }
-
-    const createdAt = typeof msg?.updated_at === 'string' ? msg.updated_at : '';
-    if (createdAt && !group.createdAt) {
-      group.createdAt = createdAt;
-    }
-
-    const comment = normalizeCommentText(typeof msg?.text === 'string' ? msg.text : '');
-    if (comment) {
-      group.comments.push(comment);
-    }
-
-    const msgFiles = Array.isArray(msg?.files) ? msg.files : [];
-    for (const file of msgFiles) {
-      if (!file?.stored_name) {
-        continue;
-      }
-      if (group.fileKeys.has(file.stored_name)) {
-        continue;
-      }
-      group.fileKeys.add(file.stored_name);
-      const index = Number.isInteger(file.file_idx) ? file.file_idx : group.files.length;
-      const label = typeof file.name === 'string' && file.name.trim() ? file.name.trim() : file.stored_name;
-      group.files.push({ index, label, file });
-      if (!group.createdAt && typeof file.uploaded_at === 'string') {
-        group.createdAt = file.uploaded_at;
-      }
-    }
-  }
-
-  return groups.filter((group) => group.comments.length > 0 || group.files.length > 0);
-}
-
-function buildFileViewEntries(files) {
-  return (Array.isArray(files) ? files : [])
-    .map((file, index) => ({
-      index,
-      file,
-      uploadedAt: typeof file?.uploaded_at === 'string' ? file.uploaded_at : '',
-    }))
-    .filter((entry) => entry.file?.stored_name)
-    .sort((left, right) => {
-      if (left.uploadedAt && right.uploadedAt) {
-        return right.uploadedAt.localeCompare(left.uploadedAt);
-      }
-      return right.index - left.index;
-    });
-}
-
-function DownloadFileChip({ boardId, cardId, index, file, label }) {
+function DownloadFileChip({ boardId, cardId, index, file }) {
   const resolvedHref = useCardFileUrl(boardId, cardId, index, file);
-
-  const displayLabel = label || file?.name || file?.stored_name || `Attachment #${index}`;
+  const displayLabel = file?.name || file?.stored_name || `Attachment #${index}`;
 
   if (!resolvedHref) {
     return (
@@ -138,29 +48,35 @@ function DownloadFileChip({ boardId, cardId, index, file, label }) {
   );
 }
 
-function SubmissionBubble({ boardId, cardId, submission }) {
-  const comment = submission.comments.join('\n\n').trim();
-  const submittedAt = formatTimestamp(submission.createdAt);
+function FilegroupBubble({ boardId, cardId, group, files }) {
+  const message = typeof group?.message === 'string' ? group.message.trim() : '';
+  const submittedAt = formatTimestamp(group?.created_at);
+  const fileIdxs = Array.isArray(group?.file_idxs) ? group.file_idxs : EMPTY_ARRAY;
 
   return (
     <div className="board-postbox-submission rounded-4 p-3">
       <div className="board-postbox-submission__top">
         <div className="d-flex flex-wrap gap-2 align-items-start">
-          {submission.files.map((entry) => (
-            <DownloadFileChip
-              key={`${submission.turnId}-${entry.index}-${entry.file?.stored_name || entry.label}`}
-              boardId={boardId}
-              cardId={cardId}
-              index={entry.index}
-              file={entry.file}
-              label={entry.label}
-            />
-          ))}
+          {fileIdxs.map((fileIdx) => {
+            const file = files[fileIdx];
+            if (!file?.stored_name) {
+              return null;
+            }
+            return (
+              <DownloadFileChip
+                key={`${fileIdx}-${file.stored_name}`}
+                boardId={boardId}
+                cardId={cardId}
+                index={fileIdx}
+                file={file}
+              />
+            );
+          })}
         </div>
       </div>
-      {comment || submittedAt ? (
+      {message || submittedAt ? (
         <div className="board-postbox-submission__meta">
-          <span className="board-postbox-submission__comment-text">{comment}</span>
+          <span className="board-postbox-submission__comment-text">{message}</span>
           {submittedAt ? (
             <span className="board-postbox-submission__time">
               <i className="bi bi-clock-history me-1" />
@@ -173,228 +89,109 @@ function SubmissionBubble({ boardId, cardId, submission }) {
   );
 }
 
-function FlattenedFilesView({ files }) {
-  if (files.length === 0) {
-    return <div className="text-muted small">No uploaded files yet.</div>;
-  }
-
-  return (
-    <div className="table-responsive">
-      <table className="table table-sm board-postbox-file-table align-middle mb-0">
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Type</th>
-            <th scope="col">Size</th>
-            <th scope="col">Uploaded</th>
-          </tr>
-        </thead>
-        <tbody>
-          {files.map((entry) => {
-            const fileName = entry.file?.name || entry.file?.stored_name || `Attachment #${entry.index}`;
-            const uploadedAt = formatTimestamp(entry.file?.uploaded_at);
-            return (
-              <tr key={`${entry.index}-${entry.file?.stored_name || entry.file?.name || 'file'}`}>
-                <td className="board-postbox-file-table__name">{fileName}</td>
-                <td>{describeMimeType(entry.file)}</td>
-                <td className="text-nowrap">{formatFileSize(entry.file?.size)}</td>
-                <td className="text-nowrap">{uploadedAt || 'Unknown time'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PostboxCardComponent({ spec = {}, variant = 'standard' }) {
+function PostboxCardComponent({ spec = {} }) {
   const { boardId, cardId, chrome = 'full', enableResize = false } = spec;
   const cardState = useCardState(boardId, cardId);
-  const filesUploaded = useCardStateFilesData(boardId, cardId);
-  const conv = useChatConversation(boardId, cardId, { historyTurnsPerPage: HISTORY_TURNS_PER_PAGE });
-  const {
-    chat,
-    chatActions,
-    historyMessages,
-    liveMessages,
-    hasMore,
-    historyLoading,
-    canLoadMore,
-    draftTurnId,
-    rotateDraftTurn,
-    refreshLatest,
-    showPrevious,
-  } = conv;
   const [submitting, setSubmitting] = useState(false);
-  const [viewMode, setViewMode] = useState('submissions');
   const composerRef = useRef(null);
-  const messagesRef = useRef(null);
+  const feedRef = useRef(null);
 
-  // Clear the staged composer when switching cards. The chat data reset is owned
-  // by useChatConversation.
+  const cardData = cardState?.cardData;
+  const files = Array.isArray(cardData?.files) ? cardData.files : EMPTY_ARRAY;
+  const filegroups = Array.isArray(cardData?.filegroups) ? cardData.filegroups : EMPTY_ARRAY;
+  const uploadCardFilesMultiple = cardState?.cardActions?.uploadCardFilesMultiple;
+
+  // Reset the staged composer when switching cards.
   useEffect(() => {
     composerRef.current?.clear();
   }, [boardId, cardId]);
 
-  const allMessages = useMemo(
-    () => [...historyMessages, ...liveMessages],
-    [historyMessages, liveMessages],
-  );
-
-  const submissions = useMemo(
-    () => groupMessagesByTurn(allMessages),
-    [allMessages],
-  );
-
-  const flattenedFiles = useMemo(
-    () => buildFileViewEntries(filesUploaded),
-    [filesUploaded],
-  );
-
+  // Keep the newest submission in view as the feed grows.
   useEffect(() => {
-    const element = messagesRef.current;
+    const element = feedRef.current;
     if (!element) return;
     element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
-  }, [submissions.length, viewMode]);
-
-  const allowMessageOnly = variant === 'universal';
+  }, [filegroups.length]);
 
   const { dragActive, handlers: stageDropHandlers } = useFileDrop({
-    onFiles: (files) => composerRef.current?.addFiles(files),
+    onFiles: (dropped) => composerRef.current?.addFiles(dropped),
   });
 
-  const handleSubmit = useCallback(async ({ text, files }) => {
-    if (!chatActions) {
+  const handleSubmit = useCallback(async ({ text, files: staged }) => {
+    if (!uploadCardFilesMultiple || !Array.isArray(staged) || staged.length === 0) {
       return;
     }
-
     setSubmitting(true);
     try {
-      const message = (typeof text === 'string' ? text.trim() : '') || 'na';
-      await chatActions.sendChat(message, {
-        turnId: draftTurnId,
-        files,
-      });
-      rotateDraftTurn();
-      try {
-        await refreshLatest();
-      } catch {
-        // Non-fatal: the submission is stored; it will appear on next refresh.
-      }
+      const message = typeof text === 'string' ? text.trim() : '';
+      await uploadCardFilesMultiple(staged, message);
+      composerRef.current?.clear();
     } finally {
       setSubmitting(false);
     }
-  }, [chatActions, draftTurnId, rotateDraftTurn, refreshLatest]);
+  }, [uploadCardFilesMultiple]);
 
-  if (!cardState?.cardContent || !chat) return null;
+  if (!cardState?.cardContent) return null;
 
   return (
     <CardChrome boardId={boardId} cardId={cardId} chrome={chrome} enableResize={enableResize}>
-    <div className="board-postbox-card h-100 d-flex flex-column overflow-hidden">
-      <div
-        ref={messagesRef}
-        className={`board-postbox-stage flex-grow-1 overflow-auto p-3${dragActive ? ' board-postbox-stage--dragging' : ''}`}
-        {...stageDropHandlers}
-      >
-        {dragActive ? (
-          <div className="board-postbox-stage__drophint">
-            Drop files to stage this submission
-          </div>
-        ) : null}
+      <div className="board-postbox-card h-100 d-flex flex-column overflow-hidden">
+        <div
+          ref={feedRef}
+          className={`board-postbox-stage flex-grow-1 overflow-auto p-3${dragActive ? ' board-postbox-stage--dragging' : ''}`}
+          {...stageDropHandlers}
+        >
+          {dragActive ? (
+            <div className="board-postbox-stage__drophint">
+              Drop files to stage this submission
+            </div>
+          ) : null}
 
-        <div className="board-postbox-viewtoggle d-flex justify-content-end mb-2">
-          <div className="btn-group btn-group-sm" role="group" aria-label="Postbox view mode">
-            <button
-              type="button"
-              className={`board-postbox-viewbtn ${viewMode === 'submissions' ? 'board-postbox-viewbtn--active' : ''}`}
-              onClick={() => setViewMode('submissions')}
-              title="Grouped submissions"
-              aria-label="Grouped submissions"
-              aria-pressed={viewMode === 'submissions'}
-            >
-              <i className="bi bi-collection" />
-            </button>
-            <button
-              type="button"
-              className={`board-postbox-viewbtn ${viewMode === 'files' ? 'board-postbox-viewbtn--active' : ''}`}
-              onClick={() => setViewMode('files')}
-              title="Flat file list"
-              aria-label="Flat file list"
-              aria-pressed={viewMode === 'files'}
-            >
-              <i className="bi bi-list-ul" />
-            </button>
-          </div>
+          {filegroups.length === 0 ? (
+            <div className="h-100 d-flex align-items-center justify-content-center text-center text-muted small px-4">
+              Drag files anywhere in this pane or use the composer below to submit the first evidence bundle.
+            </div>
+          ) : (
+            <div className="d-flex flex-column gap-3">
+              {filegroups.map((group, groupIndex) => (
+                <FilegroupBubble
+                  key={groupIndex}
+                  boardId={boardId}
+                  cardId={cardId}
+                  group={group}
+                  files={files}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {viewMode === 'submissions' ? (
-          <>
-            {hasMore && canLoadMore ? (
-              <div className="d-flex justify-content-center mb-3">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={historyLoading}
-                  onClick={() => showPrevious()}
-                >
-                  {historyLoading ? 'Loading…' : 'Show previous submissions'}
-                </button>
-              </div>
-            ) : null}
-
-            {submissions.length === 0 ? (
-              <div className="h-100 d-flex align-items-center justify-content-center text-center text-muted small px-4">
-                {allowMessageOnly
-                  ? 'Write a message or drop files using the composer below to get started.'
-                  : 'Drag files anywhere in this pane or use the composer below to submit the first evidence bundle.'}
-              </div>
-            ) : (
-              <div className="d-flex flex-column gap-3">
-                {submissions.map((submission) => (
-                  <SubmissionBubble
-                    key={submission.turnId}
-                    boardId={boardId}
-                    cardId={cardId}
-                    submission={submission}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <FlattenedFilesView files={flattenedFiles} />
-        )}
+        <MessageWithAttachmentsInput
+          ref={composerRef}
+          staged
+          multiple
+          disabled={submitting || !uploadCardFilesMultiple}
+          requireAttachment
+          onSubmit={handleSubmit}
+          placeholder="Add comment (optional)"
+          className="border-top p-3 d-flex flex-column gap-3 flex-shrink-0"
+          inputRowClassName="d-flex align-items-center gap-2"
+          attachVariant="dropzone"
+          dropzoneAs="button"
+          dropzoneClassName="board-postbox-dropzone"
+          dropzoneActiveClassName="board-postbox-dropzone--active"
+          dropzoneContent={(
+            <>
+              <i className="bi bi-cloud-arrow-up board-postbox-dropzone__icon" />
+              <span className="board-postbox-dropzone__title">Drag &amp; drop files here</span>
+              <span className="board-postbox-dropzone__hint">or click to browse</span>
+            </>
+          )}
+          inputClassName="form-control form-control-sm"
+          submitClassName="btn btn-sm btn-primary flex-shrink-0"
+          submitContent={submitting ? 'Uploading…' : 'Upload'}
+        />
       </div>
-
-      <MessageWithAttachmentsInput
-        ref={composerRef}
-        staged
-        multiple
-        disabled={submitting}
-        requireAttachment={!allowMessageOnly}
-        onSubmit={handleSubmit}
-        placeholder={allowMessageOnly ? 'Write a message, attach files, or both' : 'Add comment (optional)'}
-        className="border-top p-3 d-flex flex-column gap-3 flex-shrink-0"
-        inputRowClassName="d-flex align-items-center gap-2"
-        attachVariant="dropzone"
-        dropzoneAs="button"
-        dropzoneClassName="board-postbox-dropzone"
-        dropzoneActiveClassName="board-postbox-dropzone--active"
-        dropzoneContent={(
-          <>
-            <i className="bi bi-cloud-arrow-up board-postbox-dropzone__icon" />
-            <span className="board-postbox-dropzone__title">Drag &amp; drop files here</span>
-            <span className="board-postbox-dropzone__hint">or click to browse</span>
-          </>
-        )}
-        inputClassName="form-control form-control-sm"
-        submitClassName="btn btn-sm btn-primary flex-shrink-0"
-        submitContent={submitting
-          ? (allowMessageOnly ? 'Sending…' : 'Uploading…')
-          : (allowMessageOnly ? 'Send' : 'Upload')}
-      />
-    </div>
     </CardChrome>
   );
 }

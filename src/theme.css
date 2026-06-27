@@ -2162,62 +2162,6 @@ a {
   overflow: hidden;
 }
 
-.board-postbox-viewtoggle {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.board-postbox-viewtoggle > * {
-  pointer-events: auto;
-}
-
-.board-postbox-viewbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.3rem 0.55rem;
-  font-size: 0.95rem;
-  line-height: 1;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-surface-strong);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-
-.board-postbox-viewbtn:first-child {
-  border-top-left-radius: var(--surface-radius-sm);
-  border-bottom-left-radius: var(--surface-radius-sm);
-}
-
-.board-postbox-viewbtn:last-child {
-  border-top-right-radius: var(--surface-radius-sm);
-  border-bottom-right-radius: var(--surface-radius-sm);
-}
-
-.board-postbox-viewbtn + .board-postbox-viewbtn {
-  border-left: 0;
-}
-
-.board-postbox-viewbtn:hover:not(.board-postbox-viewbtn--active) {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent);
-}
-
-.board-postbox-viewbtn:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
-.board-postbox-viewbtn--active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-surface);
-}
-
 .board-postbox-submission {
   display: flex;
   flex-direction: column;
@@ -2350,40 +2294,6 @@ a {
   background: color-mix(in srgb, var(--board-stage-drag-bg) 90%, var(--color-surface));
   color: var(--board-stage-drag-text);
   font-weight: 700;
-}
-
-.board-postbox-file-table {
-  --bs-table-bg: transparent;
-  --bs-table-color: var(--color-text);
-  color: var(--color-text);
-  font-size: 0.82rem;
-  margin-bottom: 0;
-}
-
-.board-postbox-file-table thead th {
-  color: var(--color-text-soft);
-  font-weight: 700;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--color-border-strong);
-  background: transparent;
-}
-
-.board-postbox-file-table tbody td {
-  color: var(--color-text);
-  border-bottom: 1px solid var(--color-border);
-  background: transparent;
-  vertical-align: middle;
-}
-
-.board-postbox-file-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.board-postbox-file-table__name {
-  font-weight: 600;
-  word-break: break-word;
 }
 
 .board-card-frame__label {

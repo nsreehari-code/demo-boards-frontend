@@ -20,7 +20,6 @@ export const cardEntries = [
   {
     kind: 'card:postbox-universal',
     renderComponentFn: PostboxCard,
-    defaultVariant: 'universal',
     meta: { bare: true },
   },
 ];
