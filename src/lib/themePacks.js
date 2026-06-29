@@ -7,6 +7,17 @@ export function normalizeThemePackId(value) {
   return THEME_PACK_IDS.includes(normalized) ? normalized : DEFAULT_THEME_PACK_ID;
 }
 
+export function resolveThemePackIdFromLayout(layout, fallbackUi = null) {
+  if (layout && typeof layout === 'object' && !Array.isArray(layout)) {
+    const themeId = normalizeThemePackId(layout.theme);
+    if (typeof layout.theme === 'string' && layout.theme.trim()) {
+      return themeId;
+    }
+  }
+
+  return resolveThemePackIdFromUi(fallbackUi);
+}
+
 export function resolveThemePackIdFromUi(ui) {
   if (!ui || typeof ui !== 'object' || Array.isArray(ui)) {
     return DEFAULT_THEME_PACK_ID;

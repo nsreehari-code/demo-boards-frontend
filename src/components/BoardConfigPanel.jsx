@@ -9,9 +9,9 @@ import {
 } from '../lib/appConfig.js';
 import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
 import { useBoardConfig } from '../hooks/useBoardConfig.js';
-import { DEFAULT_THEME_PACK_ID, THEME_PACK_IDS, resolveThemePackIdFromUi, withResolvedThemePackId } from '../lib/themePacks.js';
+import { DEFAULT_THEME_PACK_ID, THEME_PACK_IDS } from '../lib/themePacks.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
-import { useBoardVisuals } from '../hooks/useBoardVisuals.js';
+import { useBoardVisual } from '../hooks/useBoardVisuals.js';
 import { AddBoard } from './board-config/AddBoard.jsx';
 import { BoardConfigButton } from './board-config/BoardConfigButton.jsx';
 import { BoardImportExport } from './board-config/BoardImportExport.jsx';
@@ -115,10 +115,12 @@ function normalizeFormState(formState, currentConfig) {
 
 export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
   const { config: activeBoardConfig } = useBoardConfig(boardId);
-  const { visuals: activeBoardVisuals } = useBoardVisuals(boardId);
   const [open, setOpen] = useState(false);
   const [openedByAuto, setOpenedByAuto] = useState(false);
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
+  const selectedBoardId = formState.defaultBoardId || boardId;
+  const [storedLayoutKind, setStoredLayoutKind] = useBoardVisual(selectedBoardId, 'kind', LAYOUT_KIND_CANVAS);
+  const [storedThemePackId, setStoredThemePackId] = useBoardVisual(selectedBoardId, 'theme', DEFAULT_THEME_PACK_ID);
   const [resettingSeeds, setResettingSeeds] = useState(false);
   const [savingSeeds, setSavingSeeds] = useState(false);
   const [preparingTemplateIngest, setPreparingTemplateIngest] = useState(false);
@@ -133,9 +135,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
   const [addBoardError, setAddBoardError] = useState('');
   const [smokeRunnerOpen, setSmokeRunnerOpen] = useState(false);
   const [smokeStrategistOpen, setSmokeStrategistOpen] = useState(false);
-  const [layoutKind, setLayoutKind] = useState(null);
   const [togglingLayout, setTogglingLayout] = useState(false);
-  const [themePackId, setThemePackId] = useState(null);
   const [togglingTheme, setTogglingTheme] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // 'runtime-import' | 'config' | null
   const importFileInputRef = useRef(null);
@@ -150,6 +150,12 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
   } = useManageBoards(formState.serverOrigin, {
     enabled: open && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL,
   });
+  const layoutKind = open && selectedBoardId && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
+    ? normalizeLayoutKind(storedLayoutKind)
+    : null;
+  const themePackId = open && selectedBoardId && formState.transportMode === BOARD_TRANSPORT_MODE_SERVER_URL
+    ? storedThemePackId
+    : null;
 
   const handleAddBoard = useCallback(async (candidate) => {
     setAddBoardSubmitting(true);
@@ -327,64 +333,6 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     };
   }, [activeBoardConfig, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
-  useEffect(() => {
-    if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
-      setLayoutKind(null);
-      return undefined;
-    }
-
-    if (formState.defaultBoardId === boardId) {
-      setLayoutKind(normalizeLayoutKind(activeBoardVisuals.layoutBlob?.kind));
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    const loadLayoutKind = async () => {
-      try {
-        const layout = await manageBoardsActions.getLayout(formState.defaultBoardId);
-        if (cancelled) return;
-        setLayoutKind(normalizeLayoutKind(layout?.kind));
-      } catch {
-        if (!cancelled) setLayoutKind(null);
-      }
-    };
-
-    void loadLayoutKind();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeBoardVisuals.layoutBlob?.kind, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
-
-  useEffect(() => {
-    if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
-      setThemePackId(null);
-      return undefined;
-    }
-
-    if (formState.defaultBoardId === boardId) {
-      setThemePackId(activeBoardVisuals.theme);
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    const loadTheme = async () => {
-      try {
-        const board = await manageBoardsActions.getBoard(formState.defaultBoardId);
-        if (cancelled) return;
-        setThemePackId(resolveThemePackIdFromUi(board?.ui));
-      } catch {
-        if (!cancelled) setThemePackId(null);
-      }
-    };
-
-    void loadTheme();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeBoardVisuals.theme, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
-
   const handleToggleLayout = useCallback(async () => {
     if (
       formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL
@@ -396,8 +344,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     const nextKind = layoutKind === LAYOUT_KIND_CARDS ? LAYOUT_KIND_CANVAS : LAYOUT_KIND_CARDS;
     setTogglingLayout(true);
     try {
-      await manageBoardsActions.shallowMergeLayout(formState.defaultBoardId, 'kind', nextKind);
-      setLayoutKind(nextKind);
+      await setStoredLayoutKind(nextKind);
       if (formState.defaultBoardId === boardId) {
         window.location.reload();
       }
@@ -406,7 +353,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     } finally {
       setTogglingLayout(false);
     }
-  }, [boardId, formState.defaultBoardId, formState.transportMode, layoutKind, manageBoardsActions, togglingLayout]);
+  }, [boardId, formState.defaultBoardId, formState.transportMode, layoutKind, setStoredLayoutKind, togglingLayout]);
 
   const handleToggleTheme = useCallback(async () => {
     if (
@@ -420,13 +367,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     const nextThemeId = THEME_PACK_IDS[(currentIndex + 1) % THEME_PACK_IDS.length];
     setTogglingTheme(true);
     try {
-      const currentBoard = await manageBoardsActions.getBoard(formState.defaultBoardId);
-      const nextRecord = {
-        ...(currentBoard?.rawBoard && typeof currentBoard.rawBoard === 'object' ? currentBoard.rawBoard : {}),
-        ui: withResolvedThemePackId(currentBoard?.ui, nextThemeId),
-      };
-      await manageBoardsActions.saveBoardRecord(formState.defaultBoardId, nextRecord);
-      setThemePackId(nextThemeId);
+      await setStoredThemePackId(nextThemeId);
       if (formState.defaultBoardId === boardId) {
         window.location.reload();
       }
@@ -435,7 +376,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     } finally {
       setTogglingTheme(false);
     }
-  }, [boardId, formState.defaultBoardId, formState.transportMode, themePackId, manageBoardsActions, togglingTheme]);
+  }, [boardId, formState.defaultBoardId, formState.transportMode, setStoredThemePackId, themePackId, togglingTheme]);
 
   const submitAndReload = useCallback(() => {
     saveAppConfigOverride(normalizeFormState(formState, getAppConfig()));

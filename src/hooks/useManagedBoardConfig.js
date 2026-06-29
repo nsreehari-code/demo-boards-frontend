@@ -42,7 +42,20 @@ function normalizeLayout(layout) {
   if (!layout || typeof layout !== 'object' || Array.isArray(layout)) return null;
   const kind = normalizePaneKind(layout.kind);
   const normalizedCanvas = normalizeRuntimeCanvasLayout(layout.canvas ?? layout);
-  return { kind, canvas: normalizedCanvas ?? null };
+  const normalizedLayout = {
+    kind,
+    canvas: normalizedCanvas ?? null,
+  };
+
+  for (const [key, value] of Object.entries(layout)) {
+    if (key === 'kind' || key === 'canvas') {
+      continue;
+    }
+
+    normalizedLayout[key] = value;
+  }
+
+  return normalizedLayout;
 }
 
 function resolveNextManagedBoardConfig(current, candidate) {
