@@ -8,8 +8,10 @@ import {
   saveAppConfigOverride,
 } from '../lib/appConfig.js';
 import { getSampleTemplate, listSampleTemplates } from '../lib/client.js';
+import { useBoardConfig } from '../hooks/useBoardConfig.js';
 import { DEFAULT_THEME_PACK_ID, THEME_PACK_IDS, resolveThemePackIdFromUi, withResolvedThemePackId } from '../lib/themePacks.js';
 import { useManageBoards } from '../hooks/useManageBoards.js';
+import { useBoardVisuals } from '../hooks/useBoardVisuals.js';
 import { AddBoard } from './board-config/AddBoard.jsx';
 import { BoardConfigButton } from './board-config/BoardConfigButton.jsx';
 import { BoardImportExport } from './board-config/BoardImportExport.jsx';
@@ -112,6 +114,8 @@ function normalizeFormState(formState, currentConfig) {
 }
 
 export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable = false, serverUnreachableMessage = '' }) {
+  const { config: activeBoardConfig } = useBoardConfig(boardId);
+  const { visuals: activeBoardVisuals } = useBoardVisuals(boardId);
   const [open, setOpen] = useState(false);
   const [openedByAuto, setOpenedByAuto] = useState(false);
   const [formState, setFormState] = useState(() => toFormState(getAppConfig()));
@@ -274,6 +278,27 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
 
     let cancelled = false;
 
+    if (formState.defaultBoardId === boardId && activeBoardConfig) {
+      const nextDraft = toPageDetailsDraft({
+        id: boardId,
+        metadata: activeBoardConfig.metadata,
+        rawBoard: activeBoardConfig.board,
+      });
+      setFormState((current) => {
+        if (current.defaultBoardId !== boardId) {
+          return current;
+        }
+        return {
+          ...current,
+          defaultBoardLabel: nextDraft.pageTitle,
+          defaultBoardSubtitle: nextDraft.pageSubtitle,
+          defaultBoardUiTemplate: nextDraft.uiTemplate,
+          refreshAllIntervalMinutes: nextDraft.refreshAllIntervalMinutes,
+        };
+      });
+      return undefined;
+    }
+
     const loadSelectedBoard = async () => {
       try {
         const selected = await manageBoardsActions.getBoard(formState.defaultBoardId);
@@ -300,13 +325,19 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     return () => {
       cancelled = true;
     };
-  }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
+  }, [activeBoardConfig, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
   useEffect(() => {
     if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
       setLayoutKind(null);
       return undefined;
     }
+
+    if (formState.defaultBoardId === boardId) {
+      setLayoutKind(normalizeLayoutKind(activeBoardVisuals.layoutBlob?.kind));
+      return undefined;
+    }
+
     let cancelled = false;
 
     const loadLayoutKind = async () => {
@@ -323,13 +354,19 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     return () => {
       cancelled = true;
     };
-  }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
+  }, [activeBoardVisuals.layoutBlob?.kind, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
   useEffect(() => {
     if (!open || !formState.defaultBoardId || formState.transportMode !== BOARD_TRANSPORT_MODE_SERVER_URL) {
       setThemePackId(null);
       return undefined;
     }
+
+    if (formState.defaultBoardId === boardId) {
+      setThemePackId(activeBoardVisuals.theme);
+      return undefined;
+    }
+
     let cancelled = false;
 
     const loadTheme = async () => {
@@ -346,7 +383,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     return () => {
       cancelled = true;
     };
-  }, [formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
+  }, [activeBoardVisuals.theme, boardId, formState.defaultBoardId, formState.transportMode, manageBoardsActions, open]);
 
   const handleToggleLayout = useCallback(async () => {
     if (
@@ -359,11 +396,7 @@ export function BoardConfigPanel({ boardId, autoOpen = false, serverUnreachable 
     const nextKind = layoutKind === LAYOUT_KIND_CARDS ? LAYOUT_KIND_CANVAS : LAYOUT_KIND_CARDS;
     setTogglingLayout(true);
     try {
-      await manageBoardsActions.saveLayout(
-        formState.defaultBoardId,
-        { kind: nextKind },
-        { mode: 'shallow-merge' },
-      );
+      await manageBoardsActions.shallowMergeLayout(formState.defaultBoardId, 'kind', nextKind);
       setLayoutKind(nextKind);
       if (formState.defaultBoardId === boardId) {
         window.location.reload();

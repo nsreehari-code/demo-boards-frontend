@@ -12,16 +12,16 @@
 // childResolver over `spec.panes`.
 
 import React, { memo, useMemo } from 'react';
-import { useManagedBoardConfig, DEFAULT_PANE_KIND } from '../../hooks/useManagedBoardConfig.js';
+import { useBoardVisuals } from '../../hooks/useBoardVisuals.js';
 import { compileRendererRules, resolvePaneFilters } from '../../lib/cardPresentationConfig.js';
 import { BOARD_TRANSPORT_MODE, BOARD_TRANSPORT_MODE_SERVER_URL } from '../../lib/appConfig.js';
 import { NodeRenderer } from '../registry/engine/NodeRenderer.jsx';
 
 function BoardRendererComponent({ boardId }) {
-  const { config: managedBoardConfig, loading: managedBoardConfigLoading } = useManagedBoardConfig(boardId);
-  const uiConfig = managedBoardConfig?.ui ?? null;
-  const boardLayout = managedBoardConfig?.layout ?? null;
-  const centrePaneKind = boardLayout?.kind ?? DEFAULT_PANE_KIND;
+  const { visuals, loading: managedBoardConfigLoading } = useBoardVisuals(boardId);
+  const uiConfig = visuals.ui;
+  const boardLayout = visuals.layoutBlob;
+  const centrePaneKind = visuals.centrePaneKind;
   const holdCanvasUntilManagedConfig = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_SERVER_URL
     && managedBoardConfigLoading
     && !boardLayout;

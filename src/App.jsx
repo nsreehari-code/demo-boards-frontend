@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useBoardState } from './hooks/useBoardState.js';
-import { useManagedBoardConfig } from './hooks/useManagedBoardConfig.js';
+import { useBoardVisuals } from './hooks/useBoardVisuals.js';
 import { BoardConfigPanel } from './components/BoardConfigPanel.jsx';
 import { TimerButton } from './components/shared/TimerButton.jsx';
 import {
@@ -12,7 +12,6 @@ import {
   REFRESH_ALL_INTERVAL_SECONDS,
 } from './lib/appConfig.js';
 import { healthz } from './lib/client.js';
-import { resolveThemePackIdFromUi } from './lib/themePacks.js';
 
 const BoardRenderer = lazy(() => import('./components/renderers/BoardRenderer.jsx').then((module) => ({ default: module.BoardRenderer })));
 
@@ -49,9 +48,9 @@ function formatCountdown(remainingMs) {
 
 export default function App() {
   const board = useBoardState(BOARD_ID);
-  const { config: managedBoardConfig } = useManagedBoardConfig(BOARD_ID);
+  const { visuals } = useBoardVisuals(BOARD_ID);
   const canRefreshAll = board?.hasRefreshableCards === true;
-  const themeId = resolveThemePackIdFromUi(managedBoardConfig?.ui);
+  const themeId = visuals.theme;
   const usesServerUrlTransport = BOARD_TRANSPORT_MODE === BOARD_TRANSPORT_MODE_SERVER_URL;
   const [serverReachability, setServerReachability] = useState({
     checking: usesServerUrlTransport,

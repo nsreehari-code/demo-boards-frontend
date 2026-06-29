@@ -5,7 +5,7 @@ import {
   getBezierPath,
 } from '@xyflow/react';
 import { buildDeterministicCanvasLayout } from '../../../../lib/boardCanvasLayout.js';
-import { useBoardLayoutActions, useBoardLayoutState } from '../../../../hooks/useCoordsState.jsx';
+import { useBoardVisuals } from '../../../../hooks/useBoardVisuals.js';
 import { CardRenderer } from '../../../renderers/CardRenderer.jsx';
 import { InfiniteCanvas } from '../../../shared/InfiniteCanvas.jsx';
 
@@ -260,8 +260,9 @@ function getMiniMapNodeClassName(node) {
 
 export function InfiniteCanvasPane({ boardId, cardIds, cardContents, cardRuntimes, dataObjects, rendererRules = [] }) {
   const [selectedToken, setSelectedToken] = useState(null);
-  const layoutState = useBoardLayoutState();
-  const { setManyCoords, setViewport, scheduleAutosave } = useBoardLayoutActions();
+  const { visuals, actions } = useBoardVisuals(boardId);
+  const layoutState = visuals.layoutState;
+  const { setManyCoords, setViewport, scheduleAutosave } = actions;
   const canvasRef = useRef(null);
   const focusedCardIdRef = useRef(null);
   const savedViewportRef = useRef(null);

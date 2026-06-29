@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+const FRONTEND_LAYOUT_NAMESPACE = 'frontend';
+
 function normalizeOrigin(serverOrigin) {
   return typeof serverOrigin === 'string'
     ? serverOrigin.trim().replace(/\/+$/, '')
@@ -149,7 +151,7 @@ export function useManageBoards(serverOrigin, options = {}) {
     return normalizeManagedBoardEntry(data?.board ?? null);
   }, [normalizedOrigin]);
 
-  const getLayout = useCallback(async (boardId) => {
+  const getLayout = useCallback(async (boardId, ns = FRONTEND_LAYOUT_NAMESPACE) => {
     const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
     if (!normalizedBoardId) {
       throw new Error('Board id is required');
@@ -159,27 +161,49 @@ export function useManageBoards(serverOrigin, options = {}) {
       subcommand: 'get-layout',
       args: {
         boardId: normalizedBoardId,
+        ns,
       },
     });
     return data?.layout ?? null;
   }, [normalizedOrigin]);
 
-  const saveLayout = useCallback(async (boardId, layout, options = {}) => {
+  const saveLayout = useCallback(async (boardId, keyvals, ns = FRONTEND_LAYOUT_NAMESPACE) => {
     const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
     if (!normalizedBoardId) {
       throw new Error('Board id is required');
     }
-    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) {
-      throw new Error('Layout is required');
+    if (!keyvals || typeof keyvals !== 'object' || Array.isArray(keyvals)) {
+      throw new Error('Layout keyvals are required');
     }
 
-    const mode = typeof options?.mode === 'string' ? options.mode.trim() : '';
     const data = await postManageBoards(normalizedOrigin, {
       subcommand: 'save-layout',
       args: {
         boardId: normalizedBoardId,
-        layout,
-        ...(mode ? { mode } : {}),
+        ns,
+        keyvals,
+      },
+    });
+    return data?.layout ?? null;
+  }, [normalizedOrigin]);
+
+  const shallowMergeLayout = useCallback(async (boardId, key, val, ns = FRONTEND_LAYOUT_NAMESPACE) => {
+    const normalizedBoardId = typeof boardId === 'string' ? boardId.trim() : '';
+    if (!normalizedBoardId) {
+      throw new Error('Board id is required');
+    }
+    const normalizedKey = typeof key === 'string' ? key.trim() : '';
+    if (!normalizedKey) {
+      throw new Error('Layout key is required');
+    }
+
+    const data = await postManageBoards(normalizedOrigin, {
+      subcommand: 'shallow-merge',
+      args: {
+        boardId: normalizedBoardId,
+        ns,
+        key: normalizedKey,
+        val,
       },
     });
     return data?.layout ?? null;
@@ -308,12 +332,13 @@ export function useManageBoards(serverOrigin, options = {}) {
     saveBoardMeta,
     getLayout,
     saveLayout,
+    shallowMergeLayout,
     saveBoardRecord,
     refreshBoard,
     exportBoard,
     previewImportBoard,
     applyImportBoard,
-  }), [addBoard, applyImportBoard, exportBoard, getLayout, listBoards, normalizedOrigin, previewImportBoard, refreshBoard, saveBoardMeta, saveBoardRecord, saveLayout]);
+  }), [addBoard, applyImportBoard, exportBoard, getLayout, listBoards, normalizedOrigin, previewImportBoard, refreshBoard, saveBoardMeta, saveBoardRecord, saveLayout, shallowMergeLayout]);
 
   return {
     managedBoards: boards,

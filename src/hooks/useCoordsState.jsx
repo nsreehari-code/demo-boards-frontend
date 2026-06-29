@@ -256,9 +256,7 @@ export function BoardCoordsProvider({ boardId, initialLayout = null, children })
       firstFlushLoggedRef.current = true;
     }
 
-    await manageBoardsActions.saveLayout(boardId, {
-      canvas: layoutRef.current,
-    }, { mode: 'shallow-merge' });
+    await manageBoardsActions.shallowMergeLayout(boardId, 'canvas', layoutRef.current);
     writeCachedBoardLayout(boardId, {
       canvas: layoutRef.current,
     });

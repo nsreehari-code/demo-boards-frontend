@@ -97,7 +97,7 @@ async function fetchManagedBoardConfig(serverOrigin, boardId) {
     fetch(`${origin}/manage-boards`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subcommand: 'get-layout', args: { boardId: id } }),
+      body: JSON.stringify({ subcommand: 'get-layout', args: { boardId: id, ns: 'frontend' } }),
     }),
   ]);
   if (!boardResponse.ok) {
